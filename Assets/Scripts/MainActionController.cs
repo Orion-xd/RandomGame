@@ -26,10 +26,17 @@ public class MainActionController : MonoBehaviour
     [SerializeField] private float jumpForce = 12f;
 
     [Header("ダッシュ")]
-    [Tooltip("ダッシュ中の水平速度")]
+    [Tooltip("ダッシュの最高速度（発動時にこの速度になる）")]
     [SerializeField] private float dashSpeed = 18f;
-    [Tooltip("ダッシュ継続時間。この間は無敵かつ落下しない")]
+    [Tooltip("ダッシュ継続時間。この間は落下しない")]
     [SerializeField] private float dashDuration = 0.5f;
+    [Range(0f, 1f)]
+    [Tooltip("継続時間のうち『前半（完全ロック区間）』が占める割合。前半は最高速度固定・入力無視・完全無敵")]
+    [SerializeField] private float dashLockFraction = 0.5f;
+    [Tooltip("後半に前方入力があるときの減速の強さ (units/秒^2)。ゆるめ")]
+    [SerializeField] private float dashForwardDecel = 40f;
+    [Tooltip("後半に後方入力があるときの減速の強さ (units/秒^2)。急ブレーキ")]
+    [SerializeField] private float dashBrakeDecel = 160f;
 
     [Header("攻撃")]
     [Tooltip("前方に出す攻撃判定（子オブジェクト）。通常は非アクティブ")]
@@ -48,6 +55,8 @@ public class MainActionController : MonoBehaviour
     private float _dashTimeLeft;
     private int _dashDir;
     private float _savedGravityScale;
+    private float _dashCurSpeed;   // 現在のダッシュ速度（大きさ）
+    private bool _dashInvBroken;   // 後半に後方入力で無敵を解除したか（一度解除したら効果終了まで戻らない）
 
     /// <summary>この間はダメージを受けない（ダッシュ中）。</summary>
     public bool IsInvincible { get; private set; }
@@ -81,9 +90,43 @@ public class MainActionController : MonoBehaviour
         // FixedUpdate は物理積分の「前」に走るので、ここで設定した速度がそのまま反映される。
         // （コルーチン + WaitForFixedUpdate だと積分の「後」に走るため、
         //  重力で1ステップぶん落ちてから y=0 に戻す形になり、ダッシュ中に少しずつ落下していた。）
-        _rb.linearVelocity = new Vector2(_dashDir * dashSpeed, 0f);
 
-        _dashTimeLeft -= Time.fixedDeltaTime;
+        float dt = Time.fixedDeltaTime;
+        float elapsed = dashDuration - _dashTimeLeft;
+        bool lockedPhase = elapsed < dashDuration * dashLockFraction;
+
+        if (lockedPhase)
+        {
+            // ── 前半：最高速度を維持。移動入力は完全に無視。完全無敵。──
+            _dashCurSpeed = dashSpeed;
+            IsInvincible = true;
+        }
+        else
+        {
+            // ── 後半：速度はキープ。ただし入力があれば反映する。──
+            float mv = _player != null ? _player.MoveInput : 0f;
+            int inputDir = Mathf.Abs(mv) > 0.01f ? (mv > 0f ? 1 : -1) : 0;
+
+            if (inputDir == _dashDir)
+            {
+                // 前方入力：そのまま進みつつ徐々に減速（ゆるめ）
+                _dashCurSpeed = Mathf.MoveTowards(_dashCurSpeed, 0f, dashForwardDecel * dt);
+            }
+            else if (inputDir == -_dashDir)
+            {
+                // 後方入力：急ブレーキ ＋ 無敵解除（一度解除したら効果終了まで戻らない）
+                _dashCurSpeed = Mathf.MoveTowards(_dashCurSpeed, 0f, dashBrakeDecel * dt);
+                _dashInvBroken = true;
+            }
+            // 入力なし：_dashCurSpeed 据え置き（速度キープ）
+
+            IsInvincible = !_dashInvBroken;
+        }
+
+        // 落下しないよう Y は 0 に固定。進行方向は発動時の向きのまま。
+        _rb.linearVelocity = new Vector2(_dashDir * _dashCurSpeed, 0f);
+
+        _dashTimeLeft -= dt;
         if (_dashTimeLeft <= 0f) EndDash();
     }
 
@@ -126,8 +169,10 @@ public class MainActionController : MonoBehaviour
 
     private void StartDash()
     {
-        _dashDir = _player.FacingSign; // 向いている方向へ前進
+        _dashDir = _player.FacingSign;   // 向いている方向へ前進
         _dashTimeLeft = dashDuration;
+        _dashCurSpeed = dashSpeed;       // 発動時に最高速度
+        _dashInvBroken = false;
 
         // ダッシュ中は重力を完全に切る（＝落下ゼロ）。終了時に戻す。
         _savedGravityScale = _rb.gravityScale;
@@ -143,7 +188,7 @@ public class MainActionController : MonoBehaviour
     {
         _dashTimeLeft = 0f;
         _rb.gravityScale = _savedGravityScale;
-        IsInvincible = false;
+        IsInvincible = false;   // 効果時間が切れたら必ず無敵解除
         OverridesMovement = false;
     }
 

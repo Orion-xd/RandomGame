@@ -21,6 +21,9 @@ public class PlayerController : MonoBehaviour
     /// <summary>キャラの向き。+1 = 右, -1 = 左。最後に移動した向きを保持する。</summary>
     public int FacingSign { get; private set; } = 1;
 
+    /// <summary>現在の左右移動入力。-1 / 0 / +1。ダッシュ中でも更新され続ける（MainActionController が参照）。</summary>
+    public float MoveInput => _moveInput;
+
     private void Awake()
     {
         _rb = GetComponent<Rigidbody2D>();
