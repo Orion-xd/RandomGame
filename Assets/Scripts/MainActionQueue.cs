@@ -73,12 +73,17 @@ public class MainActionQueue : MonoBehaviour
 
     private MainActionType Roll()
     {
-        MainActionType result;
-        do
+        if (lottery == null || lottery.Length == 0) return MainActionType.Jump; // 未設定時のフォールバック
+
+        MainActionType result = lottery[_rng.Next(lottery.Length)];
+
+        // 直前と同じ結果は振り直す（連続禁止）。
+        // ただし lottery が実質1種類だと永久に抜けられないので、試行回数に上限を設ける
+        // （超えたら連続を許容する。重み付け目的で同じ値を複数入れても固まらないように）。
+        for (int i = 0; i < 20 && lottery.Length > 1 && result == _lastRolled; i++)
         {
             result = lottery[_rng.Next(lottery.Length)];
         }
-        while (lottery.Length > 1 && result == _lastRolled); // 直前と同じ結果は振り直す（連続禁止）
 
         _lastRolled = result;
         return result;
