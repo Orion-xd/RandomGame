@@ -33,11 +33,13 @@ public class PlayerHealth : MonoBehaviour
         OnHealthChanged?.Invoke();
     }
 
-    public void TakeDamage(int amount)
+    /// <summary>ダメージを与える。実際に適用された（無敵・無敵時間中でなかった）ら true を返す。
+    /// 敵側はこれを見てノックバックを与えるかどうかを判断する。</summary>
+    public bool TakeDamage(int amount)
     {
-        if (_health <= 0) return;
-        if (Time.time < _invulnUntil) return;
-        if (_mainAction != null && _mainAction.IsInvincible) return; // ダッシュ中はすり抜け（無敵）
+        if (_health <= 0) return false;
+        if (Time.time < _invulnUntil) return false;
+        if (_mainAction != null && _mainAction.IsInvincible) return false; // ダッシュ中はすり抜け（無敵）
 
         _health -= amount;
         _invulnUntil = Time.time + invulnTime;
@@ -48,5 +50,7 @@ public class PlayerHealth : MonoBehaviour
         {
             Debug.Log("Player MISS (体力0) -> TODO: リザルト画面へ");
         }
+
+        return true;
     }
 }

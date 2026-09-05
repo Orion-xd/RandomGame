@@ -362,7 +362,7 @@ GameObject:
   - component: {fileID: 212497399}
   - component: {fileID: 212497398}
   - component: {fileID: 212497401}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: OneWayPlatform
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -706,6 +706,9 @@ MonoBehaviour:
   maxHealth: 1
   contactDamage: 1
   healthBar: {fileID: 0}
+  knockbackSpeed: 8
+  knockbackUpSpeed: 4
+  knockbackDuration: 0.25
 --- !u!61 &462735742
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -736,7 +739,7 @@ BoxCollider2D:
   m_CallbackLayers:
     serializedVersion: 2
     m_Bits: 4294967295
-  m_IsTrigger: 1
+  m_IsTrigger: 0
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
@@ -1029,6 +1032,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerController
   moveSpeed: 6
+  groundLayer:
+    serializedVersion: 2
+    m_Bits: 256
+  groundCheckDistance: 0.1
 --- !u!50 &570335817
 Rigidbody2D:
   serializedVersion: 5
@@ -1190,6 +1197,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MainActionQueue
   slotCount: 4
+  stageSeed: 12345
   lottery: 000000000100000002000000
 --- !u!114 &570335822
 MonoBehaviour:
@@ -1713,7 +1721,7 @@ GameObject:
   - component: {fileID: 1022982566}
   - component: {fileID: 1022982565}
   - component: {fileID: 1022982564}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Ground_Left
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -2572,6 +2580,9 @@ MonoBehaviour:
   maxHealth: 5
   contactDamage: 1
   healthBar: {fileID: 188705235}
+  knockbackSpeed: 8
+  knockbackUpSpeed: 4
+  knockbackDuration: 0.25
 --- !u!61 &1529777237
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -2602,7 +2613,7 @@ BoxCollider2D:
   m_CallbackLayers:
     serializedVersion: 2
     m_Bits: 4294967295
-  m_IsTrigger: 1
+  m_IsTrigger: 0
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
@@ -2869,7 +2880,7 @@ GameObject:
   - component: {fileID: 2107790280}
   - component: {fileID: 2107790279}
   - component: {fileID: 2107790278}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Ground_Right
   m_TagString: Untagged
   m_Icon: {fileID: 0}

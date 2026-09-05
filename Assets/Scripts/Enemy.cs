@@ -2,7 +2,11 @@ using UnityEngine;
 
 /// <summary>
 /// 敵キャラ。通常は体力1で一撃。ボス等は maxHealth を 2 以上にすると頭上に体力ゲージを表示する。
-/// プレイヤーに触れると（プレイヤーが無敵/ダッシュ中でなければ）接触ダメージを与える。物理的には貫通する。
+///
+/// プレイヤーとの接触仕様：
+///  - 通常時：当たり判定は「実体」。プレイヤーが触れるとすり抜けずダメージ＋ノックバックを受ける。
+///  - プレイヤーがダッシュ中：Physics2D.IgnoreCollision で衝突を無視し、すり抜けさせる（ダッシュは無敵）。
+///  - プレイヤーの攻撃判定（AttackHitbox、トリガー）に対しては常に反応する（これは物理衝突ではなくトリガー通知）。
 /// </summary>
 [RequireComponent(typeof(Collider2D))]
 public class Enemy : MonoBehaviour
@@ -12,6 +16,20 @@ public class Enemy : MonoBehaviour
     [Tooltip("頭上の体力ゲージ。maxHealth >= 2 のときだけ表示される")]
     [SerializeField] private EnemyHealthBar healthBar;
 
+    [Header("ノックバック（ダッシュ中でない接触時）")]
+    [Tooltip("プレイヤーを押し返す水平方向の速さ")]
+    [SerializeField] private float knockbackSpeed = 8f;
+    [Tooltip("押し返す際に上方向へも少し跳ねさせる速さ")]
+    [SerializeField] private float knockbackUpSpeed = 4f;
+    [Tooltip("ノックバックで入力を受け付けなくする時間")]
+    [SerializeField] private float knockbackDuration = 0.25f;
+
+    private Collider2D _col;
+    private Collider2D _playerCollider;
+    private PlayerController _playerController;
+    private MainActionController _playerMainAction;
+    private bool _ignoringPlayer;
+
     private int _health;
 
     public int Health => _health;
@@ -19,13 +37,37 @@ public class Enemy : MonoBehaviour
 
     private void Awake()
     {
+        _col = GetComponent<Collider2D>();
         _health = maxHealth;
-        GetComponent<Collider2D>().isTrigger = true; // 貫通させるため常にトリガー
 
         if (healthBar != null)
         {
             healthBar.gameObject.SetActive(maxHealth >= 2);
             healthBar.Set(_health, maxHealth);
+        }
+    }
+
+    private void Start()
+    {
+        var p = GameObject.FindGameObjectWithTag("Player");
+        if (p != null)
+        {
+            _playerCollider = p.GetComponent<Collider2D>();
+            _playerController = p.GetComponent<PlayerController>();
+            _playerMainAction = p.GetComponent<MainActionController>();
+        }
+    }
+
+    private void FixedUpdate()
+    {
+        // ダッシュ中だけ物理衝突を無視してすり抜けさせる。それ以外は実体として扱う。
+        if (_playerCollider == null || _playerMainAction == null) return;
+
+        bool shouldIgnore = _playerMainAction.IsDashing;
+        if (shouldIgnore != _ignoringPlayer)
+        {
+            Physics2D.IgnoreCollision(_playerCollider, _col, shouldIgnore);
+            _ignoringPlayer = shouldIgnore;
         }
     }
 
@@ -45,16 +87,24 @@ public class Enemy : MonoBehaviour
         Destroy(gameObject);
     }
 
-    private void OnTriggerEnter2D(Collider2D other) => TryTouchPlayer(other);
-    private void OnTriggerStay2D(Collider2D other) => TryTouchPlayer(other);
+    // 通常時（ダッシュ中でない）は当たり判定が実体なので物理衝突として届く。
+    private void OnCollisionEnter2D(Collision2D collision) => TryTouchPlayer(collision.collider);
+    private void OnCollisionStay2D(Collision2D collision) => TryTouchPlayer(collision.collider);
 
     private void TryTouchPlayer(Collider2D other)
     {
-        // プレイヤー「本体」のコライダーにだけ反応する。プレイヤーの攻撃判定には反応しない。
-        // GetComponentInParent にすると、Player の子である AttackHitbox が触れたときも
-        // 親の PlayerHealth を拾ってしまい、攻撃するたびに自分がダメージを受けるので、
-        // 普通にGetComponentを使って取得する。
+        // プレイヤー「本体」のコライダーにだけ反応する（AttackHitbox は別途トリガーで処理される）。
         var health = other.GetComponent<PlayerHealth>();
-        if (health != null) health.TakeDamage(contactDamage);
+        if (health == null) return;
+
+        bool damaged = health.TakeDamage(contactDamage);
+        if (!damaged) return; // 無敵時間中などで実際にダメージが入らなかった場合はノックバックもしない
+
+        var controller = other.GetComponent<PlayerController>();
+        if (controller == null) return;
+
+        float dir = Mathf.Sign(other.transform.position.x - transform.position.x);
+        if (dir == 0f) dir = 1f;
+        controller.ApplyKnockback(new Vector2(dir * knockbackSpeed, knockbackUpSpeed), knockbackDuration);
     }
 }

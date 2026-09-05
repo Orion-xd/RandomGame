@@ -64,6 +64,9 @@ public class MainActionController : MonoBehaviour
     /// <summary>この間は PlayerController が移動速度・向きを上書きしない（ダッシュ中）。</summary>
     public bool OverridesMovement { get; private set; }
 
+    /// <summary>ダッシュ中か（Enemy が接触をすり抜けさせるかどうかの判定に使う）。</summary>
+    public bool IsDashing { get; private set; }
+
     /// <summary>次のアクションを発動できるか（クールタイム外か）。</summary>
     public bool IsReady => Time.time >= _nextReadyTime;
 
@@ -135,6 +138,13 @@ public class MainActionController : MonoBehaviour
     {
         if (!IsReady) return;
 
+        // 空中ではジャンプ「そのものが発動できない」（消費もクールタイムも発生しない）。
+        // 「発動はするが不発に終わる」のではなく「発動を受け付けない」という仕様。
+        // ※ 将来メインアクションの組み合わせ（コンボ）を実装する際、この前提と矛盾する
+        //    仕様になる可能性があると事前に言われている。コンボ対応時は要再検討。
+        MainActionType? next = _queue.Peek(0);
+        if (next == MainActionType.Jump && (_player == null || !_player.IsGrounded)) return;
+
         // ── コンボ拡張ポイント ──
         // 例) if (_queue.Peek(0) == Jump && _queue.Peek(1) == Dash) { _queue.Consume(); _queue.Consume(); ExecuteCombo(...); ... return; }
 
@@ -162,6 +172,8 @@ public class MainActionController : MonoBehaviour
 
     private void DoJump()
     {
+        // 接地チェックは TryTrigger 側で「発動そのものを受け付けない」形で行っている。
+        // ここに来た時点で必ず接地している前提。
         Vector2 v = _rb.linearVelocity;
         v.y = jumpForce;
         _rb.linearVelocity = v;
@@ -180,6 +192,7 @@ public class MainActionController : MonoBehaviour
 
         IsInvincible = true;
         OverridesMovement = true;
+        IsDashing = true;
 
         _rb.linearVelocity = new Vector2(_dashDir * dashSpeed, 0f);
     }
@@ -190,6 +203,7 @@ public class MainActionController : MonoBehaviour
         _rb.gravityScale = _savedGravityScale;
         IsInvincible = false;   // 効果時間が切れたら必ず無敵解除
         OverridesMovement = false;
+        IsDashing = false;
     }
 
     private void OnDisable()
