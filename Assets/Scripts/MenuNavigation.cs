@@ -22,8 +22,20 @@ using UnityEngine.UI;
 /// </summary>
 public class MenuNavigation : MonoBehaviour
 {
+    /// <summary>メニューを開いたとき最初にカーソルを置く場所。</summary>
+    private enum InitialCursor
+    {
+        /// <summary>先頭（＝一番上）の有効なボタン。タイトルや結果画面（「次のステージへ」「リトライ」）向け。</summary>
+        FirstUsable,
+        /// <summary>末尾側の有効なボタン。ステージ選択で「今挑戦できる一番先のステージ」に合わせる用。</summary>
+        LastUsable,
+    }
+
     [Tooltip("空なら子から Button を自動収集（階層順）")]
     [SerializeField] private Button[] buttonsOverride;
+
+    [Tooltip("メニューを開いたとき最初にカーソルを置く位置")]
+    [SerializeField] private InitialCursor initialCursor = InitialCursor.FirstUsable;
 
     [Header("選択枠")]
     [SerializeField] private Color frameColor = new Color(1f, 0.85f, 0.2f, 1f);
@@ -57,7 +69,9 @@ public class MenuNavigation : MonoBehaviour
 
     private void OnEnable()
     {
-        _index = FirstUsable();
+        // 実際の初期カーソルは Update 側で決める（OnEnable の時点ではボタンの
+        // interactable がまだ設定されていないことがあるため。例: StageSelectMenu.Start()）。
+        _index = -1;
         _appliedIndex = -1;
         _haveMouse = false;
         RefreshFrame();
@@ -72,8 +86,9 @@ public class MenuNavigation : MonoBehaviour
     {
         if (_buttons == null || _buttons.Length == 0) return;
 
-        // OnEnable の時点でボタンがまだ有効化されておらず選択できなかった場合の遅延初期化。
-        if (_index < 0) _index = FirstUsable();
+        // カーソルが未設定 / 範囲外 / 選択先が無効になったら、初期位置を選び直す。
+        if (_index < 0 || _index >= _buttons.Length || !IsUsable(_buttons[_index]))
+            _index = PickInitial();
 
         // モジュールが（マウスクリック時などに）選択したオブジェクトを毎フレーム解除し、
         // Enter の二重発火（モジュールの Submit ＋ 下の手動 Submit）を防ぐ。
@@ -194,9 +209,15 @@ public class MenuNavigation : MonoBehaviour
 
     // ── ヘルパー ───────────────────────────────────────────
 
-    private int FirstUsable()
+    private int PickInitial()
     {
-        for (int i = 0; i < (_buttons?.Length ?? 0); i++)
+        int n = _buttons?.Length ?? 0;
+        if (initialCursor == InitialCursor.LastUsable)
+        {
+            for (int i = n - 1; i >= 0; i--)
+                if (IsUsable(_buttons[i])) return i;
+        }
+        for (int i = 0; i < n; i++)
             if (IsUsable(_buttons[i])) return i;
         return -1;
     }

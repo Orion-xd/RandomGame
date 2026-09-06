@@ -61,6 +61,7 @@ public class StageManager : MonoBehaviour
     {
         if (_ended) return;
         _ended = true;
+        GameFlow.MarkStageCleared(GameFlow.CurrentStageIndex); // 次のステージを解放
         FreezeGameplay();
         if (clearPanel != null) clearPanel.SetActive(true);
         Time.timeScale = 0f;
