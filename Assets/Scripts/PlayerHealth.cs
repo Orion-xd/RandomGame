@@ -14,6 +14,7 @@ public class PlayerHealth : MonoBehaviour
 
     private int _health;
     private float _invulnUntil;
+    private bool _died;
     private MainActionController _mainAction;
 
     public int Health => _health;
@@ -21,6 +22,9 @@ public class PlayerHealth : MonoBehaviour
 
     /// <summary>体力が変化したとき（初期化時も含む）に発火。UI 更新用。</summary>
     public event Action OnHealthChanged;
+
+    /// <summary>体力が0になったとき1回だけ発火。ステージ失敗の判定に使う。</summary>
+    public event Action OnDied;
 
     private void Awake()
     {
@@ -46,9 +50,11 @@ public class PlayerHealth : MonoBehaviour
         OnHealthChanged?.Invoke();
         Debug.Log($"Player took {amount} dmg -> HP {_health}/{maxHealth}");
 
-        if (_health <= 0)
+        if (_health <= 0 && !_died)
         {
-            Debug.Log("Player MISS (体力0) -> TODO: リザルト画面へ");
+            _died = true;
+            Debug.Log("Player MISS (体力0)");
+            OnDied?.Invoke();
         }
 
         return true;
