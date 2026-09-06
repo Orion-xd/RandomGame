@@ -134,6 +134,37 @@ public class PlayerController : MonoBehaviour
         _rb.linearVelocity = velocity;
     }
 
+    /// <summary>着地予測レイの最大距離（先行入力のジャンプ受付判定用）。</summary>
+    private const float LandingProbeDistance = 30f;
+
+    /// <summary>
+    /// いまの落下軌道で groundLayer に着地するまでのおおよその秒数を返す（メインアクションの先行入力・
+    /// ジャンプ受付の判定用）。上昇中、または真下に地面が見つからない場合は false。
+    /// 足元中央から真下へのレイ 1 本だけの簡易予測なので厳密ではない（台の端などは誤差が出る）。
+    /// コストは軽い（呼び出し側が「ジャンプのクールタイム中かつ非上昇」のときだけ呼ぶ想定）。
+    /// </summary>
+    public bool TryPredictLandingTime(out float seconds)
+    {
+        seconds = 0f;
+
+        if (_rb.linearVelocity.y > 0.01f) return false; // 上昇中は対象外
+        if (IsGrounded) return true;                    // すでに接地（seconds = 0）
+
+        Bounds b = _col.bounds;
+        Vector2 origin = new Vector2(b.center.x, b.min.y);
+        RaycastHit2D hit = Physics2D.Raycast(origin, Vector2.down, LandingProbeDistance, groundLayer);
+        if (hit.collider == null) return false;
+
+        float g = Mathf.Abs(_baseGravityScale * Physics2D.gravity.y);
+        if (g <= 0.0001f) return false;
+
+        float d = Mathf.Max(hit.distance, 0f);
+        float v0 = Mathf.Max(-_rb.linearVelocity.y, 0f); // 下向きの速さ
+        // d = v0*t + 0.5*g*t^2 を解く（正の根）。
+        seconds = (-v0 + Mathf.Sqrt(v0 * v0 + 2f * g * d)) / g;
+        return true;
+    }
+
     private void SetFacing(int sign)
     {
         FacingSign = sign;
