@@ -22,6 +22,15 @@ using UnityEngine.InputSystem;
 /// 攻撃判定、ジャンプ＋ダッシュ＝上昇中にダッシュへ移行、など）。唯一の特例はダッシュ→ジャンプで、
 /// 空中でもジャンプの発動を許可し（接地チェック免除）、ダッシュ移動を中断してから跳ぶ。
 /// このとき無敵はダッシュの通常効果時間ぶん継続する（下記 _dashInvTimeLeft）。
+///
+/// ── 先行入力（バッファ） ──
+/// クールタイム終了の inputBufferTime 秒前（既定 0.1 秒＝約6フレーム）から、スペースキーの押下を
+/// 「先行入力」として記憶する。キーを離していても、クールタイムが明けた瞬間に次のアクションを発動する。
+/// これにより「クールタイム明けにすぐ次を出す」操作がやりやすくなる。
+///  - ダッシュ / 攻撃：時間ベースなので「残り <= inputBufferTime」で受付。
+///  - ジャンプ：時間ではなく着地で明けるため、PlayerController.TryPredictLandingTime（足元からの
+///    簡易落下予測）で「着地まで <= inputBufferTime 秒」のときだけ受付。予測できなければ受け付けない。
+/// 受付中かどうかは InInputBufferZone、CD ゲージ上での区間割合は InputBufferZoneFraction01 で公開。
 /// </summary>
 [RequireComponent(typeof(Rigidbody2D))]
 [RequireComponent(typeof(PlayerController))]
@@ -63,6 +72,9 @@ public class MainActionController : MonoBehaviour
     [SerializeField] private float attackCooldown = 2f;
     [Tooltip("1つ目のアクション発動後、次をコンボとして受け付ける猶予（秒）。組み合わせによらず一定。クールタイムとは別物")]
     [SerializeField] private float comboGraceTime = 0.8f;
+    [Tooltip("クールタイム終了のこの秒数前から、スペースキー押下を『先行入力』として記憶する（約6フレーム=0.1秒）。" +
+             "キーを離していても、クールタイムが明けた瞬間に次のアクションが発動する。0 で無効")]
+    [SerializeField] private float inputBufferTime = 0.1f;
 
     private Rigidbody2D _rb;
     private PlayerController _player;
@@ -74,6 +86,12 @@ public class MainActionController : MonoBehaviour
     private int _comboStep;                    // 0 = コンボ中でない / 1 = 1つ目発動済み・2つ目待ち
     private MainActionType _comboFirstAction;   // コンボの1つ目に何を使ったか
     private float _comboDeadline;               // この時刻までに2つ目を出せばコンボ扱い
+
+    // 先行入力（クールタイム終了直前に押しておくと、明けた瞬間に発動）
+    private bool _bufferedInput;
+    private float _bufferedInputExpiry;         // これを過ぎたら記憶を破棄（保険）
+    private float _bufferZoneFraction;          // デバッグゲージ用：CD ゲージ内で先行入力できる区間の割合
+    private const float BufferedInputMaxLife = 0.4f;
 
     // ダッシュ状態（FixedUpdate で処理する）
     private float _dashTimeLeft;
@@ -101,6 +119,12 @@ public class MainActionController : MonoBehaviour
 
     /// <summary>次のアクションを発動できるか（時間ベースのクールタイム外、かつジャンプのクールタイム中でない）。</summary>
     public bool IsReady => Time.time >= _nextReadyTime && !_jumpCdActive;
+
+    /// <summary>いま先行入力の受付区間内か（CD 終了 inputBufferTime 秒前〜／ジャンプは着地 inputBufferTime 秒前〜）。</summary>
+    public bool InInputBufferZone { get; private set; }
+
+    /// <summary>デバッグ表示用：CD ゲージ内で先行入力できる区間の割合（ゲージの空側の端から測った 0..1）。</summary>
+    public float InputBufferZoneFraction01 => _bufferZoneFraction;
 
     /// <summary>デバッグ表示用：コンボ受付ゲージ（1 = 発動直後, 0 = 猶予切れ）。</summary>
     public float ComboGraceFraction01
@@ -138,10 +162,56 @@ public class MainActionController : MonoBehaviour
 
     private void Update()
     {
-        // スペースキーが押されていれば、メインアクションを実行する。
+        // 先行入力の受付区間（InInputBufferZone / _bufferZoneFraction）を毎フレーム更新。
+        UpdateInputBufferState();
+
+        // スペースキー押下：まず即時発動を試み、ダメなら受付区間内のとき「先行入力」として記憶する。
         var kb = Keyboard.current;
-        if (kb == null || !kb.spaceKey.wasPressedThisFrame) return;
-        TryTrigger();
+        if (kb != null && kb.spaceKey.wasPressedThisFrame)
+        {
+            if (TryTrigger())
+            {
+                _bufferedInput = false; // 実際に出せたので、残っていた先行入力は破棄
+            }
+            else if (InInputBufferZone)
+            {
+                _bufferedInput = true;
+                _bufferedInputExpiry = Time.time + BufferedInputMaxLife;
+            }
+        }
+
+        // 記憶した先行入力の消化：発動可能になった瞬間に実行する（キーを離していてもよい）。
+        if (_bufferedInput)
+        {
+            if (Time.time > _bufferedInputExpiry) _bufferedInput = false;
+            else if (IsReady) { _bufferedInput = false; TryTrigger(); }
+        }
+    }
+
+    /// <summary>先行入力の受付区間（InInputBufferZone）と、その CD ゲージ上での割合を更新する。</summary>
+    private void UpdateInputBufferState()
+    {
+        InInputBufferZone = false;
+        _bufferZoneFraction = 0f;
+        if (inputBufferTime <= 0f) return;
+
+        if (_jumpCdActive)
+        {
+            // ジャンプ：時間ではなく「着地」で明けるので、着地予測が使えるときだけ受付。
+            // ゲージ上の区間は上限（jumpAirCooldownCap）基準の目安表示にとどめる。
+            if (jumpAirCooldownCap > 0f)
+                _bufferZoneFraction = Mathf.Clamp01(inputBufferTime / jumpAirCooldownCap);
+            if (_player != null && _player.TryPredictLandingTime(out float tLand))
+                InInputBufferZone = tLand <= inputBufferTime;
+            return;
+        }
+
+        // ダッシュ / 攻撃：時間ベースの CD 終了 inputBufferTime 秒前から受付。
+        if (_lastCooldownDuration > 0f && Time.time < _nextReadyTime)
+        {
+            _bufferZoneFraction = Mathf.Clamp01(inputBufferTime / _lastCooldownDuration);
+            InInputBufferZone = (_nextReadyTime - Time.time) <= inputBufferTime;
+        }
     }
 
     private void FixedUpdate()
@@ -228,8 +298,9 @@ public class MainActionController : MonoBehaviour
             _jumpCdActive = false;                                        // 滞空しすぎ → 上限で強制解除
     }
 
-    /// <summary>クールタイム外、またはコンボの2つ目として有効な間なら、キュー先頭を消費してアクションを実行する。</summary>
-    public void TryTrigger()
+    /// <summary>クールタイム外、またはコンボの2つ目として有効な間なら、キュー先頭を消費してアクションを実行する。
+    /// 実際に発動できたら true、できなかったら false を返す（先行入力の記憶判定に使う）。</summary>
+    public bool TryTrigger()
     {
         // コンボ猶予を過ぎていたらコンボ状態をリセット（念のため）。
         if (_comboStep == 1 && Time.time > _comboDeadline) _comboStep = 0;
@@ -237,7 +308,7 @@ public class MainActionController : MonoBehaviour
         // 1つ目の発動から comboGraceTime 秒以内なら、2つ目としての発動を許可する（クールタイムとは独立）。
         bool comboContinuation = _comboStep == 1 && Time.time <= _comboDeadline;
 
-        if (!IsReady && !comboContinuation) return;
+        if (!IsReady && !comboContinuation) return false;
 
         // 空中ではジャンプ「そのものが発動できない」（消費もクールタイムも発生しない）。
         //  - 接地中に加え、コヨーテタイム中（地面を離れて coyoteJumpGrace 秒以内。PlayerController.InCoyoteTime）もジャンプ可。
@@ -246,7 +317,7 @@ public class MainActionController : MonoBehaviour
         MainActionType? next = _queue.Peek(0);
         bool jumpGroundBypass = comboContinuation && next == MainActionType.Jump && _comboFirstAction == MainActionType.Dash;
         bool jumpGrounded = _player != null && (_player.IsGrounded || _player.InCoyoteTime);
-        if (next == MainActionType.Jump && !jumpGroundBypass && !jumpGrounded) return;
+        if (next == MainActionType.Jump && !jumpGroundBypass && !jumpGrounded) return false;
 
         MainActionType action = _queue.Consume();
         Execute(action);
@@ -280,6 +351,8 @@ public class MainActionController : MonoBehaviour
             _comboFirstAction = action;
             _comboDeadline = Time.time + comboGraceTime;
         }
+
+        return true;
     }
 
     private float CooldownFor(MainActionType a)
@@ -380,6 +453,9 @@ public class MainActionController : MonoBehaviour
     {
         // 無効化時に重力が切れたまま／無敵のままにならないように
         if (_dashTimeLeft > 0f || _dashInvTimeLeft > 0f) EndDash();
+        _bufferedInput = false;
+        InInputBufferZone = false;
+        _bufferZoneFraction = 0f;
     }
 
     private IEnumerator DoAttack()
