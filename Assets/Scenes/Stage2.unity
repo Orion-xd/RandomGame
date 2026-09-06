@@ -826,6 +826,7 @@ GameObject:
   - component: {fileID: 355546670}
   - component: {fileID: 355546672}
   - component: {fileID: 355546671}
+  - component: {fileID: 355546673}
   m_Layer: 0
   m_Name: ClearPanel
   m_TagString: Untagged
@@ -894,6 +895,21 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 355546669}
   m_CullTransparentMesh: 1
+--- !u!114 &355546673
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 355546669}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3b7ab08171bc3474cbf71973d77dd8d4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MenuNavigation
+  buttonsOverride: []
+  frameColor: {r: 1, g: 0.85, b: 0.2, a: 1}
+  framePadding: 8
 --- !u!1 &372767095
 GameObject:
   m_ObjectHideFlags: 0
@@ -1565,6 +1581,7 @@ MonoBehaviour:
   dashCooldown: 2
   attackCooldown: 2
   comboGraceTime: 0.8
+  inputBufferTime: 0.1
 --- !u!1 &619394800
 GameObject:
   m_ObjectHideFlags: 0
@@ -3800,6 +3817,7 @@ GameObject:
   - component: {fileID: 1722059046}
   - component: {fileID: 1722059048}
   - component: {fileID: 1722059047}
+  - component: {fileID: 1722059049}
   m_Layer: 0
   m_Name: FailPanel
   m_TagString: Untagged
@@ -3867,6 +3885,21 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1722059045}
   m_CullTransparentMesh: 1
+--- !u!114 &1722059049
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1722059045}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3b7ab08171bc3474cbf71973d77dd8d4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MenuNavigation
+  buttonsOverride: []
+  frameColor: {r: 1, g: 0.85, b: 0.2, a: 1}
+  framePadding: 8
 --- !u!114 &1748229278
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3933,6 +3966,9 @@ MonoBehaviour:
   comboLabel: {fileID: 1491824247}
   cooldownLabel: {fileID: 675625889}
   barWidth: 1.2
+  bufferZoneIdleColor: {r: 0.25, g: 0.7, b: 1, a: 0.55}
+  bufferZoneActiveColor: {r: 0.35, g: 1, b: 0.45, a: 0.95}
+  minBufferZoneWidthFrac: 0.04
 --- !u!1 &1783828124
 GameObject:
   m_ObjectHideFlags: 0
