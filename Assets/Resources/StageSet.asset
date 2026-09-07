@@ -12,14 +12,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 777915acde7157a488ced20b53fca525, type: 3}
   m_Name: StageSet
   m_EditorClassIdentifier: Assembly-CSharp::StageSet
+  prologue: {fileID: 11400000, guid: 6510f983e9d42df4897eda4fba915034, type: 2}
   stages:
   - displayName: Stage 1
     sceneName: Stage1
+    intro: {fileID: 11400000, guid: e32a1e33b3deaf04194af741563fd8bc, type: 2}
   - displayName: Stage 2
     sceneName: Stage2
+    intro: {fileID: 11400000, guid: 2aae5261df96d8f4b85e08ca06fc5037, type: 2}
   - displayName: Stage 3
     sceneName: Stage3
+    intro: {fileID: 11400000, guid: cdf63d9108e27b647b9e2b47031c5a63, type: 2}
   - displayName: Stage 4
     sceneName: Stage4
+    intro: {fileID: 11400000, guid: c2d90fc76176c564eaaad6de0fa0a246, type: 2}
   - displayName: Stage 5
     sceneName: Stage5
+    intro: {fileID: 11400000, guid: 7ae84ca9687afa647abbdabda0e98188, type: 2}

@@ -162,6 +162,9 @@ public class MainActionController : MonoBehaviour
 
     private void Update()
     {
+        // 会話中はメインアクションの入力を受け付けない（スペースは会話送りに使う）。
+        if (DialoguePlayer.IsPlaying) return;
+
         // 先行入力の受付区間（InInputBufferZone / _bufferZoneFraction）を毎フレーム更新。
         UpdateInputBufferState();
 

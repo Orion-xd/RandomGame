@@ -26,6 +26,7 @@ public class StageManager : MonoBehaviour
     private PlayerHealth _playerHealth;
     private Transform _playerTf;
     private bool _ended;
+    private bool _introPlaying;
 
     private void Awake()
     {
@@ -44,6 +45,8 @@ public class StageManager : MonoBehaviour
             if (_playerHealth != null) _playerHealth.OnDied += Fail;
         }
         if (nextButton != null) nextButton.gameObject.SetActive(GameFlow.HasNextStage);
+
+        TryPlayIntro();
     }
 
     private void OnDestroy()
@@ -53,8 +56,36 @@ public class StageManager : MonoBehaviour
 
     private void Update()
     {
-        if (_ended || _playerTf == null) return;
+        if (_ended || _introPlaying || _playerTf == null) return;
         if (_playerTf.position.y < killY) Fail();
+    }
+
+    // ── ステージ開始時の会話（そのステージに初めて入ったときだけ） ──
+
+    private void TryPlayIntro()
+    {
+        int idx = GameFlow.CurrentStageIndex;
+        if (GameFlow.HasSeenIntro(idx)) return;
+
+        var seq = GameFlow.Stages != null ? GameFlow.Stages.IntroAt(idx) : null;
+        var player = FindAnyObjectByType<DialoguePlayer>();
+        if (player == null || seq == null || seq.Count == 0)
+        {
+            GameFlow.MarkIntroSeen(idx); // 会話が無いステージは既読扱いにして以後スキップ
+            return;
+        }
+
+        _introPlaying = true;
+        Time.timeScale = 0f; // プレイヤーも敵も止める
+        player.Play(seq, OnIntroFinished);
+    }
+
+    private void OnIntroFinished()
+    {
+        GameFlow.MarkIntroSeen(GameFlow.CurrentStageIndex);
+        _introPlaying = false;
+        if (_ended) return;
+        Time.timeScale = 1f;
     }
 
     public void Clear()

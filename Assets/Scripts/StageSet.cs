@@ -20,7 +20,13 @@ public class StageSet : ScriptableObject
 
         [Tooltip("読み込むシーン名。Build Settings に追加したシーンと一致させること")]
         public string sceneName;
+
+        [Tooltip("このステージに初めて入ったときに流す会話（任意。未設定なら会話なし）")]
+        public DialogueSequence intro;
     }
+
+    [Tooltip("ゲーム開始時（タイトル → ステージ選択の前）に流すプロローグ会話（任意。未設定ならスキップ）")]
+    public DialogueSequence prologue;
 
     [Tooltip("ステージを順番に並べる。index 0 = 最初のステージ")]
     public Stage[] stages;
@@ -32,4 +38,7 @@ public class StageSet : ScriptableObject
 
     public string DisplayNameAt(int index)
         => (index >= 0 && index < Count) ? stages[index].displayName : null;
+
+    public DialogueSequence IntroAt(int index)
+        => (index >= 0 && index < Count) ? stages[index].intro : null;
 }

@@ -42,6 +42,12 @@ public class DevStageClearToggles : MonoBehaviour
     [SerializeField] private float gap = 28f;
     [SerializeField] private Color boxColor = new Color(1f, 1f, 1f, 0.18f);
     [SerializeField] private Color checkColor = new Color(0.35f, 1f, 0.45f, 1f);
+    [Tooltip("列ラベル『clear』の文字")]
+    [SerializeField] private Color labelColor = new Color(1f, 1f, 1f, 0.8f);
+    [Tooltip("列ラベルのフォントサイズ")]
+    [SerializeField] private int labelFontSize = 24;
+    [Tooltip("列ラベルとチェックボックスの隙間 (px)")]
+    [SerializeField] private float labelGap = 8f;
 
     private Toggle[] _toggles;
     private bool _built;
@@ -59,11 +65,40 @@ public class DevStageClearToggles : MonoBehaviour
         if (buttons == null || buttons.Length == 0) return;
 
         _toggles = new Toggle[buttons.Length];
+        Toggle topToggle = null;
         for (int i = 0; i < buttons.Length; i++)
         {
             if (buttons[i] == null) continue;
             _toggles[i] = BuildToggle(i, buttons[i]);
+            if (topToggle == null) topToggle = _toggles[i]; // 一番上（Stage1）のトグル
         }
+
+        // 列の一番上に「clear」ラベルを1つだけ（各ボックスには付けない）。
+        if (topToggle != null) BuildColumnLabel((RectTransform)topToggle.transform, "clear");
+    }
+
+    /// <summary>列の一番上のチェックボックスの真上に、列ラベルを1つだけ置く（x はボックス列と揃う）。</summary>
+    private void BuildColumnLabel(RectTransform topBoxRt, string text)
+    {
+        var go = new GameObject("ColumnLabel_" + text, typeof(RectTransform));
+        go.transform.SetParent(topBoxRt, false);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = new Vector2(0.5f, 1f);
+        rt.anchorMax = new Vector2(0.5f, 1f);
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.anchoredPosition = new Vector2(0f, labelGap);
+        rt.sizeDelta = new Vector2(160f, labelFontSize + 8f);
+
+        var t = go.AddComponent<Text>();
+        t.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        t.fontSize = labelFontSize;
+        t.fontStyle = FontStyle.Bold;
+        t.alignment = TextAnchor.LowerCenter;
+        t.color = labelColor;
+        t.raycastTarget = false;
+        t.horizontalOverflow = HorizontalWrapMode.Overflow;
+        t.verticalOverflow = VerticalWrapMode.Overflow;
+        t.text = text;
     }
 
     private Toggle BuildToggle(int index, Button stageButton)

@@ -198,12 +198,17 @@ public class MenuNavigation : MonoBehaviour
             _frame.SetAsFirstSibling();          // 全ボタンより後ろに描画 → はみ出した分が枠に見える
             _frame.anchorMin = brt.anchorMin;
             _frame.anchorMax = brt.anchorMax;
-            _frame.pivot = brt.pivot;
+            _frame.pivot = new Vector2(0.5f, 0.5f); // 枠は常に中心 pivot。ボタン側の pivot はどうでもよい
             _frame.localScale = Vector3.one;
             _frame.localRotation = Quaternion.identity;
         }
 
-        _frame.anchoredPosition = brt.anchoredPosition;
+        // ボタンの pivot が中心でなくても正しく囲めるよう、ボタン矩形の「中心」に枠を合わせる。
+        // （pivot 位置 → 中心 への補正。中心 pivot のボタンでは補正 0 になり従来と同じ挙動。）
+        Vector2 centerOffset = new Vector2(
+            brt.sizeDelta.x * (0.5f - brt.pivot.x),
+            brt.sizeDelta.y * (0.5f - brt.pivot.y));
+        _frame.anchoredPosition = brt.anchoredPosition + centerOffset;
         _frame.sizeDelta = brt.sizeDelta + new Vector2(framePadding * 2f, framePadding * 2f);
     }
 

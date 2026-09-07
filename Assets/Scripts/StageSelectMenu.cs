@@ -50,4 +50,7 @@ public class StageSelectMenu : MonoBehaviour
 
     /// <summary>index 0 = 最初のステージ, 1 = 次のステージ, ...</summary>
     public void LoadStage(int index) => GameFlow.LoadStage(index);
+
+    /// <summary>タイトル画面へ戻る（右下の戻るボタンの OnClick から）。</summary>
+    public void BackToTitle() => GameFlow.GoTitle();
 }
