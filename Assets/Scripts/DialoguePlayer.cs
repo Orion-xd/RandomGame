@@ -33,6 +33,9 @@ public class DialoguePlayer : MonoBehaviour
     [Tooltip("会話 Canvas の描画順。HUD(0) や結果画面(100) より前面に。")]
     [SerializeField] private int sortingOrder = 200;
 
+    [Tooltip("会話（プロローグ / ステージ開始会話）が出てからこの秒数、送り入力を無効化する（連打で飛ばさないように）")]
+    [SerializeField] private float inputLockDuration = 0.5f;
+
     private DialogueSequence _seq;
     private int _page;
     private Action _onComplete;
@@ -81,6 +84,7 @@ public class DialoguePlayer : MonoBehaviour
         }
 
         IsPlaying = true;
+        InputLock.LockFor(inputLockDuration); // 会話が出た直後、しばらく送り入力を無効化
         _root.SetActive(true);
         Render();
     }
@@ -88,15 +92,18 @@ public class DialoguePlayer : MonoBehaviour
     private void Update()
     {
         if (!IsPlaying) return;
+        if (!InputLock.InputAllowed) return; // 出た直後は連打の勢いで飛ばさない
 
         var k = Keyboard.current;
-        if (k == null) return;
-        if (k.spaceKey.wasPressedThisFrame
+        bool byKey = k != null && (k.spaceKey.wasPressedThisFrame
             || k.enterKey.wasPressedThisFrame
-            || k.numpadEnterKey.wasPressedThisFrame)
-        {
-            Advance();
-        }
+            || k.numpadEnterKey.wasPressedThisFrame);
+
+        // 画面のどこをクリックしても読み進められる（UI 経由ではなくデバイスを直接読むので位置は問わない）。
+        var m = Mouse.current;
+        bool byClick = m != null && m.leftButton.wasPressedThisFrame;
+
+        if (byKey || byClick) Advance();
     }
 
     private void Advance()
@@ -219,6 +226,7 @@ public class DialoguePlayer : MonoBehaviour
         LayoutBox(false);
         _boxBg = boxGo.AddComponent<Image>();
         _boxBg.color = boxColor;
+        _boxBg.raycastTarget = false;
 
         _speakerText = NewText("Speaker", boxGo.transform, speakerFontSize, TextAnchor.UpperLeft);
         _speakerText.color = speakerColor;
@@ -238,7 +246,7 @@ public class DialoguePlayer : MonoBehaviour
         brt.offsetMax = new Vector2(-30f, -60f); // 上に話者名ぶんの余白
 
         _hintText = NewText("Hint", _root.transform, hintFontSize, TextAnchor.LowerRight);
-        _hintText.text = "Space / Enter ▶";
+        _hintText.text = "Click / Space / Enter ▶";
         _hintText.color = new Color(1f, 1f, 1f, 0.65f);
         FillRect((RectTransform)_hintText.transform, 0.5f, 0.02f, 0.965f, 0.06f);
     }

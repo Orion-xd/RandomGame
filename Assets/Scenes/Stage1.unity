@@ -1205,6 +1205,8 @@ MonoBehaviour:
   initialCursor: 0
   frameColor: {r: 1, g: 0.85, b: 0.2, a: 1}
   framePadding: 8
+  rowTolerance: 40
+  inputLockDuration: 1
 --- !u!1 &372767095
 GameObject:
   m_ObjectHideFlags: 0
@@ -4625,6 +4627,7 @@ MonoBehaviour:
   failPanel: {fileID: 1722059045}
   nextButton: {fileID: 68450664}
   killY: -12
+  inputLockDuration: 0.5
 --- !u!4 &1625155391
 Transform:
   m_ObjectHideFlags: 0
@@ -4736,6 +4739,8 @@ MonoBehaviour:
   initialCursor: 0
   frameColor: {r: 1, g: 0.85, b: 0.2, a: 1}
   framePadding: 8
+  rowTolerance: 40
+  inputLockDuration: 1
 --- !u!114 &1748229278
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5071,6 +5076,7 @@ MonoBehaviour:
   speakerFontSize: 26
   hintFontSize: 18
   sortingOrder: 200
+  inputLockDuration: 0.5
 --- !u!4 &1816234063
 Transform:
   m_ObjectHideFlags: 0

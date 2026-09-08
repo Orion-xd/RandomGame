@@ -549,6 +549,8 @@ MonoBehaviour:
   initialCursor: 0
   frameColor: {r: 1, g: 0.85, b: 0.2, a: 1}
   framePadding: 8
+  rowTolerance: 40
+  inputLockDuration: 0.5
 --- !u!114 &1263943162
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -561,7 +563,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0699296f2df05b844a5660fcb1035714, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DevStorySeenToggles
-  developerMode: 1
   stageSelectMenu: {fileID: 0}
   stageButtons: []
   prologueAnchorButton: {fileID: 816786894}
@@ -570,7 +571,9 @@ MonoBehaviour:
   stageExtraLeftGap: 72
   boxColor: {r: 1, g: 1, b: 1, a: 0.18}
   checkColor: {r: 0.45, g: 0.72, b: 1, a: 1}
-  captionColor: {r: 1, g: 1, b: 1, a: 0.5}
+  labelColor: {r: 1, g: 1, b: 1, a: 0.8}
+  labelFontSize: 24
+  labelGap: 8
 --- !u!1 &1419511076
 GameObject:
   m_ObjectHideFlags: 0

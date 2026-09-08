@@ -126,19 +126,30 @@ public static class GameFlow
     /// <summary>プロローグ会話を「見た」ことにする。</summary>
     public static void MarkPrologueSeen() => SetPrologueSeen(true);
 
-    /// <summary>クリア状況と会話既読フラグをリセット（先頭のみ解放・全会話が初回状態）。テスト用。</summary>
-    public static void ResetProgress()
+    /// <summary>ステージのクリア状況とステージ開始会話の既読だけをリセット（プロローグ既読は残す）。
+    /// ステージ選択画面の開発者用リセットボタンが呼ぶ。</summary>
+    public static void ResetStageProgress()
     {
         PlayerPrefs.DeleteKey(ClearedKey);
         PlayerPrefs.DeleteKey(SeenIntroKey);
+        PlayerPrefs.Save();
+    }
+
+    /// <summary>クリア状況・会話既読（プロローグ含む）を全てリセット（先頭のみ解放・全会話が初回状態）。
+    /// テスト用 / FreshBuildGuard（新ビルド初回起動）用。</summary>
+    public static void ResetProgress()
+    {
+        ResetStageProgress();
         PlayerPrefs.DeleteKey(SeenPrologueKey);
         PlayerPrefs.Save();
     }
 
+    // すべての画面遷移は SceneTransition 経由（暗転 → 読み込み → 明転）。
+
     public static void GoTitle()
     {
         Time.timeScale = 1f;
-        SceneManager.LoadScene(TitleScene);
+        SceneTransition.Go(TitleScene);
     }
 
     /// <summary>タイトルの「ゲームスタート」から。未読ならプロローグシーンを経由し、既読ならステージ選択へ直行。
@@ -146,16 +157,14 @@ public static class GameFlow
     public static void StartGame()
     {
         Time.timeScale = 1f;
-        if (!HasSeenPrologue && Application.CanStreamedLevelBeLoaded(PrologueScene))
-            SceneManager.LoadScene(PrologueScene);
-        else
-            SceneManager.LoadScene(StageSelectScene);
+        bool toPrologue = !HasSeenPrologue && Application.CanStreamedLevelBeLoaded(PrologueScene);
+        SceneTransition.Go(toPrologue ? PrologueScene : StageSelectScene);
     }
 
     public static void GoStageSelect()
     {
         Time.timeScale = 1f;
-        SceneManager.LoadScene(StageSelectScene);
+        SceneTransition.Go(StageSelectScene);
     }
 
     public static void LoadStage(int index)
@@ -172,7 +181,7 @@ public static class GameFlow
 
         CurrentStageIndex = index;
         Time.timeScale = 1f;
-        SceneManager.LoadScene(scene);
+        SceneTransition.Go(scene);
     }
 
     public static void RetryStage() => LoadStage(CurrentStageIndex);

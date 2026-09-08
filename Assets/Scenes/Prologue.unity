@@ -255,6 +255,7 @@ MonoBehaviour:
   speakerFontSize: 26
   hintFontSize: 18
   sortingOrder: 200
+  inputLockDuration: 0.5
 --- !u!4 &1179332137
 Transform:
   m_ObjectHideFlags: 0
