@@ -43,6 +43,20 @@ public static class GameFlow
 
     public static int CurrentStageIndex { get; private set; }
 
+    /// <summary>今アクティブなシーンが StageSet の何番目のステージか。フロー経由なら CurrentStageIndex、
+    /// シーンを直接 Play したときはシーン名から引く。ステージシーンでなければ -1。</summary>
+    public static int ActiveStageIndex
+    {
+        get
+        {
+            var s = Stages;
+            if (s == null) return -1;
+            int byName = s.IndexOfScene(SceneManager.GetActiveScene().name);
+            if (byName >= 0) return byName;
+            return (CurrentStageIndex >= 0 && CurrentStageIndex < s.Count) ? CurrentStageIndex : -1;
+        }
+    }
+
     public static int StageCount => Stages != null ? Stages.Count : 0;
     public static bool HasNextStage => CurrentStageIndex + 1 < StageCount;
 

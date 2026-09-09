@@ -17,15 +17,25 @@ MonoBehaviour:
   - displayName: Stage 1
     sceneName: Stage1
     intro: {fileID: 11400000, guid: e32a1e33b3deaf04194af741563fd8bc, type: 2}
+    allowedActions: 01000000
+    disableCombos: 1
   - displayName: Stage 2
     sceneName: Stage2
     intro: {fileID: 11400000, guid: 2aae5261df96d8f4b85e08ca06fc5037, type: 2}
+    allowedActions: 0100000002000000
+    disableCombos: 0
   - displayName: Stage 3
     sceneName: Stage3
     intro: {fileID: 11400000, guid: cdf63d9108e27b647b9e2b47031c5a63, type: 2}
+    allowedActions: 000000000100000002000000
+    disableCombos: 0
   - displayName: Stage 4
     sceneName: Stage4
     intro: {fileID: 11400000, guid: c2d90fc76176c564eaaad6de0fa0a246, type: 2}
+    allowedActions: 000000000100000002000000
+    disableCombos: 0
   - displayName: Stage 5
     sceneName: Stage5
     intro: {fileID: 11400000, guid: 7ae84ca9687afa647abbdabda0e98188, type: 2}
+    allowedActions: 000000000100000002000000
+    disableCombos: 0

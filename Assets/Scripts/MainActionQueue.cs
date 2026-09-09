@@ -12,6 +12,10 @@ using UnityEngine;
 /// 専用の乱数列（System.Random）で生成することで実現している
 /// （UnityEngine.Random は他の抽選处理ともグローバル状態を共有するため使わない）。
 /// また、連続して同じアクションが並ばないように、直前と同じ結果が出たら振り直す。
+///
+/// 抽選対象は `StageSet.allowedActions`（そのステージに設定があれば）で上書きされる。
+/// ステージ1のように抽選対象が1種類（Dash のみ）の場合、「連続禁止」は自動的に無効化される
+/// （振り直しループが `lottery.Length > 1` 条件でスキップされるため、無限ループにならない）。
 /// </summary>
 public class MainActionQueue : MonoBehaviour
 {
@@ -21,7 +25,8 @@ public class MainActionQueue : MonoBehaviour
     [Tooltip("このステージのアクション列を決める種。同じ値なら何度やり直しても同じ並びになる")]
     [SerializeField] private int stageSeed = 12345;
 
-    [Tooltip("抽選対象。重み付けしたいときは同じ値を複数入れる")]
+    [Tooltip("抽選対象（既定）。重み付けしたいときは同じ値を複数入れる。" +
+             "StageSet.allowedActions がそのステージに設定されていれば、そちらで上書きされる")]
     [SerializeField]
     private MainActionType[] lottery =
     {
@@ -41,6 +46,13 @@ public class MainActionQueue : MonoBehaviour
 
     private void Awake()
     {
+        // ステージごとに使えるアクションが違う場合は、抽選対象を差し替える。
+        // （StageSet.allowedActions が未設定なら、シーンの lottery をそのまま使う）
+        var allowed = GameFlow.Stages != null
+            ? GameFlow.Stages.AllowedActionsAt(GameFlow.ActiveStageIndex)
+            : null;
+        if (allowed != null && allowed.Length > 0) lottery = allowed;
+
         // 毎回 stageSeed から作り直すので、リトライしても同じ並びが再現される。
         _rng = new System.Random(stageSeed);
         _lastRolled = null;
