@@ -16,10 +16,13 @@ using UnityEngine.SceneManagement;
 public static class GameFlow
 {
     public const string TitleScene = "Title";
+    public const string PrologueScene = "Prologue";
     public const string StageSelectScene = "StageSelect";
 
     private const string StageSetResourcePath = "StageSet";
     private const string ClearedKey = "RandomGame.ClearedStagesMask";
+    private const string SeenIntroKey = "RandomGame.SeenIntroMask";
+    private const string SeenPrologueKey = "RandomGame.SeenPrologue";
 
     private static StageSet _stages;
 
@@ -39,6 +42,20 @@ public static class GameFlow
     }
 
     public static int CurrentStageIndex { get; private set; }
+
+    /// <summary>今アクティブなシーンが StageSet の何番目のステージか。フロー経由なら CurrentStageIndex、
+    /// シーンを直接 Play したときはシーン名から引く。ステージシーンでなければ -1。</summary>
+    public static int ActiveStageIndex
+    {
+        get
+        {
+            var s = Stages;
+            if (s == null) return -1;
+            int byName = s.IndexOfScene(SceneManager.GetActiveScene().name);
+            if (byName >= 0) return byName;
+            return (CurrentStageIndex >= 0 && CurrentStageIndex < s.Count) ? CurrentStageIndex : -1;
+        }
+    }
 
     public static int StageCount => Stages != null ? Stages.Count : 0;
     public static bool HasNextStage => CurrentStageIndex + 1 < StageCount;
@@ -85,23 +102,83 @@ public static class GameFlow
     /// <summary>ステージクリア時に呼ぶ。そのステージを「クリア済み」にする（＝次が解放される）。</summary>
     public static void MarkStageCleared(int index) => SetStageCleared(index, true);
 
-    /// <summary>クリア状況をリセット（全ステージ未クリア＝先頭のみ解放）。テスト用。</summary>
-    public static void ResetProgress()
+    // ── 会話の既読フラグ（初回だけ再生するため。PlayerPrefs に保存。開発者用トグルからも変更可） ──
+
+    private static int SeenIntroMask
     {
-        PlayerPrefs.DeleteKey(ClearedKey);
+        get => PlayerPrefs.GetInt(SeenIntroKey, 0);
+        set { PlayerPrefs.SetInt(SeenIntroKey, value); PlayerPrefs.Save(); }
+    }
+
+    /// <summary>そのステージの開始時会話を既に見たか（初回判定）。</summary>
+    public static bool HasSeenIntro(int index)
+        => index >= 0 && index < StageCount && (SeenIntroMask & (1 << index)) != 0;
+
+    /// <summary>そのステージの開始時会話の既読フラグを直接セットする（開発者用トグル / 再生後の自動セット）。</summary>
+    public static void SetIntroSeen(int index, bool seen)
+    {
+        if (index < 0 || index >= StageCount) return;
+        int m = SeenIntroMask;
+        if (seen) m |= (1 << index);
+        else m &= ~(1 << index);
+        SeenIntroMask = m;
+    }
+
+    /// <summary>そのステージの開始時会話を「見た」ことにする。</summary>
+    public static void MarkIntroSeen(int index) => SetIntroSeen(index, true);
+
+    /// <summary>プロローグ会話を既に見たか。既読なら「ゲームスタート」でプロローグをスキップする。</summary>
+    public static bool HasSeenPrologue => PlayerPrefs.GetInt(SeenPrologueKey, 0) != 0;
+
+    /// <summary>プロローグ会話の既読フラグを直接セットする（開発者用トグル / 再生後の自動セット）。</summary>
+    public static void SetPrologueSeen(bool seen)
+    {
+        PlayerPrefs.SetInt(SeenPrologueKey, seen ? 1 : 0);
         PlayerPrefs.Save();
     }
+
+    /// <summary>プロローグ会話を「見た」ことにする。</summary>
+    public static void MarkPrologueSeen() => SetPrologueSeen(true);
+
+    /// <summary>ステージのクリア状況とステージ開始会話の既読だけをリセット（プロローグ既読は残す）。
+    /// ステージ選択画面の開発者用リセットボタンが呼ぶ。</summary>
+    public static void ResetStageProgress()
+    {
+        PlayerPrefs.DeleteKey(ClearedKey);
+        PlayerPrefs.DeleteKey(SeenIntroKey);
+        PlayerPrefs.Save();
+    }
+
+    /// <summary>クリア状況・会話既読（プロローグ含む）を全てリセット（先頭のみ解放・全会話が初回状態）。
+    /// テスト用 / FreshBuildGuard（新ビルド初回起動）用。</summary>
+    public static void ResetProgress()
+    {
+        ResetStageProgress();
+        PlayerPrefs.DeleteKey(SeenPrologueKey);
+        PlayerPrefs.Save();
+    }
+
+    // すべての画面遷移は SceneTransition 経由（暗転 → 読み込み → 明転）。
 
     public static void GoTitle()
     {
         Time.timeScale = 1f;
-        SceneManager.LoadScene(TitleScene);
+        SceneTransition.Go(TitleScene);
+    }
+
+    /// <summary>タイトルの「ゲームスタート」から。未読ならプロローグシーンを経由し、既読ならステージ選択へ直行。
+    /// プロローグシーンが Build Settings に無い場合もステージ選択へ直行する（未整備でも動く）。</summary>
+    public static void StartGame()
+    {
+        Time.timeScale = 1f;
+        bool toPrologue = !HasSeenPrologue && Application.CanStreamedLevelBeLoaded(PrologueScene);
+        SceneTransition.Go(toPrologue ? PrologueScene : StageSelectScene);
     }
 
     public static void GoStageSelect()
     {
         Time.timeScale = 1f;
-        SceneManager.LoadScene(StageSelectScene);
+        SceneTransition.Go(StageSelectScene);
     }
 
     public static void LoadStage(int index)
@@ -118,7 +195,7 @@ public static class GameFlow
 
         CurrentStageIndex = index;
         Time.timeScale = 1f;
-        SceneManager.LoadScene(scene);
+        SceneTransition.Go(scene);
     }
 
     public static void RetryStage() => LoadStage(CurrentStageIndex);

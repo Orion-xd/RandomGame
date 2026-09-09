@@ -16,6 +16,9 @@ public class StageSelectMenu : MonoBehaviour
     [Tooltip("index 0 = 最初のステージのボタン、1 = 次のステージ … の順で割り当てる（GameFlow.Stages と対応）")]
     [SerializeField] private Button[] stageButtons;
 
+    [Tooltip("未指定なら同じ GameObject から取得。初期カーソルを『今挑戦できる一番先のステージ』に合わせる")]
+    [SerializeField] private MenuNavigation menuNavigation;
+
     /// <summary>index 順のステージボタン（開発者用トグルなどから参照）。</summary>
     public Button[] StageButtons => stageButtons;
 
@@ -23,6 +26,17 @@ public class StageSelectMenu : MonoBehaviour
     {
         ApplyDisplayNames();
         RefreshLocks();
+        ApplyInitialCursor();
+    }
+
+    /// <summary>初期カーソルを「今挑戦できる一番先のステージ」（連続解放されている最大 index）に合わせる。</summary>
+    private void ApplyInitialCursor()
+    {
+        if (menuNavigation == null) menuNavigation = GetComponent<MenuNavigation>();
+        if (menuNavigation == null || stageButtons == null || stageButtons.Length == 0) return;
+
+        int target = Mathf.Clamp(GameFlow.UnlockedStageIndex, 0, stageButtons.Length - 1);
+        if (stageButtons[target] != null) menuNavigation.SetInitialFocus(stageButtons[target]);
     }
 
     /// <summary>未解放ステージのボタンを無効化する。</summary>
@@ -50,4 +64,7 @@ public class StageSelectMenu : MonoBehaviour
 
     /// <summary>index 0 = 最初のステージ, 1 = 次のステージ, ...</summary>
     public void LoadStage(int index) => GameFlow.LoadStage(index);
+
+    /// <summary>タイトル画面へ戻る（右下の戻るボタンの OnClick から）。</summary>
+    public void BackToTitle() => GameFlow.GoTitle();
 }

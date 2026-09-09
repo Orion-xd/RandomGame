@@ -908,8 +908,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MenuNavigation
   buttonsOverride: []
+  initialCursor: 0
   frameColor: {r: 1, g: 0.85, b: 0.2, a: 1}
   framePadding: 8
+  rowTolerance: 40
+  inputLockDuration: 1
 --- !u!1 &372767095
 GameObject:
   m_ObjectHideFlags: 0
@@ -3790,6 +3793,7 @@ MonoBehaviour:
   failPanel: {fileID: 1722059045}
   nextButton: {fileID: 68450664}
   killY: -12
+  inputLockDuration: 0.5
 --- !u!4 &1625155391
 Transform:
   m_ObjectHideFlags: 0
@@ -3898,8 +3902,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MenuNavigation
   buttonsOverride: []
+  initialCursor: 0
   frameColor: {r: 1, g: 0.85, b: 0.2, a: 1}
   framePadding: 8
+  rowTolerance: 40
+  inputLockDuration: 1
 --- !u!114 &1748229278
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4592,6 +4599,60 @@ MonoBehaviour:
   m_EditorClassIdentifier: Unity.InputSystem::UnityEngine.InputSystem.InputActionReference
   m_Asset: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}
   m_ActionId: 32b35790-4ed0-4e9a-aa41-69ac6d629449
+--- !u!1 &2035614581
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2035614583}
+  - component: {fileID: 2035614582}
+  m_Layer: 0
+  m_Name: DialogueSystem
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &2035614582
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2035614581}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 47352784d9f637d4fa8b9d22a0ef588b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DialoguePlayer
+  blackColor: {r: 0.05, g: 0.05, b: 0.06, a: 1}
+  boxColor: {r: 0, g: 0, b: 0, a: 0.78}
+  textColor: {r: 1, g: 1, b: 1, a: 1}
+  speakerColor: {r: 1, g: 0.92, b: 0.55, a: 1}
+  centerFontSize: 40
+  bodyFontSize: 30
+  speakerFontSize: 26
+  hintFontSize: 18
+  sortingOrder: 200
+  inputLockDuration: 0.5
+--- !u!4 &2035614583
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2035614581}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2058955645
 GameObject:
   m_ObjectHideFlags: 0
@@ -4818,3 +4879,4 @@ SceneRoots:
   - {fileID: 1240937341}
   - {fileID: 1625155391}
   - {fileID: 492194403}
+  - {fileID: 2035614583}
