@@ -1,6 +1,6 @@
 # RandomGame 仕様・実装まとめ
 
-最終更新: 2026-09-09 / 対象ブランチ: `feature/tilemap`
+最終更新: 2026-09-11 / 対象ブランチ: `feature/tilemap`
 Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.GetAxis` は不可、`UnityEngine.InputSystem.Keyboard.current` を使う）
 
 このドキュメントは「後日、続きの作業をするとき」に現状を把握するためのもの。
@@ -64,7 +64,7 @@ Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.Ge
     - 後方入力: **急ブレーキ**（`dashBrakeDecel` = 160 u/s²）＋**無敵解除**（`_dashInvBroken` ラッチ。一度解除したらこのダッシュ中は戻らない）。
   - `IsDashing` が true の間、`Enemy` 側がプレイヤーとの物理衝突を `Physics2D.IgnoreCollision` で無視（すり抜け）。
   - `OverridesMovement` が true の間、`PlayerController` は速度・向きを書かない（ダッシュが制御）。
-- **攻撃 (`DoAttack` コルーチン + `AttackHitbox`)**: 前方 `forwardOffset`（0.9）に子オブジェクトの当たり判定を `attackDuration`（0.2 秒）だけ有効化。触れた敵に `attackDamage`（1）。同じ敵を多重ヒットしない（`HashSet<Enemy>`、有効化時にクリア）。攻撃判定はトリガー。
+- **攻撃 (`DoAttack` コルーチン + `AttackHitbox`)**: 前方 `forwardOffset`（0.9）に子オブジェクトの当たり判定を `attackDuration`（**0.4 秒**、2026-09-11 に 0.2→0.4 変更、全ステージ共通）だけ有効化。触れた敵に `attackDamage`（1）。同じ敵を多重ヒットしない（`HashSet<Enemy>`、有効化時にクリア）。攻撃判定はトリガー。
 
 ### 2-4. クールタイム
 
@@ -184,8 +184,8 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
   - **`TilemapColliderBootstrap`（`Ground` に付ける・必須）**: eval で `SetTile` して作った Tilemap は Play 開始時にコライダー形状を生成せず（`CompositeCollider2D.pathCount = 0` のまま＝**地面がすり抜けて落下する**）、`Awake` でタイルを一括で貼り直して（`GetTilesBlock` → `ClearAllTiles` → `SetTilesBlock` → `ProcessTilemapChanges` → `GenerateGeometry`）形状の再生成を促す。これが無いと 5 シーンとも地面に当たり判定が付かない。通常のタイルパレットで塗ったマップなら不要。
   - タイルアセット: `Assets/Art/Tiles/GroundTile.asset`（`UnityEngine.Tilemaps.Tile`、`colliderType = Grid`、sprite = `Assets/Art/GroundTile.png`）。仮素材。**最終的に GroundTile.png を 90×90px の本番絵で上書きし、PPU を 90 に保てば 1 セル = 1 ユニットのまま差し替わる**（`Assets/Art/GroundTile.png` の現状: 90×90 の茶色ベタ＋縁＋斑点、Sprite / Single / PPU 90 / Point / 無圧縮 / FullRect / pivot Center）。
   - **塗り範囲**: 天面 y=-2（＝セル行 y=-3 が一番上、そこから y=-8 まで 6 行）。
-    - **Stage1**: x セル [-19,7) と [10,30) を塗り、x セル 7〜9 を空にして **落とし穴（x≈7〜10、幅 3）**。`CompositeCollider2D.pathCount = 2`（左右で分離）。
-    - **Stage2〜Stage5**: x セル [-19,27) を連続で塗り、落とし穴なし。`pathCount = 1`。
+    - **Stage1, Stage3**（2026-09-11、Stage3 も Stage1 と同一構成に変更）: x セル [-19,7) と [10,30) を塗り、x セル 7〜9 を空にして **落とし穴（x≈7〜10、幅 3）**。`CompositeCollider2D.pathCount = 2`（左右で分離）。
+    - **Stage2, Stage4, Stage5**: x セル [-19,27) を連続で塗り、落とし穴なし。`pathCount = 1`。
   - `PlayerController.IsGrounded` は `CompositeCollider2D` を `Physics2D.OverlapBox` で検出できる（Play で確認済み: Stage1 は左地面/穴/右地面、Stage2〜5 は連続、天面 y=-2）。
 - **一方通行の高台**（`OneWayPlatform`, 位置 (3,-0.4)、コライダー x≈1〜5・天面 y≈-0.2）:
   - 下から上へは常にすり抜け。上から下へは抜けられない（着地できる）。
@@ -250,7 +250,8 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
     - `Disabled`: 自動リセットなし。
   - **事故防止**: `Policy = OnEveryBuild` のまま **Development Build 以外**をビルドしようとすると、`FreshBuildGuardBuildCheck`（`IPreprocessBuildWithReport`, `Assets/Scripts/Editor/`）が確認ダイアログを出してビルドを止める（バッチモードでは `BuildFailedException`）。「毎ビルド全消し」仕様を忘れたまま配布するのを防ぐ。リリース時は `Policy` を `OnTokenChange` / `Disabled` に変える。
 - **ボタンの `onClick` はすべて永続 UnityEvent リスナー**（Inspector に表示される。`UnityEventTools.AddPersistentListener` で設定済み）。結果画面の各ボタンも同様に `StageManager` の `OnNextStage`/`OnRetry`/`OnStageSelect` を指す。EventSystem は `InputSystemUIInputModule` + `Assets/InputSystem_Actions.inputactions`。
-- **Stage2〜Stage5**（`Stage2.unity`〜`Stage5.unity`）: Stage1 を複製して敵・高台を削除し、地面を**落とし穴なしの連続 Tilemap**（x セル [-19,27)）にしただけの**プレースホルダー**（Stage4/5 は Stage3 を複製）。中身の設計は未着手。`stageSeed` は 22222 / 33333 / 44444 / 55555。各シーンに `EventSystem` / `StageFlow`(`StageManager`+`ResultCanvas`) / `Goal`(@x25) / 結果パネルの `MenuNavigation` を含む（Stage1 と同構成）。
+- **Stage2, Stage4, Stage5**: Stage1 を複製して敵・高台を削除し、地面を**落とし穴なしの連続 Tilemap**（x セル [-19,27)）にしただけの**プレースホルダー**（Stage4/5 は Stage3 を複製した時点のもの。以下の Stage3 変更後も追随していない）。中身の設計は未着手。`stageSeed` は 22222 / 44444 / 55555。各シーンに `EventSystem` / `StageFlow`(`StageManager`+`ResultCanvas`) / `Goal`(@x25) / 結果パネルの `MenuNavigation` を含む（Stage1 と同構成）。
+- **Stage3（2026-09-11、地形・敵配置を Stage1 と同一化）**: 地面・高台・敵の配置を Stage1 と完全に一致させた。地面 Tilemap は Stage1 と同じ x セル [-19,7) ＋ [10,30)（落とし穴 x≈7〜10 あり）。`OneWayPlatform`（@(3,-0.4)）、`Enemy_A`（HP1 @x≈-4）、`Enemy_Boss`（HP5 @x≈15, `HealthBar` 子付き）を Stage1 から複製して配置（`OneWayPlatform.playerCollider` は未設定に戻し、そのシーンの Player をタグから自動取得させる）。`Goal`（@x25）・`stageSeed`（33333）はそのまま変更していない。
 - **使用可能アクション（`StageSet.stages[i].allowedActions`, 2026-09-09）**: Stage1 = `Dash` のみ（`disableCombos` も実質 on）／ Stage2 = `Dash`+`Attack` ／ Stage3〜5 = `Jump`+`Dash`+`Attack`。`StageSet.asset` で編集。
 - **結果画面**は各ステージシーン内の `StageFlow/ResultCanvas`（`ClearPanel` / `FailPanel`、`sortingOrder 100`、通常は非アクティブ）。`StageManager` が表示と遷移を管理。
   - 表示中は `Time.timeScale = 0`、`PlayerController` / `MainActionController` を無効化。
@@ -390,7 +391,7 @@ OneWayPlatform         @ (3,-0.4) BoxCollider extents (2,0.2)  layer=Ground  [On
 | ダッシュ | dashLockFraction（前半ロック割合） | 0.5 | MainActionController |
 | ダッシュ | dashForwardDecel / dashBrakeDecel | 40 / 160 u/s² | MainActionController |
 | ダッシュ | dashCooldown | 2 秒 | MainActionController |
-| 攻撃 | attackDuration / attackDamage | 0.2 秒 / 1 | MainActionController |
+| 攻撃 | attackDuration / attackDamage | **0.4 秒**（2026-09-11 変更） / 1 | MainActionController |
 | 攻撃 | attackCooldown | 2 秒 | MainActionController |
 | 攻撃 | forwardOffset（判定の前方オフセット） | 0.9 | AttackHitbox |
 | コンボ | comboGraceTime（受付猶予） | 0.8 秒 | MainActionController |
@@ -435,7 +436,7 @@ OneWayPlatform         @ (3,-0.4) BoxCollider extents (2,0.2)  layer=Ground  [On
 ## 13. 未実装 / TODO
 
 **画面の流れは最小実装で通ったが、以下は未着手 / 仮:**
-- **Stage2〜Stage5 の中身**（今は落とし穴なしの連続 Tilemap 地面のみ。敵・地形・ゴール配置など）。
+- **Stage2, Stage4, Stage5 の中身**（今は落とし穴なしの連続 Tilemap 地面のみ。敵・地形・ゴール配置など）。**Stage3 は Stage1 と同一構成に変更済み**（2026-09-11）だが、レベルデザインとして意図されたものではなく暫定。
 - **会話テキストは全部仮**（`DialogueSequence` アセットの中身）。プロローグの一枚絵も未準備（仮イラスト表示中）。本番の絵は主人公＝左 / ダンジョン＝右の構図で用意予定。
 - **会話 UI の日本語化・体裁**（本文は日本語だがフォントは builtin の OS フォールバック頼み。メニュー同様 TMP + 日本語フォントアセットが要る）。文字送り演出（1 文字ずつ表示など）は無し。
 - **UI の日本語化**（メニューは今は英語。日本語にするなら TMP + 日本語グリフのフォントアセットが必要）。

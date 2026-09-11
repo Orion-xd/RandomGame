@@ -2045,7 +2045,7 @@ MonoBehaviour:
   dashForwardDecel: 40
   dashBrakeDecel: 160
   attackHitbox: {fileID: 1081026461}
-  attackDuration: 0.2
+  attackDuration: 0.4
   attackDamage: 1
   dashCooldown: 2
   attackCooldown: 2
