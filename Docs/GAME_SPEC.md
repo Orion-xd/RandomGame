@@ -1,6 +1,6 @@
 # RandomGame 仕様・実装まとめ
 
-最終更新: 2026-09-11 / 対象ブランチ: `feature/tilemap`（日本語フォント対応も同ブランチで実施）
+最終更新: 2026-09-11 / 対象ブランチ: `feature/tilemap`（日本語フォント対応・高台の Tilemap 化も同ブランチで実施）
 Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.GetAxis` は不可、`UnityEngine.InputSystem.Keyboard.current` を使う）
 
 このドキュメントは「後日、続きの作業をするとき」に現状を把握するためのもの。
@@ -25,7 +25,7 @@ Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.Ge
 ### 企画側からの仕様確認（2026-09-05 回答ぶん。これが優先）
 
 - **ダッシュ以外での敵接触はすり抜けない**。実体としてぶつかり、ノックバック + 1 ダメージ。すり抜けるのはダッシュ中だけ（ダッシュは無敵）。
-- **地面は Tilemap で作る**（2026-09-09 に移行済み。§7 / §9-1）。1 セル = 1 ワールドユニット。仮タイル素材で実装済みで、最終的に 90×90px（PPU 90）の地面タイルに差し替える想定。高台（`OneWayPlatform`）は素材サイズ未定のため Tilemap 化は保留、従来の GameObject のまま。参考記事: https://zenn.dev/sasshi_i/articles/bcc55419a1af9d
+- **地面は Tilemap で作る**（2026-09-09 に移行済み。§7 / §9-1）。1 セル = 1 ワールドユニット。仮タイル素材で実装済みで、最終的に 90×90px（PPU 90）の地面タイルに差し替える想定。**高台も 2026-09-11 に Tilemap 化済み**（§7「一方通行の高台」）、現在は Stage3 のみに配置。参考記事: https://zenn.dev/sasshi_i/articles/bcc55419a1af9d
 - **ゴールに全敵撃破は不要**。雑魚は回避して進んでよい。**ボスは撃破必須**（何かが進行を塞ぐ想定）。ゴール判定自体は未実装。
 - **空中ジャンプ不可**（ただし後述のコヨーテタイムとダッシュ→ジャンプ特例あり）。
 - **アクションの並び**: コンボは 2 つまで。同じアクションは 2 連続で並ばない。**ステージ全体で並びは固定**（ゲームオーバーして最初からやり直しても同じ順番）。
@@ -187,13 +187,18 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
     - **Stage1, Stage3**（2026-09-11、Stage3 も Stage1 と同一構成に変更）: x セル [-19,7) と [10,30) を塗り、x セル 7〜9 を空にして **落とし穴（x≈7〜10、幅 3）**。`CompositeCollider2D.pathCount = 2`（左右で分離）。
     - **Stage2, Stage4, Stage5**: x セル [-19,27) を連続で塗り、落とし穴なし。`pathCount = 1`。
   - `PlayerController.IsGrounded` は `CompositeCollider2D` を `Physics2D.OverlapBox` で検出できる（Play で確認済み: Stage1 は左地面/穴/右地面、Stage2〜5 は連続、天面 y=-2）。
-- **一方通行の高台**（`OneWayPlatform`, 位置 (3,-0.4)、コライダー x≈1〜5・天面 y≈-0.2）:
-  - 下から上へは常にすり抜け。上から下へは抜けられない（着地できる）。
+  - **タイルパレット（`Assets/Tilemaps/Palettes/GroundPalette.prefab`, 2026-09-11）**: `Window > 2D > Tile Palette` で開いて手作業編集するための Unity 標準パレット。`GroundTile` と高台の 6 タイル（下記）を収録済み。使い方: シーンを開く → Tile Palette ウィンドウで `GroundPalette` を選択 → Active Tilemap がそのシーンの対象 Tilemap（`Grid/Ground` または `Grid/Platform`）になっていることを確認 → Paint/Erase/Box Fill 等でシーンビュー上を直接編集 → Ctrl+S で保存。当たり判定は Play 開始時に `TilemapColliderBootstrap` が自動で作り直すので、手で塗っても特別な後処理は不要。
+- **一方通行の高台（Tilemap 版, 2026-09-11）**: `Grid` の子 `Platform`（`Ground` と同じ Grid・同じ 1×1 セル。現在 **Stage3 のみ**に配置。Stage1 の旧 GameObject 版は削除済み、Stage2/4/5 はもともと無し）。
+  - **見た目**: 天面（乗れる面）3 種＋柱（乗れない・当たり判定も無い）3 種、計 6 枚のタイルで構成。実際の並びは天面 左/中央/右 の 3 マス＋その真下に柱 左/中央/右 の 3 マスの計 3×2 マス。柱は地面の天面（y=-2）にちょうど接し、「地面から生えた柱の上に台がある」見た目になる。左右は端用、中央は繰り返し用の想定（今は仮素材のため天面 3 種・柱 3 種はそれぞれほぼ同じ見た目で左右にわずかな縁のアクセントがある程度だが、本番素材に差し替えれば区別できるようになる設計）。
+    - タイル: `Assets/Art/Tiles/PlatformTopLeft` / `PlatformTopCenter` / `PlatformTopRight`（`colliderType = Grid`）、`PlatformPillarLeft` / `PlatformPillarCenter` / `PlatformPillarRight`（`colliderType = None`）。元画像は `Assets/Art/PlatformTop*.png` / `PlatformPillar*.png`（90×90, PPU90 の仮素材。天面はオパーク、柱は半透明のグレー＝当たり判定が無いことを視覚的に示す仮の意匠）。
+  - **当たり判定**: `Platform` の `TilemapCollider2D`(`compositeOperation=Merge`) + `CompositeCollider2D` は `colliderType=None` の柱タイルからは形状を作らないため、**天面タイルだけが合成された 1 つの当たり判定**になる（柱部分は完全にすり抜け＝当たり判定自体が存在しない。天面部分は実体の当たり判定）。
+  - 一方通行のロジックは `OneWayPlatform` コンポーネントをそのまま流用（`Platform` GameObject に付ける）。下から上へは常にすり抜け。上から下へは抜けられない（着地できる）。
   - ただし **プレイヤーの横幅のうち `requiredOverlap`（0.5、インスペクター調整可）以上が天面に重なっている**ときだけ着地判定を有効化。端に少し引っかかっただけでは乗れない。
-  - 実装は `PlatformEffector2D` ではなく、毎 `FixedUpdate` で `Physics2D.IgnoreCollision(player, platform, !solid)` をトグル。`solid = 足が天面より上（`topTolerance` 0.05） && 下降中 && 重なり率 >= requiredOverlap`。
+  - 実装は `PlatformEffector2D` ではなく、毎 `FixedUpdate` で `Physics2D.IgnoreCollision(player, platform, !solid)` をトグル。`solid = 足が天面より上（`topTolerance` 0.05） && 下降中 && 重なり率 >= requiredOverlap`。単体 BoxCollider2D でも Tilemap の CompositeCollider2D でも動くよう、`Awake` は `CompositeCollider2D` を優先して `_col` に採用する（2026-09-11 追加）。
   - `overlapX = min(右端どうし) - max(左端どうし)`、重なり率 = `overlapX / プレイヤー横幅`。ソース内に具体例つきの長いコメントあり。
+  - Play で確認済み: `CompositeCollider2D.pathCount=1`（天面3マス分が1つに合成、bounds が天面3マス分の範囲と一致）、柱範囲は `OverlapBox` で完全に無反応、着地条件を満たすと `IgnoreCollision` が解除されソリッドになる（横に外れる／下から上昇中は再びすり抜け）ことを確認。
 - **カメラ**（`CameraFollow`, Main Camera）: 横方向のみ `Mathf.SmoothDamp`（`smoothTime` 0.15）で追従。Y/Z は開始時の値で固定（縦追従なし）。ortho size 6、位置 (0,-0.5,-10)。
-- **レイヤー**: user layer 8 = "Ground"。`Grid/Ground`（Tilemap）/ `OneWayPlatform` に設定。`Enemy` はわざと外している（敵の上に乗ってもジャンプが回復しないように）。
+- **レイヤー**: user layer 8 = "Ground"。`Grid/Ground`（Tilemap）/ `Grid/Platform`（Tilemap, Stage3 のみ）に設定。`Enemy` はわざと外している（敵の上に乗ってもジャンプが回復しないように）。
 
 ---
 
@@ -251,7 +256,7 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
   - **事故防止**: `Policy = OnEveryBuild` のまま **Development Build 以外**をビルドしようとすると、`FreshBuildGuardBuildCheck`（`IPreprocessBuildWithReport`, `Assets/Scripts/Editor/`）が確認ダイアログを出してビルドを止める（バッチモードでは `BuildFailedException`）。「毎ビルド全消し」仕様を忘れたまま配布するのを防ぐ。リリース時は `Policy` を `OnTokenChange` / `Disabled` に変える。
 - **ボタンの `onClick` はすべて永続 UnityEvent リスナー**（Inspector に表示される。`UnityEventTools.AddPersistentListener` で設定済み）。結果画面の各ボタンも同様に `StageManager` の `OnNextStage`/`OnRetry`/`OnStageSelect` を指す。EventSystem は `InputSystemUIInputModule` + `Assets/InputSystem_Actions.inputactions`。
 - **Stage2, Stage4, Stage5**: Stage1 を複製して敵・高台を削除し、地面を**落とし穴なしの連続 Tilemap**（x セル [-19,27)）にしただけの**プレースホルダー**（Stage4/5 は Stage3 を複製した時点のもの。以下の Stage3 変更後も追随していない）。中身の設計は未着手。`stageSeed` は 22222 / 44444 / 55555。各シーンに `EventSystem` / `StageFlow`(`StageManager`+`ResultCanvas`) / `Goal`(@x25) / 結果パネルの `MenuNavigation` を含む（Stage1 と同構成）。
-- **Stage3（2026-09-11、地形・敵配置を Stage1 と同一化）**: 地面・高台・敵の配置を Stage1 と完全に一致させた。地面 Tilemap は Stage1 と同じ x セル [-19,7) ＋ [10,30)（落とし穴 x≈7〜10 あり）。`OneWayPlatform`（@(3,-0.4)）、`Enemy_A`（HP1 @x≈-4）、`Enemy_Boss`（HP5 @x≈15, `HealthBar` 子付き）を Stage1 から複製して配置（`OneWayPlatform.playerCollider` は未設定に戻し、そのシーンの Player をタグから自動取得させる）。`Goal`（@x25）・`stageSeed`（33333）はそのまま変更していない。
+- **Stage3（2026-09-11、地形・敵配置を Stage1 と同一化 → 同日中に高台を Tilemap 版へ置き換え）**: 地面・敵の配置を Stage1 と一致させた。地面 Tilemap は Stage1 と同じ x セル [-19,7) ＋ [10,30)（落とし穴 x≈7〜10 あり）。`Enemy_A`（HP1 @x≈-4）、`Enemy_Boss`（HP5 @x≈15, `HealthBar` 子付き）を Stage1 から複製して配置。高台は当初 Stage1 から GameObject 版 `OneWayPlatform` を複製していたが、同日中に **Tilemap 版の `Grid/Platform`**（x セル 2,3,4・天面行 y=-1、直下に柱行 y=-2）へ置き換えた（詳細は §7「一方通行の高台」）。`Goal`（@x25）・`stageSeed`（33333）はそのまま変更していない。
 - **使用可能アクション（`StageSet.stages[i].allowedActions`, 2026-09-09）**: Stage1 = `Dash` のみ（`disableCombos` も実質 on）／ Stage2 = `Dash`+`Attack` ／ Stage3〜5 = `Jump`+`Dash`+`Attack`。`StageSet.asset` で編集。
 - **結果画面**は各ステージシーン内の `StageFlow/ResultCanvas`（`ClearPanel` / `FailPanel`、`sortingOrder 100`、通常は非アクティブ）。`StageManager` が表示と遷移を管理。
   - 表示中は `Time.timeScale = 0`、`PlayerController` / `MainActionController` を無効化。
@@ -335,10 +340,15 @@ HUD_Canvas             [Canvas, CanvasScaler, GraphicRaycaster]
   HealthPanel          [HealthUI] → HP0..2 (Image, 赤丸)
 Grid                   @ (0,0)  [Grid] cell size (1,1)
   Ground               layer=Ground  [Tilemap, TilemapRenderer(order -10), Rigidbody2D(Static),
-                                      TilemapCollider2D(compositeOperation Merge), CompositeCollider2D(Polygons)]
+                                      TilemapCollider2D(compositeOperation Merge), CompositeCollider2D(Polygons),
+                                      TilemapColliderBootstrap]
                                       天面 y=-2。Stage1 は落とし穴あり（pathCount 2）
-OneWayPlatform         @ (3,-0.4) BoxCollider extents (2,0.2)  layer=Ground  [OneWayPlatform]
+  Platform             （Stage3 のみ）layer=Ground  [Tilemap, TilemapRenderer(order -9), Rigidbody2D(Static),
+                                      TilemapCollider2D(compositeOperation Merge), CompositeCollider2D(Polygons),
+                                      TilemapColliderBootstrap, OneWayPlatform]
+                                      天面セル x=2,3,4 / y=-1（colliderType Grid）、柱セル同 x / y=-2（colliderType None）
 ```
+（Stage1 に以前あった GameObject 版 `OneWayPlatform` は 2026-09-11 に削除済み。§7 参照）
 
 生成アセット（`Assets/Art/`）: `WhiteSquare.png`（32px, PPU32）、`PlayerArrow.png`（左右非対称の矢印）、`Circle.png`（体力アイコン）、`PlayerNoFriction.physicsMaterial2D`（摩擦 0）、`GroundTile.png`（90×90, PPU 90 の仮地面タイル。本番絵で上書き予定）、`Tiles/GroundTile.asset`（`Tile`, colliderType Grid）。
 
@@ -358,7 +368,7 @@ OneWayPlatform         @ (3,-0.4) BoxCollider extents (2,0.2)  layer=Ground  [On
 | `Enemy` | Enemy_A, Enemy_Boss | 体力・接触ダメージ + ノックバック・ダッシュ中すり抜け |
 | `EnemyPatrol` | Enemy_A, Enemy_Boss | 左右往復（transform 直接移動） |
 | `EnemyHealthBar` | Enemy_Boss/HealthBar | ボスの体力ゲージ + 数値 |
-| `OneWayPlatform` | OneWayPlatform | 一方通行 + 重なり率での着地判定 |
+| `OneWayPlatform` | Stage3/`Grid/Platform`（Tilemap の CompositeCollider2D） | 一方通行 + 重なり率での着地判定。単体 Collider2D でも Tilemap の CompositeCollider2D でも動く（`Awake` が CompositeCollider2D を優先） |
 | `TilemapColliderBootstrap` | 各ステージ `Grid/Ground` | `Awake` でタイルを貼り直し、`TilemapCollider2D`/`CompositeCollider2D` の形状を再生成させる（eval 生成 Tilemap が Play 開始時に当たり判定を持たない問題の対策）。§7 |
 | `CameraFollow` | Main Camera | 横方向のみ追従 |
 | `ActionBarUI` | HUD_Canvas/ActionBar | アクション先読み表示 |
@@ -450,7 +460,8 @@ OneWayPlatform         @ (3,-0.4) BoxCollider extents (2,0.2)  layer=Ground  [On
 - **ロック中ステージの見た目**は Unity 既定のグレーアウトのみ（「LOCKED」表記や鍵アイコンは未実装）。クリア進捗のセーブは `PlayerPrefs` の 1 キーだけ（スロット/複数セーブ無し）。
 - `StageManager.nextButton` の表示可否は `GameFlow.CurrentStageIndex` 依存。エディタでステージシーンを直接 Play すると index=0 扱いになる（フロー経由なら正しい）。
 - ボスの行動（今の `Enemy_Boss` は HP が多いだけの巡回。攻撃パターン無し）。1 発 1 ダメージ・攻撃CT 2秒なので撃破は単調。
-- **地面 Tilemap の本番タイル素材**（今は仮の `GroundTile.png`。90×90px / PPU 90 を保って上書きすれば差し替わる）。高台の Tilemap 化は素材サイズ確定後。
+- **地面 / 高台 Tilemap の本番タイル素材**（今は仮の `GroundTile.png` と `PlatformTop*.png`/`PlatformPillar*.png`。90×90px / PPU 90 を保って上書きすれば差し替わる。高台は天面・柱それぞれ左/中央/右で見た目を区別できる本番絵を想定）。
+- **高台（Tilemap 版）は現状 Stage3 に 1 基のみ**。複数配置する場合、`OneWayPlatform` の着地判定が `_col.bounds`（＝合成コライダー全体の外接矩形）ベースなので、同じ `Platform` Tilemap 上に離れた高台を複数置くと bounds が全体を覆ってしまい正しく判定できない。複数基必要になったら高台ごとに別の `Platform` GameObject（別 Tilemap）に分けること。
 - ステージのカメラ左右クランプ、スポーン地点の明示。
 - 体力 UI アイコンは `enabled` 切り替えのみ / `EnemyHealthBar` の fill は中央アンカー。
 - ハート型など体力 UI の見た目（現状は赤丸で確定・OK）。
