@@ -1,6 +1,6 @@
 # RandomGame 仕様・実装まとめ
 
-最終更新: 2026-09-11 / 対象ブランチ: `feature/tilemap`
+最終更新: 2026-09-11 / 対象ブランチ: `feature/tilemap`（日本語フォント対応も同ブランチで実施）
 Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.GetAxis` は不可、`UnityEngine.InputSystem.Keyboard.current` を使う）
 
 このドキュメントは「後日、続きの作業をするとき」に現状を把握するためのもの。
@@ -228,7 +228,7 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 - **ステージの並び・シーン名は `StageSet`（ScriptableObject, `Assets/Resources/StageSet.asset`, 2026-09-06）に外出し**。インスペクターで `stages[]`（`displayName` + `sceneName`）を編集する。`GameFlow` が `Resources.Load<StageSet>("StageSet")` で読む（コード内にシーン名を書かない）。**ステージ追加はコード変更不要** → ①シーン作成＋Build Settings 追加 ②`StageSet.stages` に要素追加 ③StageSelect にボタン追加＋`StageSelectMenu.stageButtons` に同 index で割当。`StageSelectMenu` は `displayName` があればボタンのラベル（子 `Text`）へ反映する。
 - **現在 5 ステージ**（2026-09-07 に 3 → 5 へ拡張、企画どおり）。`StageSet` に Stage1〜Stage5 を登録。
 - **ビルド設定のシーン順**: `[0] Title, [1] Prologue, [2] StageSelect, [3] Stage1, [4] Stage2, [5] Stage3, [6] Stage4, [7] Stage5`（`SampleScene` は `Stage1.unity` にリネーム済み）。※シーンは名前でロードするので順番自体は動作に影響しない。
-- **Title**（`Assets/Scenes/Title.unity`）: Camera + EventSystem + Canvas（"勇者しばりちゃん" タイトル + "Game Start" ボタン）+ `TitleMenu`。ボタン `onClick` → `TitleMenu.OnStartClicked()` → `GameFlow.StartGame()`（Prologue シーンが Build Settings に無ければ StageSelect へ直行するフォールバックつき）。
+- **Title**（`Assets/Scenes/Title.unity`）: Camera + EventSystem + Canvas（"勇者しばりちゃん" タイトル + "Game Start" ボタン）+ `TitleMenu`。ボタン `onClick` → `TitleMenu.OnStartClicked()` → `GameFlow.StartGame()`（Prologue シーンが Build Settings に無ければ StageSelect へ直行するフォールバックつき）。**タイトルの `Text`（"勇者しばりちゃん"）はシーンに直接置かれた唯一の日本語 UI**（他はすべて `DialoguePlayer` が実行時生成）で、§9-2 の日本語フォント対応時に見落としていた（`m_Font` がビルトインの Arial のまま）。2026-09-11 に `NotoSansJP-Regular` を明示的に割り当てて修正済み。**シーンに直接置いた Text に日本語を入れる場合は、フォントを手動で `NotoSansJP-Regular` に差し替える必要がある**（`DialoguePlayer` 経由なら自動）。
 - **Prologue**（`Assets/Scenes/Prologue.unity`, 2026-09-07）: Camera + `DialoguePlayer`（会話 UI は実行時生成）+ `PrologueRunner`。`PrologueRunner` が `StageSet.prologue` を再生し、読み終わると `GameFlow.GoStageSelect()`。会話が空なら即 StageSelect へ。
 - **StageSelect**（`StageSelect.unity`）: Camera + EventSystem + Canvas（"SELECT STAGE" 見出し + `Stage1Btn`〜`Stage5Btn` + `BackButton`）+ `StageSelectMenu` + `MenuNavigation` + `DevStageClearToggles` + `DevStorySeenToggles` + `DevProgressResetButton`。各ステージボタン `onClick` → `StageSelectMenu.LoadStage(i)`（i=0..4, 永続 int リスナー）。
   - **ステージボタンの並び（2026-09-08 変更）**: **横一列**。`Stage{i}Btn` は anchor/pivot (0.5,0.5)・**230×230 の正方形**・`anchoredPosition = ((i-2) * 280, -60)`（中心そろえ・間隔 280px）。ラベルは fontSize 34。以前は 560×100 の縦 5 段だった。
@@ -274,7 +274,7 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
   - 選択中（キーボードカーソル or マウスホバー）のボタンに**色付きの枠**（`SelectionFrame`、実行時生成の黄色い矩形を背面に置き、`framePadding`(8px) ぶんはみ出させて枠に見せる）。
     - 枠の位置合わせ（2026-09-07 修正）: 枠は常に pivot (0.5,0.5) にし、ボタンの pivot が中心でなくても `sizeDelta*(0.5 - pivot)` で矩形中心へ補正して合わせる。以前はボタンの pivot をそのままコピーしていたため、中心 pivot でないボタン（左下配置の BackButton など）で枠が片側に寄っていた。中心 pivot のボタンでは補正 0 で従来と同じ。
   - `EventSystem`/`InputSystemUIInputModule` の自動ナビゲーションとは二重処理にならないよう、対象ボタンの `Navigation.mode = None` にし、毎フレーム `EventSystem` の選択を解除している。マウスのクリック・ホバー着色はモジュール側のまま。
-- **将来メモ**: ステージ開始演出は §9-2 の開始会話で最小実装済み（`StageManager.Start` → 会話 → 操作解禁）。`GameFlow` は遷移のみ。メニュー UI テキストは日本語フォント未整備のため**英語**（会話本文は日本語。エディタでは OS フォントのフォールバックで表示される）。
+- **将来メモ**: ステージ開始演出は §9-2 の開始会話で最小実装済み（`StageManager.Start` → 会話 → 操作解禁）。`GameFlow` は遷移のみ。メニュー UI テキストは日本語フォント未整備のため**英語**（会話本文は日本語。`Assets/Resources/Fonts/NotoSansJP-Regular.ttf` を埋め込んで表示、詳細は §9-2「日本語フォント」）。
 
 ### 9-2. プロローグ / 会話システム（`DialogueSequence` + `DialoguePlayer`、2026-09-07）
 
@@ -289,6 +289,12 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 - `Play(DialogueSequence, System.Action onComplete)` で再生。**スペース / エンター / テンキー Enter / 画面のどこでも左クリック**で送り、最後まで読むと `onComplete`。内容が空なら即 `onComplete`。クリックは UI 経由ではなく `Mouse.current.leftButton` を直接読むので、テキストボックス上でも位置を問わず送れる（会話 UI の Image は `raycastTarget=false`）。
 - **入力ロック（`InputLock`, 2026-09-08）**: `Play()` の直後に `InputLock.LockFor(inputLockDuration)`（既定 0.5 秒）。その間は送り入力（Space/Enter/左クリック）を無視。プロローグ／開始会話へは `SceneTransition` 経由で入るので、実際には「暗転〜明転〜さらに 0.5 秒」ずっと送り入力は不可（`InputLock.InputAllowed` が `SceneTransition.Transitioning` も見るため）。明転後に会話が現れ、ロックが明ければ通常どおり送れる。ステージ開始会話は会話終了時（`StageManager.OnIntroFinished`）にも `LockFor(0.5)`（送り切った勢いでアクションが出ないように）。
 - 再生中は静的 `DialoguePlayer.IsPlaying == true`。`PlayerController.Update` と `MainActionController.Update` は先頭でこれを見て**入力を無視**（スペースが会話送りに食われる／移動しない）。
+
+**日本語フォント（2026-09-11）**: 会話本文は日本語だが、以前は `Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf")`（ビルトインの Arial 系、日本語グリフ無し）をそのまま使っていた。エディタ / Windows スタンドアロンでは欠けているグリフを **OS インストール済みフォントへフォールバック**して表示できていたが、**WebGL ビルド（unityroom）は OS フォントにアクセスできないため、そのフォールバックが効かず日本語が表示されない**という問題があった。
+- 対策: `Assets/Resources/Fonts/NotoSansJP-Regular.ttf` を追加し、`DialoguePlayer.Awake()` で `Resources.Load<Font>("Fonts/NotoSansJP-Regular")`（見つからなければビルトインへフォールバック）を使うようにした。`DialoguePlayer` が生成する全ての `Text`（`_centerText` / `_speakerText` / `_bodyText` / `_hintText` / 仮イラストの `主人公`・`ダンジョン`・`(仮イラスト)` ラベル）はこの `_font` を共有しているので、この 1 箇所の変更で会話まわりの日本語表示すべてに効く。`Text.dynamic` 方式（`TrueTypeFontImporter`: `fontRenderingMode=Smooth`, `fontTextureCase=Dynamic`, `includeFontData=True`）なので、フォントの実データがビルドに同梱され、OS に頼らず自前でグリフを描画する（WebGL でも動く）。
+- **文字セットは「常用漢字レベル」にサブセット化済み**（Google Fonts 配布の可変フォント `NotoSansJP[wght].ttf` から `fonttools varLib.instancer` で Regular(wght=400) の静的インスタンスを書き出し → `fonttools subset` で以下の文字だけに絞った）: ASCII 印字可能文字（0x20–0x7E）／CJK 記号・句読点（U+3000–303F）／ひらがな（U+3040–309F）／カタカナ（U+30A0–30FF）／全角英数・記号の一部（U+FF01–FF5E, U+FFE0–FFE5）／**常用漢字 2136 字**（[hoffmannjp/joyo-json](https://github.com/hoffmannjp/joyo-json) の `joyo_kanji.json` から取得）／その他少数の記号（¥ ° × ÷ – — …）。合計ユニーク文字数 2594、フォントファイルは **約960KB**（元の可変フォントは 9.5MB、静的 Regular 単体でも 5.8MB）。
+- **常用漢字に無い固有名詞用の漢字（人名・地名など難読字）は現状表示できない。** 会話テキストに常用漢字外の漢字を使う場合は、後述の手順でフォントを作り直して文字を追加する必要がある。ライセンスは SIL Open Font License 1.1（`Assets/Fonts/NotoSansJP-OFL-LICENSE.txt`、ビルドには含まれない参照用）。
+- **文字を追加してフォントを作り直す手順**: ①追加したい文字を集めたテキストファイルを用意（既存の常用漢字リストに足す形でも可）②Google Fonts の `ofl/notosansjp/NotoSansJP[wght].ttf`（可変フォント）を取得 ③`python -m fontTools.varLib.instancer --update-name-table -o Regular-full.ttf NotoSansJP[wght].ttf wght=400` で Regular の静的フォントを書き出す ④`python -m fontTools.subset Regular-full.ttf --text-file=charset.txt --output-file=NotoSansJP-Regular.ttf --layout-features='*' --glyph-names --symbol-cmap --legacy-cmap --notdef-glyph --notdef-outline --recommended-glyphs --name-IDs='*' --name-legacy --name-languages='*'` でサブセット化 ⑤`Assets/Resources/Fonts/NotoSansJP-Regular.ttf` を上書きしてインポートし直す（既存の GUID を維持するため、ファイルの中身だけ差し替える）。
 
 **プロローグ**: `Title`「Game Start」→ `GameFlow.StartGame()` → `Prologue` シーン → `PrologueRunner` が `StageSet.prologue` を再生 → 終了で `GameFlow.GoStageSelect()`。`StartGame()` は Prologue が Build Settings に無ければ StageSelect へ直行。
 
@@ -361,7 +367,7 @@ OneWayPlatform         @ (3,-0.4) BoxCollider extents (2,0.2)  layer=Ground  [On
 | `GameFlow` | (static クラス) | 画面遷移（`SceneTransition.Go` 経由）+ ステージ解放 + 会話既読。`Stages`（StageSet）、`StageCount`、`StartGame`（未読ならPrologue経由）/`LoadStage`/`RetryStage`/`NextStage`/`GoStageSelect`/`GoTitle`、`CurrentStageIndex`、`ActiveStageIndex`（アクティブシーン名から StageSet index を解決）、クリア状況（`IsStageCleared`/`SetStageCleared`/`MarkStageCleared`、PlayerPrefs ビットマスク）、`IsStageUnlocked`/`UnlockedStageIndex`、ステージ会話既読（`HasSeenIntro`/`SetIntroSeen`/`MarkIntroSeen`、ビットマスク）、プロローグ既読（`HasSeenPrologue`/`SetPrologueSeen`/`MarkPrologueSeen`、0/1）、`ResetStageProgress`（クリア＋ステージ既読の2キー消去、プロローグは残す）、`ResetProgress`（3キー消去） |
 | `DeveloperSettings` | ScriptableObject（`Assets/Resources/DeveloperSettings.asset`） | 開発者機能の総合スイッチ。`developerMode` bool をインスペクター編集。静的 `Active` = エディタ内 かつ `developerMode`（`#if UNITY_EDITOR` ガード。ビルドでは常に false）。`DevStageClearToggles` / `DevStorySeenToggles` / `DevProgressResetButton` が従う |
 | `DialogueSequence` | ScriptableObject（`Assets/Dialogue/*.asset`） | 会話 1 本。`pages[]` = `speaker` + `text` + `image` + `layout` |
-| `DialoguePlayer` | Prologue シーン, 各ステージシーン | 会話再生（UI は実行時生成）。`Play(seq, onComplete)`、静的 `IsPlaying`。送り＝Space/Enter/左クリック（画面任意位置）。`Play()` で `InputLock.LockFor(inputLockDuration=0.5)` |
+| `DialoguePlayer` | Prologue シーン, 各ステージシーン | 会話再生（UI は実行時生成）。`Play(seq, onComplete)`、静的 `IsPlaying`。送り＝Space/Enter/左クリック（画面任意位置）。`Play()` で `InputLock.LockFor(inputLockDuration=0.5)`。日本語表示用に `Resources.Load<Font>("Fonts/NotoSansJP-Regular")` を使用（§9-2） |
 | `PrologueRunner` | Prologue シーン | `StageSet.prologue` を再生 → `GameFlow.GoStageSelect()` |
 | `TitleMenu` | Title/Canvas | `OnStartClicked()` → `GameFlow.StartGame()`（プロローグ経由でステージ選択）（ボタン onClick から） |
 | `StageSelectMenu` | StageSelect/Canvas | `LoadStage(int)` → `GameFlow.LoadStage(i)`、`BackToTitle()` → `GameFlow.GoTitle()`（左下 BackButton）。`Start` で `RefreshLocks()`（未解放ボタン無効化）＋ `MenuNavigation.SetInitialFocus`（初期カーソル＝一番先の解放ステージ）。`StageButtons` を公開 |
@@ -438,8 +444,8 @@ OneWayPlatform         @ (3,-0.4) BoxCollider extents (2,0.2)  layer=Ground  [On
 **画面の流れは最小実装で通ったが、以下は未着手 / 仮:**
 - **Stage2, Stage4, Stage5 の中身**（今は落とし穴なしの連続 Tilemap 地面のみ。敵・地形・ゴール配置など）。**Stage3 は Stage1 と同一構成に変更済み**（2026-09-11）だが、レベルデザインとして意図されたものではなく暫定。
 - **会話テキストは全部仮**（`DialogueSequence` アセットの中身）。プロローグの一枚絵も未準備（仮イラスト表示中）。本番の絵は主人公＝左 / ダンジョン＝右の構図で用意予定。
-- **会話 UI の日本語化・体裁**（本文は日本語だがフォントは builtin の OS フォールバック頼み。メニュー同様 TMP + 日本語フォントアセットが要る）。文字送り演出（1 文字ずつ表示など）は無し。
-- **UI の日本語化**（メニューは今は英語。日本語にするなら TMP + 日本語グリフのフォントアセットが必要）。
+- **会話 UI の体裁**（日本語表示自体は 2026-09-11 に対応済み — §9-2「日本語フォント」。文字送り演出（1 文字ずつ表示など）は無し。常用漢字外の漢字は現状のフォントサブセットに無いので表示できない）。
+- **UI の日本語化**（メニューは今は英語のまま。日本語にする場合、`Text` はレンダリングだけなら §9-2 のフォントを流用できるが、見た目を作り込むなら TMP 移行も検討）。
 - 結果画面 / メニューの見た目（配置・色は最小限）。
 - **ロック中ステージの見た目**は Unity 既定のグレーアウトのみ（「LOCKED」表記や鍵アイコンは未実装）。クリア進捗のセーブは `PlayerPrefs` の 1 キーだけ（スロット/複数セーブ無し）。
 - `StageManager.nextButton` の表示可否は `GameFlow.CurrentStageIndex` 依存。エディタでステージシーンを直接 Play すると index=0 扱いになる（フロー経由なら正しい）。
