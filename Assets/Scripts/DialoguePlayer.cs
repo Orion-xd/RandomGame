@@ -34,7 +34,7 @@ public class DialoguePlayer : MonoBehaviour
     [SerializeField] private int sortingOrder = 200;
 
     [Tooltip("会話（プロローグ / ステージ開始会話）が出てからこの秒数、送り入力を無効化する（連打で飛ばさないように）")]
-    [SerializeField] private float inputLockDuration = 0.5f;
+    [SerializeField] private float inputLockDuration = 0.25f;
 
     private DialogueSequence _seq;
     private int _page;

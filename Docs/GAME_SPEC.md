@@ -1,6 +1,6 @@
 # RandomGame 仕様・実装まとめ
 
-最終更新: 2026-09-11 / 対象ブランチ: `feature/tilemap`（日本語フォント対応・高台の Tilemap 化も同ブランチで実施）
+最終更新: 2026-09-12 / 対象ブランチ: `feature/action-assist`（地面・高台の Tilemap 化、日本語フォント対応は `feature/tilemap` ブランチで実施済み・マージ済み）
 Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.GetAxis` は不可、`UnityEngine.InputSystem.Keyboard.current` を使う）
 
 このドキュメントは「後日、続きの作業をするとき」に現状を把握するためのもの。
@@ -14,7 +14,7 @@ Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.Ge
 
 - **操作は2系統**
   - **通常操作**: 左右移動のみ（A/D または ←/→）。
-  - **メインアクション**: スペースキー。ジャンプ / ダッシュ / 攻撃 のいずれかが発動する。
+  - **メインアクション**: スペース / エンター / テンキー Enter / 左クリック（2026-09-12、会話送りやメニュー決定と操作系を統一するため追加）。ジャンプ / ダッシュ / 攻撃 のいずれかが発動する。
     ※ 名称は必ず「メインアクション」。以前「特殊操作」と呼んでいたが変更済み。
 - **体力**: カービィ風。敵に接触で 1 ダメージ、3 回でミス（→ リザルト画面。未実装）。
 - **落下 = 即ミス**（未実装）。
@@ -90,10 +90,10 @@ Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.Ge
 
 ### 2-6. 先行入力（バッファ）
 
-- **`inputBufferTime` = 0.1 秒（約6フレーム。0 で無効）**。クールタイム終了のこの秒数前から、スペースキー押下を「先行入力」として記憶する。
-- **キーを離していても**、クールタイムが明けた瞬間（`IsReady`）に次のアクションが自動発動する。「クールタイム明けにすぐ次を出す」操作をやりやすくするため。
+- **`inputBufferTime` = 0.1 秒（約6フレーム。0 で無効）**。クールタイム終了のこの秒数前から、発動入力（スペース / エンター / テンキー Enter / 左クリック）を「先行入力」として記憶する。
+- **入力を離していても**、クールタイムが明けた瞬間（`IsReady`）に次のアクションが自動発動する。「クールタイム明けにすぐ次を出す」操作をやりやすくするため。
 - 実装（`MainActionController`）:
-  - `Update()` でスペース押下時、まず `TryTrigger()`（`void`→`bool` に変更、発動できたか返す）。**出せなかった & `InInputBufferZone`** なら `_bufferedInput = true`（`_bufferedInputExpiry = Time.time + 0.4`＝`BufferedInputMaxLife` で失効させる保険つき）。
+  - `Update()` で発動入力押下時、まず `TryTrigger()`（`void`→`bool` に変更、発動できたか返す）。**出せなかった & `InInputBufferZone`** なら `_bufferedInput = true`（`_bufferedInputExpiry = Time.time + 0.4`＝`BufferedInputMaxLife` で失効させる保険つき）。
   - 毎フレーム、`_bufferedInput` かつ `IsReady` になったら消費して `TryTrigger()`。ライブ入力で発動できたときは残っていた記憶を破棄。`OnDisable` でもクリア。
 - **受付区間（`InInputBufferZone`）と CD ゲージ上の割合（`InputBufferZoneFraction01`、空側の端から測った 0..1）を公開** → `PlayerDebugBars` が色付き表示に使う（§8）。
   - **ダッシュ / 攻撃**（時間ベース）: 残り `<= inputBufferTime` で受付。割合 = `inputBufferTime / _lastCooldownDuration`（例: CD 2 秒なら 0.05）。
@@ -225,11 +225,11 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 
 - **遷移はすべて `GameFlow`（static クラス）→ `SceneTransition.Go(シーン名)`**。`CurrentStageIndex` だけ static で保持（「次のステージへ」「もう一度」に使う）。
 - **フェード遷移（`SceneTransition`, 2026-09-08）**: **どのシーン遷移でも**「暗転 → 読み込み → 明転」を行う。実行時に自動生成（`DontDestroyOnLoad`）、全面真っ黒 Image の alpha を上下させるだけ（上下左右の動きなし）。`sortingOrder 32760`（会話・結果画面より前面）、`raycastTarget=true` で演出中はマウスも遮断。
-  - 時間は `Assets/Resources/SceneTransitionSettings.asset` で調整：`fadeOutSeconds`(0.5) / `fadeInSeconds`(0.5) / `postFadeInLockSeconds`(0.5)。`Time.unscaledDeltaTime` 基準（結果画面など `timeScale=0` から遷移しても動く）。
+  - 時間は `Assets/Resources/SceneTransitionSettings.asset` で調整：`fadeOutSeconds`(0.5) / `fadeInSeconds`(0.5) / `postFadeInLockSeconds`(**0.25**、2026-09-12 に 0.5→0.25 へ半減)。`Time.unscaledDeltaTime` 基準（結果画面など `timeScale=0` から遷移しても動く）。
   - **明転（フェードイン）のヒッチ対策（2026-09-08）**: シーンロード直後は 1 フレームの delta が大きく荒れるため、そのままだと明転が 1〜2 フレームで終わって「いきなり明るくなる」ように見える。対策として ①ロード後に 2 フレーム捨ててから明転開始 ②`Fade` の 1 フレームあたりの進行量に上限（`max(1/60, duration*0.15)` 秒）を設ける。
-  - 演出中は `SceneTransition.Transitioning == true` → `InputLock.InputAllowed` が常に false（＝すべての入力を無効化）。明転しきったあと `InputLock.LockFor(postFadeInLockSeconds)` を呼び、**さらに 0.5 秒**入力を止める（連打対策）。合計：暗転 0.5 ＋ 読み込み ＋ 明転 0.5 ＋ 0.5。
+  - 演出中は `SceneTransition.Transitioning == true` → `InputLock.InputAllowed` が常に false（＝すべての入力を無効化）。明転しきったあと `InputLock.LockFor(postFadeInLockSeconds)` を呼び、**さらに 0.25 秒**入力を止める（連打対策。2026-09-12 に 0.5→0.25 へ半減）。合計：暗転 0.5 ＋ 読み込み ＋ 明転 0.5 ＋ 0.25。
   - **暗転中は `Time.timeScale = 0`（2026-09-08）**: 暗転が始まってから `LoadSceneAsync` 完了までは遷移元シーンを完全停止させる。これが無いと、クリアパネルのボタンを押してから遷移するまでの短い間だけ通常進行に戻り、`CameraFollow` の追従（`SmoothDamp`）が再開して「プレイヤーは操作していないのにカメラだけ少し動く」違和感が出る。読み込み後に `timeScale = 1` に戻す（開始会話があれば `StageManager` が再度 0 にする）。フェード自体は `Time.unscaledDeltaTime` なので timeScale 0 でも進む。
-  - **ステージクリア / 失敗のパネル表示はシーン遷移ではないのでフェードしない**。代わりに結果パネルの `MenuNavigation.inputLockDuration` を **1.0 秒**にしてある（他画面は 0.5 秒）。この間はキーボードに加え `GraphicRaycaster` を無効化してマウスクリックも止める。
+  - **ステージクリア / 失敗のパネル表示はシーン遷移ではないのでフェードしない**。代わりに結果パネルの `MenuNavigation.inputLockDuration` で連打対策をしている（**2026-09-12 に 1.0→0.5 秒へ半減**、現在は他画面と同じ 0.5 秒）。この間はキーボードに加え `GraphicRaycaster` を無効化してマウスクリックも止める。
 - **ステージの並び・シーン名は `StageSet`（ScriptableObject, `Assets/Resources/StageSet.asset`, 2026-09-06）に外出し**。インスペクターで `stages[]`（`displayName` + `sceneName`）を編集する。`GameFlow` が `Resources.Load<StageSet>("StageSet")` で読む（コード内にシーン名を書かない）。**ステージ追加はコード変更不要** → ①シーン作成＋Build Settings 追加 ②`StageSet.stages` に要素追加 ③StageSelect にボタン追加＋`StageSelectMenu.stageButtons` に同 index で割当。`StageSelectMenu` は `displayName` があればボタンのラベル（子 `Text`）へ反映する。
 - **現在 5 ステージ**（2026-09-07 に 3 → 5 へ拡張、企画どおり）。`StageSet` に Stage1〜Stage5 を登録。
 - **ビルド設定のシーン順**: `[0] Title, [1] Prologue, [2] StageSelect, [3] Stage1, [4] Stage2, [5] Stage3, [6] Stage4, [7] Stage5`（`SampleScene` は `Stage1.unity` にリネーム済み）。※シーンは名前でロードするので順番自体は動作に影響しない。
@@ -275,7 +275,7 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
   - **初期カーソル位置**: `SetInitialFocus(Button)` で明示指定があればそれ（`StageSelectMenu` が「今挑戦できる一番先のステージ」＝`GameFlow.UnlockedStageIndex` のボタンを渡す）。無ければ `initialCursor` enum：`FirstUsable`（既定。Title / 結果画面）。実際の確定は Update 側（`OnEnable` 時点では他スクリプトの `Start` 未実行のことがあるため）。
   - **マウスホバー**：**マウスを実際に動かしたときだけ**カーソルに反映（`OnEnable` で現在のマウス位置を基準として覚え、そこから 2px 以上動くまでホバー無効）。シーン遷移直後や結果パネル表示直後にマウスが据え置かれているだけでは、初期カーソル位置が上書きされない（2026-09-08 修正。例：ステージ2クリア→ステージ選択でカーソルはステージ3のまま、マウスがステージ1上にあっても動かさない限り動かない）。
   - **入力ロック（`InputLock`, 2026-09-08）**：`OnEnable` に `InputLock.LockFor(inputLockDuration)` を呼び、その間は入力（移動・決定）を無視する。`InputLock.InputAllowed` = `!SceneTransition.Transitioning && Time.unscaledTime >= 解除時刻`。`Time.unscaledTime` 基準。**ロックが明けたら通常どおり**（意図的な連打はそのまま通す）。ロック中は `GraphicRaycaster` も無効化してマウスクリックも止める（`OnDisable` で復帰）。
-    - シーン遷移では `SceneTransition` が「暗転〜明転〜さらに 0.5 秒」を管理するので `OnEnable` の `LockFor` は実質冗長（害はない）。**結果パネル**（`ClearPanel` / `FailPanel`）はシーン遷移ではないので、この `LockFor` が効く時間（`inputLockDuration` = **1.0 秒**）が本番。他画面の `MenuNavigation` は 0.5 秒。
+    - シーン遷移では `SceneTransition` が「暗転〜明転〜さらに 0.25 秒」を管理するので `OnEnable` の `LockFor` は実質冗長（害はない）。**結果パネル**（`ClearPanel` / `FailPanel`）はシーン遷移ではないので、この `LockFor` が効く時間（`inputLockDuration`）が本番。2026-09-12 に 1.0→0.5 秒へ半減し、現在は他画面の `MenuNavigation` と同じ 0.5 秒。
   - 選択中（キーボードカーソル or マウスホバー）のボタンに**色付きの枠**（`SelectionFrame`、実行時生成の黄色い矩形を背面に置き、`framePadding`(8px) ぶんはみ出させて枠に見せる）。
     - 枠の位置合わせ（2026-09-07 修正）: 枠は常に pivot (0.5,0.5) にし、ボタンの pivot が中心でなくても `sizeDelta*(0.5 - pivot)` で矩形中心へ補正して合わせる。以前はボタンの pivot をそのままコピーしていたため、中心 pivot でないボタン（左下配置の BackButton など）で枠が片側に寄っていた。中心 pivot のボタンでは補正 0 で従来と同じ。
   - `EventSystem`/`InputSystemUIInputModule` の自動ナビゲーションとは二重処理にならないよう、対象ボタンの `Navigation.mode = None` にし、毎フレーム `EventSystem` の選択を解除している。マウスのクリック・ホバー着色はモジュール側のまま。
@@ -292,7 +292,7 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 **再生**: `DialoguePlayer`（`Assets/Scripts/DialoguePlayer.cs`）。
 - UI（Canvas 含む）は**実行時に自分で生成**する。シーン側は空 GameObject にコンポーネントを付けるだけ。Canvas は `sortingOrder 200`（HUD / 結果画面より前面）。
 - `Play(DialogueSequence, System.Action onComplete)` で再生。**スペース / エンター / テンキー Enter / 画面のどこでも左クリック**で送り、最後まで読むと `onComplete`。内容が空なら即 `onComplete`。クリックは UI 経由ではなく `Mouse.current.leftButton` を直接読むので、テキストボックス上でも位置を問わず送れる（会話 UI の Image は `raycastTarget=false`）。
-- **入力ロック（`InputLock`, 2026-09-08）**: `Play()` の直後に `InputLock.LockFor(inputLockDuration)`（既定 0.5 秒）。その間は送り入力（Space/Enter/左クリック）を無視。プロローグ／開始会話へは `SceneTransition` 経由で入るので、実際には「暗転〜明転〜さらに 0.5 秒」ずっと送り入力は不可（`InputLock.InputAllowed` が `SceneTransition.Transitioning` も見るため）。明転後に会話が現れ、ロックが明ければ通常どおり送れる。ステージ開始会話は会話終了時（`StageManager.OnIntroFinished`）にも `LockFor(0.5)`（送り切った勢いでアクションが出ないように）。
+- **入力ロック（`InputLock`, 2026-09-08）**: `Play()` の直後に `InputLock.LockFor(inputLockDuration)`（既定 **0.25 秒**、2026-09-12 に 0.5→0.25 へ半減）。その間は送り入力（Space/Enter/左クリック）を無視。プロローグ／開始会話へは `SceneTransition` 経由で入るので、実際には「暗転〜明転〜さらに 0.25 秒」ずっと送り入力は不可（`InputLock.InputAllowed` が `SceneTransition.Transitioning` も見るため）。明転後に会話が現れ、ロックが明ければ通常どおり送れる。ステージ開始会話は会話終了時（`StageManager.OnIntroFinished`）にも `LockFor(0.25)`（送り切った勢いでアクションが出ないように）。
 - 再生中は静的 `DialoguePlayer.IsPlaying == true`。`PlayerController.Update` と `MainActionController.Update` は先頭でこれを見て**入力を無視**（スペースが会話送りに食われる／移動しない）。
 
 **日本語フォント（2026-09-11）**: 会話本文は日本語だが、以前は `Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf")`（ビルトインの Arial 系、日本語グリフ無し）をそのまま使っていた。エディタ / Windows スタンドアロンでは欠けているグリフを **OS インストール済みフォントへフォールバック**して表示できていたが、**WebGL ビルド（unityroom）は OS フォントにアクセスできないため、そのフォールバックが効かず日本語が表示されない**という問題があった。
@@ -360,7 +360,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 |---|---|---|
 | `MainActionType` | (enum) | Jump / Dash / Attack |
 | `MainActionQueue` | Player | アクションの並び（決定的・連続禁止）。`Peek` / `Consume` / `OnChanged`。`StageSet.allowedActions` があれば `lottery` を上書き |
-| `MainActionController` | Player | メインアクションの発動・クールタイム・コンボ・先行入力・ダッシュ処理・無敵。会話中／画面切り替え直後は入力停止。`StageSet.disableCombos` のステージでは `_combosEnabled=false`（コンボ無効） |
+| `MainActionController` | Player | メインアクションの発動・クールタイム・コンボ・先行入力・ダッシュ処理・無敵。発動入力はスペース / エンター / テンキー Enter / 左クリック（2026-09-12、会話送り・メニュー決定と統一）。会話中／画面切り替え直後は入力停止。`StageSet.disableCombos` のステージでは `_combosEnabled=false`（コンボ無効） |
 | `PlayerController` | Player | 左右移動・向き・接地判定・コヨーテ/落下猶予・ノックバック受け・着地時間予測（`TryPredictLandingTime`）。会話中／画面切り替え直後（`InputLock`）は入力停止 |
 | `PlayerHealth` | Player | 体力・被弾・無敵時間。`TakeDamage -> bool`、`OnHealthChanged` |
 | `AttackHitbox` | Player/AttackHitbox | 前方の一時的な攻撃判定（トリガー） |
@@ -377,7 +377,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | `GameFlow` | (static クラス) | 画面遷移（`SceneTransition.Go` 経由）+ ステージ解放 + 会話既読。`Stages`（StageSet）、`StageCount`、`StartGame`（未読ならPrologue経由）/`LoadStage`/`RetryStage`/`NextStage`/`GoStageSelect`/`GoTitle`、`CurrentStageIndex`、`ActiveStageIndex`（アクティブシーン名から StageSet index を解決）、クリア状況（`IsStageCleared`/`SetStageCleared`/`MarkStageCleared`、PlayerPrefs ビットマスク）、`IsStageUnlocked`/`UnlockedStageIndex`、ステージ会話既読（`HasSeenIntro`/`SetIntroSeen`/`MarkIntroSeen`、ビットマスク）、プロローグ既読（`HasSeenPrologue`/`SetPrologueSeen`/`MarkPrologueSeen`、0/1）、`ResetStageProgress`（クリア＋ステージ既読の2キー消去、プロローグは残す）、`ResetProgress`（3キー消去） |
 | `DeveloperSettings` | ScriptableObject（`Assets/Resources/DeveloperSettings.asset`） | 開発者機能の総合スイッチ。`developerMode` bool をインスペクター編集。静的 `Active` = エディタ内 かつ `developerMode`（`#if UNITY_EDITOR` ガード。ビルドでは常に false）。`DevStageClearToggles` / `DevStorySeenToggles` / `DevProgressResetButton` が従う |
 | `DialogueSequence` | ScriptableObject（`Assets/Dialogue/*.asset`） | 会話 1 本。`pages[]` = `speaker` + `text` + `image` + `layout` |
-| `DialoguePlayer` | Prologue シーン, 各ステージシーン | 会話再生（UI は実行時生成）。`Play(seq, onComplete)`、静的 `IsPlaying`。送り＝Space/Enter/左クリック（画面任意位置）。`Play()` で `InputLock.LockFor(inputLockDuration=0.5)`。日本語表示用に `Resources.Load<Font>("Fonts/NotoSansJP-Regular")` を使用（§9-2） |
+| `DialoguePlayer` | Prologue シーン, 各ステージシーン | 会話再生（UI は実行時生成）。`Play(seq, onComplete)`、静的 `IsPlaying`。送り＝Space/Enter/左クリック（画面任意位置）。`Play()` で `InputLock.LockFor(inputLockDuration=0.25)`（2026-09-12 に 0.5→0.25 へ半減）。日本語表示用に `Resources.Load<Font>("Fonts/NotoSansJP-Regular")` を使用（§9-2） |
 | `PrologueRunner` | Prologue シーン | `StageSet.prologue` を再生 → `GameFlow.GoStageSelect()` |
 | `TitleMenu` | Title/Canvas | `OnStartClicked()` → `GameFlow.StartGame()`（プロローグ経由でステージ選択）（ボタン onClick から） |
 | `StageSelectMenu` | StageSelect/Canvas | `LoadStage(int)` → `GameFlow.LoadStage(i)`、`BackToTitle()` → `GameFlow.GoTitle()`（左下 BackButton）。`Start` で `RefreshLocks()`（未解放ボタン無効化）＋ `MenuNavigation.SetInitialFocus`（初期カーソル＝一番先の解放ステージ）。`StageButtons` を公開 |
@@ -386,12 +386,12 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | `DevProgressResetButton` | StageSelect/Canvas | 【開発者用】BackButton の少し上に「Reset story & clear」ボタンを実行時生成し `MenuNavigation.AddButton` で登録。`GameFlow.ResetStageProgress()` ＋ 両トグルの `ResetAll()`。表示は `DeveloperSettings.Active` |
 | `FreshBuildGuard` | (static, `RuntimeInitializeOnLoadMethod`) | ビルド版のみ。`Policy`（OnEveryBuild / OnTokenChange / Disabled）に応じて起動時に `GameFlow.ResetProgress()`。エディタ内は無効 |
 | `FreshBuildGuardBuildCheck` | (`Assets/Scripts/Editor/`, `IPreprocessBuildWithReport`) | `Policy = OnEveryBuild` のまま非開発ビルドを作ろうとしたら確認ダイアログでビルドを止める |
-| `StageManager` | 各ステージ/StageFlow | クリア/失敗判定・結果画面表示・結果ボタン処理・落下死判定（killY）・初回入場時の開始会話（`TryPlayIntro`, `Time.timeScale=0`）・ステージ開始時 / 会話終了時に `InputLock.LockFor(inputLockDuration=0.5)` |
+| `StageManager` | 各ステージ/StageFlow | クリア/失敗判定・結果画面表示・結果ボタン処理・落下死判定（killY）・初回入場時の開始会話（`TryPlayIntro`, `Time.timeScale=0`）・ステージ開始時 / 会話終了時に `InputLock.LockFor(inputLockDuration=0.25)`（2026-09-12 に 0.5→0.25 へ半減） |
 | `Goal` | 各ステージ/Goal | 右端トリガー。ボス全滅後にプレイヤーが触れると `StageManager.Clear()` |
-| `MenuNavigation` | Title/StageSelect の Canvas, 各ステージの ClearPanel/FailPanel | メニュー UI のキーボード操作。位置ベース 2D 移動（W/S=上下・最近傍＋端ループ、A/D=同じ行内＋端ループ）、Space/Enter で決定、選択枠の自動生成。マウスホバーは移動時のみ反映。`OnEnable` で `InputLock.LockFor(inputLockDuration)`（メニュー 0.5s / 結果パネル 1.0s）、ロック中は `GraphicRaycaster` も無効化。`AddButton()` / `SetInitialFocus()` |
+| `MenuNavigation` | Title/StageSelect の Canvas, 各ステージの ClearPanel/FailPanel | メニュー UI のキーボード操作。位置ベース 2D 移動（W/S=上下・最近傍＋端ループ、A/D=同じ行内＋端ループ）、Space/Enter で決定、選択枠の自動生成。マウスホバーは移動時のみ反映。`OnEnable` で `InputLock.LockFor(inputLockDuration)`（全画面共通 0.5s、2026-09-12 に結果パネルの 1.0s を統一）、ロック中は `GraphicRaycaster` も無効化。`AddButton()` / `SetInitialFocus()` |
 | `InputLock` | (static クラス) | 入力ロック。`InputAllowed` = `!SceneTransition.Transitioning && Time.unscaledTime >= 解除時刻`。`LockFor(秒)` で一定時間 false に（一番遅い解除時刻を採用）。`MenuNavigation`/`DialoguePlayer`/`StageManager`/`SceneTransition` が LockFor、`MenuNavigation`/`DialoguePlayer`/`MainActionController`/`PlayerController` が参照 |
 | `SceneTransition` | (実行時生成, `DontDestroyOnLoad`) | 全シーン遷移で暗転→読み込み→明転。`Go(シーン名)`。演出中 `Transitioning=true`（＝入力全無効）、明転後 `InputLock.LockFor(postFadeInLockSeconds)`。全面黒 Image（sortingOrder 32760, raycastTarget）でマウスも遮断 |
-| `SceneTransitionSettings` | ScriptableObject（`Assets/Resources/SceneTransitionSettings.asset`） | `fadeOutSeconds` / `fadeInSeconds` / `postFadeInLockSeconds`（各 0.5）。インスペクター調整 |
+| `SceneTransitionSettings` | ScriptableObject（`Assets/Resources/SceneTransitionSettings.asset`） | `fadeOutSeconds`(0.5) / `fadeInSeconds`(0.5) / `postFadeInLockSeconds`(**0.25**、2026-09-12 に 0.5→0.25 へ半減)。インスペクター調整 |
 
 ---
 
@@ -427,8 +427,10 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | ステージ | killY（落下死ライン） | -12 | StageManager |
 | メニュー操作 | frameColor / framePadding（選択枠） | 黄 / 8px | MenuNavigation |
 | メニュー操作 | rowTolerance（横入力で同じ行とみなす縦ズレ） | 40px | MenuNavigation |
-| 入力ロック | inputLockDuration（画面 / パネルが出てからこの秒数、入力を無効化） | 0.5 秒（結果パネルの MenuNavigation のみ 1.0 秒） | MenuNavigation / DialoguePlayer / StageManager |
-| フェード遷移 | fadeOutSeconds / fadeInSeconds / postFadeInLockSeconds | 各 0.5 秒 | SceneTransitionSettings（`Assets/Resources/`） |
+| 入力ロック | inputLockDuration（`MenuNavigation`：画面 / パネルが出てからこの秒数、入力を無効化） | 0.5 秒（全画面共通。結果パネルも 2026-09-12 に 1.0→0.5 秒へ統一） | MenuNavigation |
+| 入力ロック | inputLockDuration（`DialoguePlayer`/`StageManager`：会話・ステージ開始/終了直後の入力無効化） | **0.25 秒**（2026-09-12 に 0.5→0.25 へ半減） | DialoguePlayer / StageManager |
+| フェード遷移 | fadeOutSeconds / fadeInSeconds | 各 0.5 秒 | SceneTransitionSettings（`Assets/Resources/`） |
+| フェード遷移 | postFadeInLockSeconds | **0.25 秒**（2026-09-12 に 0.5→0.25 へ半減） | SceneTransitionSettings（`Assets/Resources/`） |
 | 会話 | blackColor / boxColor（暗転・ボックス） | ほぼ黒 / 黒 78% | DialoguePlayer |
 | 会話 | centerFontSize / bodyFontSize / speakerFontSize | 40 / 30 / 26 | DialoguePlayer |
 | 会話 | sortingOrder（会話 Canvas） | 200 | DialoguePlayer |

@@ -4,7 +4,8 @@ using UnityEngine.InputSystem;
 
 /// <summary>
 /// メインアクション（ジャンプ / ダッシュ / 攻撃）の発動を司る。
-/// スペースキーでキュー先頭のアクションを1つ消費して実行し、クールタイム経過まで次を受け付けない。
+/// スペース / エンター / テンキー Enter / 左クリックでキュー先頭のアクションを1つ消費して実行し、
+/// クールタイム経過まで次を受け付けない（会話送りやメニュー決定と操作系を統一するため複数キーを許可）。
 ///
 /// ── クールタイム ──
 ///  - ダッシュ / 攻撃：技ごとの固定秒数（dashCooldown / attackCooldown）。
@@ -27,8 +28,8 @@ using UnityEngine.InputSystem;
 /// 1回発動したら comboGraceTime は無意味で、そのアクションのクールタイムが明けるまで次は出せない。
 ///
 /// ── 先行入力（バッファ） ──
-/// クールタイム終了の inputBufferTime 秒前（既定 0.1 秒＝約6フレーム）から、スペースキーの押下を
-/// 「先行入力」として記憶する。キーを離していても、クールタイムが明けた瞬間に次のアクションを発動する。
+/// クールタイム終了の inputBufferTime 秒前（既定 0.1 秒＝約6フレーム）から、発動入力（スペース / エンター /
+/// テンキー Enter / 左クリック）を「先行入力」として記憶する。入力を離していても、クールタイムが明けた瞬間に次のアクションを発動する。
 /// これにより「クールタイム明けにすぐ次を出す」操作がやりやすくなる。
 ///  - ダッシュ / 攻撃：時間ベースなので「残り <= inputBufferTime」で受付。
 ///  - ジャンプ：時間ではなく着地で明けるため、PlayerController.TryPredictLandingTime（足元からの
@@ -176,9 +177,17 @@ public class MainActionController : MonoBehaviour
         // 先行入力の受付区間（InInputBufferZone / _bufferZoneFraction）を毎フレーム更新。
         UpdateInputBufferState();
 
-        // スペースキー押下：まず即時発動を試み、ダメなら受付区間内のとき「先行入力」として記憶する。
+        // 発動入力：スペース / エンター / テンキー Enter / 左クリック（会話送りやメニュー決定と統一）。
+        // まず即時発動を試み、ダメなら受付区間内のとき「先行入力」として記憶する。
         var kb = Keyboard.current;
-        if (kb != null && kb.spaceKey.wasPressedThisFrame)
+        bool byKey = kb != null && (kb.spaceKey.wasPressedThisFrame
+            || kb.enterKey.wasPressedThisFrame
+            || kb.numpadEnterKey.wasPressedThisFrame);
+
+        var mouse = Mouse.current;
+        bool byClick = mouse != null && mouse.leftButton.wasPressedThisFrame;
+
+        if (byKey || byClick)
         {
             if (TryTrigger())
             {
