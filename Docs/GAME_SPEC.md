@@ -1,6 +1,6 @@
 # RandomGame 仕様・実装まとめ
 
-最終更新: 2026-09-12 / 対象ブランチ: `feature/action-assist`（地面・高台の Tilemap 化、日本語フォント対応は `feature/tilemap` ブランチで実施済み・マージ済み）
+最終更新: 2026-09-12 / 対象ブランチ: `feature/action-assist`（地面・高台の Tilemap 化、日本語フォント対応は `feature/tilemap` ブランチで実施済み・マージ済み。Player/Enemy/Goal の Prefab 化は §15）
 Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.GetAxis` は不可、`UnityEngine.InputSystem.Keyboard.current` を使う）
 
 このドキュメントは「後日、続きの作業をするとき」に現状を把握するためのもの。
@@ -331,22 +331,25 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 
 ### 9-1. ステージ1 = `Assets/Scenes/Stage1.unity`（旧 `SampleScene.unity`）
 
-（下記に加えて `EventSystem`、`StageFlow`（`StageManager` + `ResultCanvas`）、`Goal`（@x28, 縦長トリガー, 緑）を追加済み）
+（下記に加えて `EventSystem`、`StageFlow`（`StageManager` + `ResultCanvas`）、`Goal`（Prefab インスタンス, @x28, 縦長トリガー, 緑）を追加済み）
 
 ```
 Main Camera            [Camera, CameraFollow]  ortho size 6 @ (0,-0.5,-10)
 Global Light 2D
-Player                 @ (-10,-1.5)  [SpriteRenderer(PlayerArrow), BoxCollider2D, Rigidbody2D(grav 3, PlayerNoFriction),
+Player（Prefab インスタンス） @ (-10,-1.5)  [SpriteRenderer(PlayerArrow), BoxCollider2D, Rigidbody2D(grav 3, PlayerNoFriction),
                                       PlayerController, MainActionQueue, MainActionController, PlayerHealth]
   AttackHitbox         [SpriteRenderer, BoxCollider2D(trigger), AttackHitbox]  通常は非アクティブ
   DebugBars            [PlayerDebugBars]
     ComboBar / CooldownBar  各 BG(SpriteRenderer) + Fill(SpriteRenderer) + Label(TextMesh)
-Enemy_A                @ (-4,-1.5)  [SpriteRenderer, BoxCollider2D, Enemy(HP1), EnemyPatrol]
-Enemy_Boss             @ (15,-1.25) [SpriteRenderer, BoxCollider2D, Enemy(HP複数), EnemyPatrol]
+Enemy_A（Prefab インスタンス） @ (-4,-1.5)  [SpriteRenderer, BoxCollider2D, Enemy(HP1), EnemyPatrol]
+Enemy_Boss（Prefab インスタンス, EnemyBoss variant） @ (15,-1.25) [SpriteRenderer, BoxCollider2D, Enemy(HP複数), EnemyPatrol]
   HealthBar            [EnemyHealthBar] → BG / Fill / Label(TextMesh)
-HUD_Canvas             [Canvas, CanvasScaler, GraphicRaycaster]
+HUD_Canvas（Prefab インスタンス） [Canvas, CanvasScaler, GraphicRaycaster]
   ActionBar            [ActionBarUI] → Title(Text) + Slot0..3 (Image + 子 Label(Text))
   HealthPanel          [HealthUI] → HP0..2 (Image, 赤丸)
+StageFlow（Prefab インスタンス） [StageManager]
+  ResultCanvas         [Canvas, CanvasScaler, GraphicRaycaster] → ClearPanel/FailPanel（各 [MenuNavigation] + Title + ボタン群）
+DialogueSystem（Prefab インスタンス, Prologue を除く） [DialoguePlayer]
 Grid                   @ (0,0)  [Grid] cell size (1,1)
   Ground               layer=Ground  [Tilemap, TilemapRenderer(order -10), Rigidbody2D(Static),
                                       TilemapCollider2D(compositeOperation Merge), CompositeCollider2D(Polygons),
@@ -379,9 +382,9 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | `EnemyHealthBar` | Enemy_Boss/HealthBar | ボスの体力ゲージ + 数値 |
 | `OneWayPlatform` | Stage3/`Grid/Platform`（Tilemap の CompositeCollider2D） | 一方通行 + 重なり率での着地判定。単体 Collider2D でも Tilemap の CompositeCollider2D でも動く（`Awake` が CompositeCollider2D を優先） |
 | `TilemapColliderBootstrap` | 各ステージ `Grid/Ground` | `Awake` でタイルを貼り直し、`TilemapCollider2D`/`CompositeCollider2D` の形状を再生成させる（eval 生成 Tilemap が Play 開始時に当たり判定を持たない問題の対策）。§7 |
-| `CameraFollow` | Main Camera | 横方向のみ追従 |
-| `ActionBarUI` | HUD_Canvas/ActionBar | アクション先読み表示 |
-| `HealthUI` | HUD_Canvas/HealthPanel | 体力アイコン表示 |
+| `CameraFollow` | Main Camera | 横方向のみ追従。`target`（Player の Transform）は未設定なら Tag=Player から自動取得（2026-09-12） |
+| `ActionBarUI` | HUD_Canvas/ActionBar | アクション先読み表示。`queue`（Player の MainActionQueue）は未設定なら Tag=Player から自動取得（2026-09-12） |
+| `HealthUI` | HUD_Canvas/HealthPanel | 体力アイコン表示。`playerHealth`（Player の PlayerHealth）は未設定なら Tag=Player から自動取得（2026-09-12） |
 | `StageSet` | ScriptableObject（`Assets/Resources/StageSet.asset`） | ステージの並び。`stages[]` = `displayName` + `sceneName` + `intro`（会話）+ `allowedActions`（そのステージの抽選対象）+ `disableCombos`。全体の `prologue`。`AllowedActionsAt`/`DisableCombosAt`/`IndexOfScene`。GameFlow が Resources.Load |
 | `GameFlow` | (static クラス) | 画面遷移（`SceneTransition.Go` 経由）+ ステージ解放 + 会話既読。`Stages`（StageSet）、`StageCount`、`StartGame`（未読ならPrologue経由）/`LoadStage`/`RetryStage`/`NextStage`/`GoStageSelect`/`GoTitle`、`CurrentStageIndex`、`ActiveStageIndex`（アクティブシーン名から StageSet index を解決）、クリア状況（`IsStageCleared`/`SetStageCleared`/`MarkStageCleared`、PlayerPrefs ビットマスク）、`IsStageUnlocked`/`UnlockedStageIndex`、ステージ会話既読（`HasSeenIntro`/`SetIntroSeen`/`MarkIntroSeen`、ビットマスク）、プロローグ既読（`HasSeenPrologue`/`SetPrologueSeen`/`MarkPrologueSeen`、0/1）、`ResetStageProgress`（クリア＋ステージ既読の2キー消去、プロローグは残す）、`ResetProgress`（3キー消去） |
 | `DeveloperSettings` | ScriptableObject（`Assets/Resources/DeveloperSettings.asset`） | 開発者機能の総合スイッチ。`developerMode` bool をインスペクター編集。静的 `Active` = エディタ内 かつ `developerMode`（`#if UNITY_EDITOR` ガード。ビルドでは常に false）。`DevStageClearToggles` / `DevStorySeenToggles` / `DevProgressResetButton` が従う |
@@ -494,3 +497,42 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 6. **アクションの並びはステージ固定・決定的**（seed ベース）。同じアクションは 2 連続しない。
 7. **ダッシュ以外の敵接触はすり抜けない**（ノックバック + ダメージ）。すり抜けるのはダッシュ中のみ。
 8. **敵接触ダメージは本体コライダーのみ**（`GetComponent`、`GetComponentInParent` を使わない。子の攻撃判定で自傷しないため）。
+
+---
+
+## 15. 共通オブジェクトの Prefab 化（2026-09-12）
+
+全ステージで共通の `Player` / `Enemy_A` / `Enemy_Boss` / `Goal` を Prefab 化した。`Assets/Prefabs/` に置き、各ステージシーンには**直接配置した Prefab インスタンス**（実行時に動的生成する仕組みは無い・不要）。
+
+- **`Assets/Prefabs/Player.prefab`**: Stage1 の `Player`（子の `AttackHitbox` / `DebugBars` ツリーごと）をそのまま Prefab 化。Stage2〜5 は元の GameObject を削除し、このプレハブをインスタンス化して差し替えた。
+  - **ステージごとに残す上書き（インスタンス側の override）**: `Transform.position`（全ステージ実は (-10,-1.5,0) で共通）、`MainActionQueue.stageSeed`（Stage1〜5 = 12345 / 22222 / 33333 / 44444 / 55555）。他のフィールドはプレハブ側の値がそのまま使われる。
+- **`Assets/Prefabs/Enemy.prefab`**: Stage1 の `Enemy_A`（HP1 の雑魚。`Enemy` + `EnemyPatrol`）を Prefab 化。Stage3 の `Enemy_A` はこのプレハブのインスタンスに差し替え（Stage2/4/5 に敵は無し、元々の仕様どおり）。
+- **`Assets/Prefabs/EnemyBoss.prefab`**: `Enemy.prefab` の **Prefab Variant**（`PrefabUtility` の Variant 機構。ベースの差分だけを持つ）。差分は `Enemy.maxHealth`（1→5）、`EnemyPatrol`（speed 1.5→1 / range 3→2）、そして `HealthBar` 子（`EnemyHealthBar` + BG/Fill/Label）の追加。Stage1 の元の `Enemy_Boss` から `HealthBar` 子をそのまま移設して作成したので、見た目・参照とも作り直しではなく既存資産の再利用。Stage3 の `Enemy_Boss` もこのプレハブのインスタンスに差し替え。
+  - 今後 HP や巡回範囲を変えたいときは `EnemyBoss.prefab` 自体を編集すれば、Stage1・Stage3 両方の `Enemy_Boss` に自動反映される（**Play で実証済み**: `Enemy.prefab` の `contactDamage` を一時的に 1→2 に変えて、Stage1 のシーンファイルには一切触れずに `Enemy_A` インスタンス側が 2 を返すことを確認 → 1 に戻した）。
+- **`Assets/Prefabs/Goal.prefab`**: Stage1 の `Goal` を Prefab 化。`stageManager` フィールドは未設定のままにしてある（`Awake` で `FindAnyObjectByType<StageManager>()` に自動解決するので、シーンをまたいだ参照を持たせる必要が無い＝そのままプレハブ化しても安全）。Stage2〜5 の `Goal` もこのプレハブのインスタンスに差し替え。位置はステージごとに override（Stage1 = x28、Stage2〜5 = x25）。
+- **`Assets/Prefabs/HUD_Canvas.prefab`**（2026-09-12 追加分）: Stage1 の `HUD_Canvas`（`ActionBarUI` + `HealthPanel`）を Prefab 化。Stage2〜5 もこのプレハブのインスタンスに差し替え。override は無し（全ステージ完全に同一構成）。
+- **`Assets/Prefabs/StageFlow.prefab`**（2026-09-12 追加分）: Stage1 の `StageFlow`（`StageManager` + `ResultCanvas` の `ClearPanel`/`FailPanel`/`MenuNavigation` 一式）を Prefab 化。`StageManager.clearPanel`/`failPanel`/`nextButton`、各ボタンの `onClick` persistent listener は全部同じ Prefab 階層の内部参照なので、そのまま正しく維持される。Stage2〜5 もこのプレハブのインスタンスに差し替え。override は無し。
+- **`Assets/Prefabs/DialogueSystem.prefab`**（2026-09-12 追加分）: `DialoguePlayer` 単体を Prefab 化（**Stage1〜5 のみ**）。**Prologue シーンの `DialogueSystem` は対象外**（`DialoguePlayer` に加えて `PrologueRunner` が付いており、他のどのシーンとも構成が違う一点物なので、共通化のメリットが無く従来どおりの通常 GameObject のまま）。
+
+**Prefab 化のあと確認したこと**: `HUD_Canvas`/`StageFlow`/`DialogueSystem` を差し替える前に、それぞれの内部（`ActionBarUI`/`HealthUI`/`StageManager`/`DialoguePlayer`/`MenuNavigation`/`PrologueRunner`）の `[SerializeField]` を全スクリプト横断で洗い出し、**外部の別オブジェクトから直接参照されている箇所が無いこと**を確認してから実施した（§15-1 の教訓を踏まえた事前チェック）。唯一の外部参照だった `Goal.stageManager` は元々 auto-resolve 済みで無害。差し替え後、Stage1〜5 すべてで Play 確認（コンソールエラー・警告 0、`ActionBarUI`/`HealthUI`/`CameraFollow` の自動解決も正常、`StageManager.Clear()` 呼び出しも正常動作）。
+
+**Prefab に関する重要な訂正（ユーザーの認識との相違）**: 「プレハブを直置きすると、あとでプレハブ本体を変更しても反映されない」というのは誤り。**プレハブインスタンスはシーンに直接置いても元のプレハブアセットとリンクしたままで、プレハブ側を編集すれば全インスタンスへ自動反映される**（Unity の Prefab の中核機能）。反映されないのは「そのインスタンスだけ個別に上書き（override）した項目」のみ。よって、今回のような「あとで調整しやすくしたい」という目的には、シーンに直接プレハブインスタンスを置くだけで十分であり、**実行時の動的生成（`Instantiate`）は実装していない・不要**。動的生成が要るのは、敵の湧き方をランダムにしたい／オブジェクトプールしたいなど別の目的が出てきたときで、現状の仕様には無い。
+
+### 15-1. 副作用バグとその修正（2026-09-12、Prefab 化の直後に発生）
+
+Player を「削除 → 新しい Prefab インスタンスを配置」という手順で差し替えた際、**Player とは別の GameObject が Player 側のコンポーネントを直接参照（Inspector 上のオブジェクト参照）していた箇所**が、古い Player の破棄と同時にすべて null になった（Tag 検索ではなく直接参照なので、Unity が自動的に新しいインスタンスへ繋ぎ直してはくれない）。影響は Stage2〜5（Stage1 は既存の Player をそのまま `SaveAsPrefabAssetAndConnect` したため同一インスタンスが継続し無事）。
+
+判明した被害（Stage2〜5 全部）:
+- **`CameraFollow.target`**（Main Camera）→ カメラがプレイヤーに追従しない。
+- **`ActionBarUI.queue`**（HUD_Canvas/ActionBar）→ アクションバーの4枠が空のまま更新されない。
+- **`HealthUI.playerHealth`**（HUD_Canvas/HealthPanel）→ 被弾しても体力アイコンが減らない（ユーザー未報告・調査で発見）。**Stage2 はカメラのみユーザーが手動修正済みだったため、これと ActionBarUI はまだ壊れていた**。
+
+**対応**: 各シーンで3つの参照を Player の実インスタンスへ張り直して保存。加えて**再発防止**として、`CameraFollow` / `ActionBarUI` / `HealthUI` の3スクリプトに `Awake()` を追加し、参照が未設定（null）なら `GameObject.FindGameObjectWithTag("Player")` から自動解決するようにした（`Goal.stageManager` や `OneWayPlatform.playerCollider` と同じ、このプロジェクトで既に使われている流儀）。見つからなければ `Debug.LogWarning` を出す。Play で意図的に3つとも null にした状態から検証し、自動解決が効いて正しいインスタンスに繋がることを確認済み。
+
+**教訓 / 次に Prefab 化する（HUD_Canvas・StageFlow・DialogueSystem）ときの注意**: GameObject を「削除して Prefab インスタンスに差し替える」操作をするときは、**その GameObject を Inspector 上で直接参照している他のスクリプトが無いか事前に確認する**（`grep -n "SerializeField" *.cs` で該当型のフィールドを洗い出す、など）。Tag/Find 経由の参照は無事だが、直接参照は同じ壊れ方をする。今回のように参照する側に自動解決フォールバックを仕込んでおくと、今後同種の差し替えをしても壊れない。
+
+**Prefab 化を見送ったもの（理由つき）**:
+- `Grid/Ground`・`Grid/Platform`（Tilemap 地形）: コンポーネント構成は共通だが、塗ったタイルのデータ自体はステージごとに意図的に異なる（レベルデザインの本体）。Tilemap のタイルデータを Prefab の override として持たせるのは大きめのデータになり扱いにくいため、今回は見送り。コンポーネント構成を変える（例: `TilemapColliderBootstrap` にロジックを足す）ときは、既存の 5+1 シーンへ手作業で反映する必要がある点は変わらず。
+- `EventSystem` / `Main Camera`: 単純な定型オブジェクトで、共通化のメリットが薄いため見送り。
+
+**`HUD_Canvas` / `StageFlow` / `DialogueSystem`（Prologue 除く）も 2026-09-12 中に Prefab 化済み**（上記参照）。UnityEvent の persistent listener 配線や Canvas の入れ子構造は、いずれも Prefab 階層の内部参照だったため Player/Enemy/Goal のときと同様に問題なく維持された。
