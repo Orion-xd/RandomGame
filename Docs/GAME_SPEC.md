@@ -294,6 +294,15 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 - `Play(DialogueSequence, System.Action onComplete)` で再生。**スペース / エンター / テンキー Enter / 画面のどこでも左クリック**で送り、最後まで読むと `onComplete`。内容が空なら即 `onComplete`。クリックは UI 経由ではなく `Mouse.current.leftButton` を直接読むので、テキストボックス上でも位置を問わず送れる（会話 UI の Image は `raycastTarget=false`）。
 - **入力ロック（`InputLock`, 2026-09-08）**: `Play()` の直後に `InputLock.LockFor(inputLockDuration)`（既定 **0.25 秒**、2026-09-12 に 0.5→0.25 へ半減）。その間は送り入力（Space/Enter/左クリック）を無視。プロローグ／開始会話へは `SceneTransition` 経由で入るので、実際には「暗転〜明転〜さらに 0.25 秒」ずっと送り入力は不可（`InputLock.InputAllowed` が `SceneTransition.Transitioning` も見るため）。明転後に会話が現れ、ロックが明ければ通常どおり送れる。ステージ開始会話は会話終了時（`StageManager.OnIntroFinished`）にも `LockFor(0.25)`（送り切った勢いでアクションが出ないように）。
 - 再生中は静的 `DialoguePlayer.IsPlaying == true`。`PlayerController.Update` と `MainActionController.Update` は先頭でこれを見て**入力を無視**（スペースが会話送りに食われる／移動しない）。
+- **文字送り（タイプライター演出、2026-09-12。on/off・速さともに同日中にシーン単位→ページ単位へ変更）**: `DialogueSequence.Page.useTypewriterEffect`（`[SerializeField] bool`、**既定 true**）と `.typewriterCharsPerSecond`（`[SerializeField] float`、**既定 30**）が**ページ（テキスト）ごとに個別設定**できる。true のページは、本文（`_centerText` または `_bodyText`。**話者名は対象外で常に即時表示**）を先頭からそのページの速さ（1秒あたりの表示文字数）で1文字ずつ表示する（「こんにちは」→「こ」→「こん」→…）。
+  - **表示し終わる前**に発動入力（Space/Enter/テンキー Enter/左クリック）があると、その入力は**残りを一気に表示するだけ**でページはまだ送らない（`CompleteTypewriter()`）。
+  - **表示し終わった状態**での発動入力で、初めて次のページへ送る（`Advance()`）。＝1文字ずつ表示中は「1回目の入力で全文表示、2回目の入力で次へ」という2段階。
+  - そのページの `useTypewriterEffect` が false なら、常に開始時点で全文表示済み（`IsFullyRevealed`）から始まるため、発動入力は毎回即ページ送りになる＝従来の一括表示（この場合 `typewriterCharsPerSecond` は無視される）。
+  - アニメーションは `Time.unscaledDeltaTime` 基準で進む（ステージ開始会話は `StageManager` が `Time.timeScale=0` にするため、`Time.deltaTime` 基準だと文字が出てこなくなる）。
+  - 実装は `_typewriterActive`/`_typewriterFullText`/`_typewriterElapsed`/`_typewriterTarget`（アニメーション対象の `Text`）/`_typewriterCharsPerSecond`（そのページの速さを保持）で状態管理。`SetPageText(Text target, string fullText, bool useTypewriter, float charsPerSecond)` が `Render()` から `p.useTypewriterEffect`/`p.typewriterCharsPerSecond` を渡して呼ばれる。リッチテキストタグ（`<color=...>` 等）を本文に含めた場合、単純な文字数カットのため表示途中でタグが割れる可能性がある（現状のダイアログデータはプレーンテキストのみなので未対応・未検証）。
+  - **インスペクターでの設定場所**: **`Assets/Dialogue/*.asset`（各 `DialogueSequence`）の `pages[]` 内、ページごとの `Use Typewriter Effect` / `Typewriter Chars Per Second`**（例: `Stage1Intro.asset` を選択 → `Pages` を展開 → 各要素の中。`DialoguePlayer` 側にはこれらの設定は無い）。**既存の `.asset` は再保存していなくても、この bool/float フィールドは新規追加分も含めて全ページ既定値（true / 30）で読み込まれることを確認済み**（Prologue / Stage1Intro で検証）。
+  - **`CenteredOnBlack` の中央表示ブレ対策（2026-09-12）**: `_centerText` は元々 `TextAnchor.MiddleCenter` で、文字送り中に文字数が増えるたびに中央揃えの基準がズレて左右にブレて見えていた。対策として `LayoutCenteredText(string)` を新設：ページ描画時にまず確保領域（画面の 12%〜88%）の実横幅を測り、`Text.preferredWidth` で全文の必要横幅を求め、`Mathf.Min` で確保領域幅にクランプ（収まらない＝改行が要る場合は確保領域いっぱいにフォールバック）。その横幅ぶんだけ確保領域の中央に来るよう `offsetMin`/`offsetMax` で領域自体を狭め、揃えを `TextAnchor.MiddleLeft` に変更した上でその固定された左端から文字を生やす。全文表示時にちょうど元の中央位置へ収まるため、見た目を変えずに文字送り中のブレだけを解消できる。`useTypewriterEffect=false` のページでも同じ計算を通すが、この場合は最初から全文表示のため実害はない（計算結果のボックス幅＝全文の幅になり、Left と Center が一致する）。
+  - **フェード演出中はアニメーションを止める（2026-09-12）**: プロローグ／ステージ開始会話は `Start()` から即座に `Play()` されるため、シーン遷移の暗転〜明転（`SceneTransition.Transitioning`）の間に文字送りが進んでしまい、明転して画面が見えたときには既に全文表示済み、という問題があった。対策として `UpdateTypewriter()` の先頭で `if (SceneTransition.Transitioning) return;`（経過時間を進めない＝待機）を追加。明転が完了して `Transitioning` が false になった瞬間から文字送りが始まるため、プレイヤーは実際にアニメーションを見られる。Play で確認済み：`Transitioning=true` の間は3回 `Update()` を回しても `_typewriterElapsed`/表示テキストが変化しない。`Transitioning=false` にした瞬間から進み始める。
 
 **日本語フォント（2026-09-11）**: 会話本文は日本語だが、以前は `Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf")`（ビルトインの Arial 系、日本語グリフ無し）をそのまま使っていた。エディタ / Windows スタンドアロンでは欠けているグリフを **OS インストール済みフォントへフォールバック**して表示できていたが、**WebGL ビルド（unityroom）は OS フォントにアクセスできないため、そのフォールバックが効かず日本語が表示されない**という問題があった。
 - 対策: `Assets/Resources/Fonts/NotoSansJP-Regular.ttf` を追加し、`DialoguePlayer.Awake()` で `Resources.Load<Font>("Fonts/NotoSansJP-Regular")`（見つからなければビルトインへフォールバック）を使うようにした。`DialoguePlayer` が生成する全ての `Text`（`_centerText` / `_speakerText` / `_bodyText` / `_hintText` / 仮イラストの `主人公`・`ダンジョン`・`(仮イラスト)` ラベル）はこの `_font` を共有しているので、この 1 箇所の変更で会話まわりの日本語表示すべてに効く。`Text.dynamic` 方式（`TrueTypeFontImporter`: `fontRenderingMode=Smooth`, `fontTextureCase=Dynamic`, `includeFontData=True`）なので、フォントの実データがビルドに同梱され、OS に頼らず自前でグリフを描画する（WebGL でも動く）。
@@ -376,8 +385,8 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | `StageSet` | ScriptableObject（`Assets/Resources/StageSet.asset`） | ステージの並び。`stages[]` = `displayName` + `sceneName` + `intro`（会話）+ `allowedActions`（そのステージの抽選対象）+ `disableCombos`。全体の `prologue`。`AllowedActionsAt`/`DisableCombosAt`/`IndexOfScene`。GameFlow が Resources.Load |
 | `GameFlow` | (static クラス) | 画面遷移（`SceneTransition.Go` 経由）+ ステージ解放 + 会話既読。`Stages`（StageSet）、`StageCount`、`StartGame`（未読ならPrologue経由）/`LoadStage`/`RetryStage`/`NextStage`/`GoStageSelect`/`GoTitle`、`CurrentStageIndex`、`ActiveStageIndex`（アクティブシーン名から StageSet index を解決）、クリア状況（`IsStageCleared`/`SetStageCleared`/`MarkStageCleared`、PlayerPrefs ビットマスク）、`IsStageUnlocked`/`UnlockedStageIndex`、ステージ会話既読（`HasSeenIntro`/`SetIntroSeen`/`MarkIntroSeen`、ビットマスク）、プロローグ既読（`HasSeenPrologue`/`SetPrologueSeen`/`MarkPrologueSeen`、0/1）、`ResetStageProgress`（クリア＋ステージ既読の2キー消去、プロローグは残す）、`ResetProgress`（3キー消去） |
 | `DeveloperSettings` | ScriptableObject（`Assets/Resources/DeveloperSettings.asset`） | 開発者機能の総合スイッチ。`developerMode` bool をインスペクター編集。静的 `Active` = エディタ内 かつ `developerMode`（`#if UNITY_EDITOR` ガード。ビルドでは常に false）。`DevStageClearToggles` / `DevStorySeenToggles` / `DevProgressResetButton` が従う |
-| `DialogueSequence` | ScriptableObject（`Assets/Dialogue/*.asset`） | 会話 1 本。`pages[]` = `speaker` + `text` + `image` + `layout` |
-| `DialoguePlayer` | Prologue シーン, 各ステージシーン | 会話再生（UI は実行時生成）。`Play(seq, onComplete)`、静的 `IsPlaying`。送り＝Space/Enter/左クリック（画面任意位置）。`Play()` で `InputLock.LockFor(inputLockDuration=0.25)`（2026-09-12 に 0.5→0.25 へ半減）。日本語表示用に `Resources.Load<Font>("Fonts/NotoSansJP-Regular")` を使用（§9-2） |
+| `DialogueSequence` | ScriptableObject（`Assets/Dialogue/*.asset`） | 会話 1 本。`pages[]` = `speaker` + `text` + `image` + `layout` + `useTypewriterEffect`（既定 true）+ `typewriterCharsPerSecond`（既定 30）（2026-09-12 追加。ページごとに文字送り演出の on/off と速さ） |
+| `DialoguePlayer` | Prologue シーン, 各ステージシーン | 会話再生（UI は実行時生成）。`Play(seq, onComplete)`、静的 `IsPlaying`。送り＝Space/Enter/左クリック（画面任意位置）。`Play()` で `InputLock.LockFor(inputLockDuration=0.25)`（2026-09-12 に 0.5→0.25 へ半減）。日本語表示用に `Resources.Load<Font>("Fonts/NotoSansJP-Regular")` を使用（§9-2）。1文字ずつの文字送り演出（on/off・速さともにページ単位＝`DialogueSequence.Page.useTypewriterEffect`/`.typewriterCharsPerSecond`、2026-09-12、§9-2） |
 | `PrologueRunner` | Prologue シーン | `StageSet.prologue` を再生 → `GameFlow.GoStageSelect()` |
 | `TitleMenu` | Title/Canvas | `OnStartClicked()` → `GameFlow.StartGame()`（プロローグ経由でステージ選択）（ボタン onClick から） |
 | `StageSelectMenu` | StageSelect/Canvas | `LoadStage(int)` → `GameFlow.LoadStage(i)`、`BackToTitle()` → `GameFlow.GoTitle()`（左下 BackButton）。`Start` で `RefreshLocks()`（未解放ボタン無効化）＋ `MenuNavigation.SetInitialFocus`（初期カーソル＝一番先の解放ステージ）。`StageButtons` を公開 |
@@ -434,6 +443,8 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | 会話 | blackColor / boxColor（暗転・ボックス） | ほぼ黒 / 黒 78% | DialoguePlayer |
 | 会話 | centerFontSize / bodyFontSize / speakerFontSize | 40 / 30 / 26 | DialoguePlayer |
 | 会話 | sortingOrder（会話 Canvas） | 200 | DialoguePlayer |
+| 会話 | useTypewriterEffect（1文字ずつ表示するか、ページ単位） | true（2026-09-12 追加、同日中にシーン単位→ページ単位へ変更） | DialogueSequence.Page |
+| 会話 | typewriterCharsPerSecond（文字送りの速さ、ページ単位） | 30 文字/秒（2026-09-12 追加、同日中にシーン単位→ページ単位へ変更） | DialogueSequence.Page |
 
 ---
 
@@ -456,7 +467,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 **画面の流れは最小実装で通ったが、以下は未着手 / 仮:**
 - **Stage2, Stage4, Stage5 の中身**（今は落とし穴なしの連続 Tilemap 地面のみ。敵・地形・ゴール配置など）。**Stage3 は Stage1 と同一構成に変更済み**（2026-09-11）だが、レベルデザインとして意図されたものではなく暫定。
 - **会話テキストは全部仮**（`DialogueSequence` アセットの中身）。プロローグの一枚絵も未準備（仮イラスト表示中）。本番の絵は主人公＝左 / ダンジョン＝右の構図で用意予定。
-- **会話 UI の体裁**（日本語表示自体は 2026-09-11 に対応済み — §9-2「日本語フォント」。文字送り演出（1 文字ずつ表示など）は無し。常用漢字外の漢字は現状のフォントサブセットに無いので表示できない）。
+- **会話 UI の体裁**（日本語表示自体は 2026-09-11 に対応済み — §9-2「日本語フォント」。文字送り演出は 2026-09-12 対応済み — §9-2。常用漢字外の漢字は現状のフォントサブセットに無いので表示できない）。
 - **UI の日本語化**（メニューは今は英語のまま。日本語にする場合、`Text` はレンダリングだけなら §9-2 のフォントを流用できるが、見た目を作り込むなら TMP 移行も検討）。
 - 結果画面 / メニューの見た目（配置・色は最小限）。
 - **ロック中ステージの見た目**は Unity 既定のグレーアウトのみ（「LOCKED」表記や鍵アイコンは未実装）。クリア進捗のセーブは `PlayerPrefs` の 1 キーだけ（スロット/複数セーブ無し）。
