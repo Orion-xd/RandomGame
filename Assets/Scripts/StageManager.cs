@@ -25,7 +25,7 @@ public class StageManager : MonoBehaviour
 
     [Header("入力ロック")]
     [Tooltip("ステージ開始時（および開始会話の直後）、この秒数だけ入力を無効化する（連打の勢いでの誤アクション防止）")]
-    [SerializeField] private float inputLockDuration = 0.5f;
+    [SerializeField] private float inputLockDuration = 0.25f;
 
     private PlayerHealth _playerHealth;
     private Transform _playerTf;
