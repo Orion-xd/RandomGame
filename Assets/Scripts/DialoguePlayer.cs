@@ -56,7 +56,11 @@ public class DialoguePlayer : MonoBehaviour
 
     private void Awake()
     {
-        _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        // 会話本文は日本語。ビルトインフォントは日本語グリフを持たず、エディタ/スタンドアロンでは
+        // OS フォントへのフォールバックでたまたま表示できているだけ（WebGL では OS フォントに
+        // アクセスできないため表示できない）。日本語グリフを内包した Noto Sans JP を明示的に使う。
+        _font = Resources.Load<Font>("Fonts/NotoSansJP-Regular")
+            ?? Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         BuildUI();
         _root.SetActive(false);
     }

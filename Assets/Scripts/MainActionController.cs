@@ -64,7 +64,7 @@ public class MainActionController : MonoBehaviour
     [Tooltip("前方に出す攻撃判定（子オブジェクト）。通常は非アクティブ")]
     [SerializeField] private AttackHitbox attackHitbox;
     [Tooltip("攻撃判定が出ている時間")]
-    [SerializeField] private float attackDuration = 0.2f;
+    [SerializeField] private float attackDuration = 0.4f;
     [Tooltip("攻撃1ヒットのダメージ")]
     [SerializeField] private int attackDamage = 1;
 
