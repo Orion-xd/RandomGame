@@ -62,7 +62,11 @@ public class PlayerController : MonoBehaviour
 
     private void Update()
     {
-        // 会話中・画面切り替え直後（InputLock）は移動入力を止める。
+        // 会話中・画面切り替え直後（InputLock）は移動入力を止める。メインアクション
+        // （MainActionController）も同じロックで発動を止めているため、移動だけ先に解禁すると
+        // 「動けるのになぜアクションが出せないのか」という不自然な状態になる（2026-09-12。一度は
+        // 移動だけ対象外にしたが、この不自然さの方が問題だったため両方ブロックへ差し戻した）。
+        // ステージ画面にはメニューのカーソル移動に相当する操作が無いため、早期解除の仕組みも無い。
         if (DialoguePlayer.IsPlaying || !InputLock.InputAllowed) { _moveInput = 0f; return; }
 
         var kb = Keyboard.current;

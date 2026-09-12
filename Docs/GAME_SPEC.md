@@ -274,7 +274,7 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
   - **スペース / Enter** で決定（`Button.onClick.Invoke()`）。
   - **初期カーソル位置**: `SetInitialFocus(Button)` で明示指定があればそれ（`StageSelectMenu` が「今挑戦できる一番先のステージ」＝`GameFlow.UnlockedStageIndex` のボタンを渡す）。無ければ `initialCursor` enum：`FirstUsable`（既定。Title / 結果画面）。実際の確定は Update 側（`OnEnable` 時点では他スクリプトの `Start` 未実行のことがあるため）。
   - **マウスホバー**：**マウスを実際に動かしたときだけ**カーソルに反映（`OnEnable` で現在のマウス位置を基準として覚え、そこから 2px 以上動くまでホバー無効）。シーン遷移直後や結果パネル表示直後にマウスが据え置かれているだけでは、初期カーソル位置が上書きされない（2026-09-08 修正。例：ステージ2クリア→ステージ選択でカーソルはステージ3のまま、マウスがステージ1上にあっても動かさない限り動かない）。
-  - **入力ロック（`InputLock`, 2026-09-08）**：`OnEnable` に `InputLock.LockFor(inputLockDuration)` を呼び、その間は入力（移動・決定）を無視する。`InputLock.InputAllowed` = `!SceneTransition.Transitioning && Time.unscaledTime >= 解除時刻`。`Time.unscaledTime` 基準。**ロックが明けたら通常どおり**（意図的な連打はそのまま通す）。ロック中は `GraphicRaycaster` も無効化してマウスクリックも止める（`OnDisable` で復帰）。
+  - **入力ロック（`InputLock`, 2026-09-08 / 対象を決定系のみに限定 2026-09-12、§16）**：`OnEnable` に `InputLock.LockFor(inputLockDuration)` を呼び、その間は**決定**（Space/Enter/テンキー Enter・マウスクリック＝`HandleSubmit()` と `GraphicRaycaster`）だけを無視する。`InputLock.InputAllowed` = `!SceneTransition.Transitioning && Time.unscaledTime >= 解除時刻`。`Time.unscaledTime` 基準。**カーソル移動（`HandleKeyboardNav()`・マウスホバー）はこの猶予タイマー中でも常に反映される**（以前は移動も含めて全部止めていたため、「下矢印キーでカーソルを動かしたい」という意図した操作までブロックしてしまう問題があった。決定だけを対象にすることで解消）。ただし `SceneTransition` の**フェード演出中**（`InputLock.NavigationAllowed` = `!SceneTransition.Transitioning` が false の間）はカーソル移動・マウスホバーも含めて完全にブロックする（フェード中はまだ画面が見えていないため。猶予タイマーの対象外＝常時受付、とは別の話）。さらに、フェードが終わった後にカーソル移動が実際に成立した（＝そのパネルで意味のある操作だった）瞬間に `InputLock.Unlock()` を呼び、**決定のロックも即座に解除する**（キー操作で動かし始めた時点で「連打の勢い」ではなく「意図した操作」と判断できるため）。**ロックが明けたら決定も通常どおり**（意図的な連打はそのまま通す）。
     - シーン遷移では `SceneTransition` が「暗転〜明転〜さらに 0.25 秒」を管理するので `OnEnable` の `LockFor` は実質冗長（害はない）。**結果パネル**（`ClearPanel` / `FailPanel`）はシーン遷移ではないので、この `LockFor` が効く時間（`inputLockDuration`）が本番。2026-09-12 に 1.0→0.5 秒へ半減し、現在は他画面の `MenuNavigation` と同じ 0.5 秒。
   - 選択中（キーボードカーソル or マウスホバー）のボタンに**色付きの枠**（`SelectionFrame`、実行時生成の黄色い矩形を背面に置き、`framePadding`(8px) ぶんはみ出させて枠に見せる）。
     - 枠の位置合わせ（2026-09-07 修正）: 枠は常に pivot (0.5,0.5) にし、ボタンの pivot が中心でなくても `sizeDelta*(0.5 - pivot)` で矩形中心へ補正して合わせる。以前はボタンの pivot をそのままコピーしていたため、中心 pivot でないボタン（左下配置の BackButton など）で枠が片側に寄っていた。中心 pivot のボタンでは補正 0 で従来と同じ。
@@ -373,7 +373,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | `MainActionType` | (enum) | Jump / Dash / Attack |
 | `MainActionQueue` | Player | アクションの並び（決定的・連続禁止）。`Peek` / `Consume` / `OnChanged`。`StageSet.allowedActions` があれば `lottery` を上書き |
 | `MainActionController` | Player | メインアクションの発動・クールタイム・コンボ・先行入力・ダッシュ処理・無敵。発動入力はスペース / エンター / テンキー Enter / 左クリック（2026-09-12、会話送り・メニュー決定と統一）。会話中／画面切り替え直後は入力停止。`StageSet.disableCombos` のステージでは `_combosEnabled=false`（コンボ無効） |
-| `PlayerController` | Player | 左右移動・向き・接地判定・コヨーテ/落下猶予・ノックバック受け・着地時間予測（`TryPredictLandingTime`）。会話中／画面切り替え直後（`InputLock`）は入力停止 |
+| `PlayerController` | Player | 左右移動・向き・接地判定・コヨーテ/落下猶予・ノックバック受け・着地時間予測（`TryPredictLandingTime`）。会話中／画面切り替え直後（`InputLock`）は入力停止（§16-2） |
 | `PlayerHealth` | Player | 体力・被弾・無敵時間。`TakeDamage -> bool`、`OnHealthChanged` |
 | `AttackHitbox` | Player/AttackHitbox | 前方の一時的な攻撃判定（トリガー） |
 | `PlayerDebugBars` | Player/DebugBars | 頭上のデバッグゲージ 2 本。`Awake` で `!DeveloperSettings.Active` なら GameObject ごと非アクティブ（開発者用） |
@@ -400,7 +400,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | `FreshBuildGuardBuildCheck` | (`Assets/Scripts/Editor/`, `IPreprocessBuildWithReport`) | `Policy = OnEveryBuild` のまま非開発ビルドを作ろうとしたら確認ダイアログでビルドを止める |
 | `StageManager` | 各ステージ/StageFlow | クリア/失敗判定・結果画面表示・結果ボタン処理・落下死判定（killY）・初回入場時の開始会話（`TryPlayIntro`, `Time.timeScale=0`）・ステージ開始時 / 会話終了時に `InputLock.LockFor(inputLockDuration=0.25)`（2026-09-12 に 0.5→0.25 へ半減） |
 | `Goal` | 各ステージ/Goal | 右端トリガー。ボス全滅後にプレイヤーが触れると `StageManager.Clear()` |
-| `MenuNavigation` | Title/StageSelect の Canvas, 各ステージの ClearPanel/FailPanel | メニュー UI のキーボード操作。位置ベース 2D 移動（W/S=上下・最近傍＋端ループ、A/D=同じ行内＋端ループ）、Space/Enter で決定、選択枠の自動生成。マウスホバーは移動時のみ反映。`OnEnable` で `InputLock.LockFor(inputLockDuration)`（全画面共通 0.5s、2026-09-12 に結果パネルの 1.0s を統一）、ロック中は `GraphicRaycaster` も無効化。`AddButton()` / `SetInitialFocus()` |
+| `MenuNavigation` | Title/StageSelect の Canvas, 各ステージの ClearPanel/FailPanel | メニュー UI のキーボード操作。位置ベース 2D 移動（W/S=上下・最近傍＋端ループ、A/D=同じ行内＋端ループ）、Space/Enter で決定、選択枠の自動生成。マウスホバーは移動時のみ反映。`OnEnable` で `InputLock.LockFor(inputLockDuration)`（全画面共通 0.5s、2026-09-12 に結果パネルの 1.0s を統一）。カーソル移動・マウスホバーは `InputLock.NavigationAllowed`（フェード中だけ false）を見る、決定（`HandleSubmit()`/`GraphicRaycaster`）は `InputLock.InputAllowed`（フェード中 or 猶予中は false）を見る——猶予中でもカーソル移動は効き、実際に成立したら `InputLock.Unlock()` で決定の猶予も即解除する（2026-09-12、§16-1）。`AddButton()` / `SetInitialFocus()` |
 | `InputLock` | (static クラス) | 入力ロック。`InputAllowed` = `!SceneTransition.Transitioning && Time.unscaledTime >= 解除時刻`。`LockFor(秒)` で一定時間 false に（一番遅い解除時刻を採用）。`MenuNavigation`/`DialoguePlayer`/`StageManager`/`SceneTransition` が LockFor、`MenuNavigation`/`DialoguePlayer`/`MainActionController`/`PlayerController` が参照 |
 | `SceneTransition` | (実行時生成, `DontDestroyOnLoad`) | 全シーン遷移で暗転→読み込み→明転。`Go(シーン名)`。演出中 `Transitioning=true`（＝入力全無効）、明転後 `InputLock.LockFor(postFadeInLockSeconds)`。全面黒 Image（sortingOrder 32760, raycastTarget）でマウスも遮断 |
 | `SceneTransitionSettings` | ScriptableObject（`Assets/Resources/SceneTransitionSettings.asset`） | `fadeOutSeconds`(0.5) / `fadeInSeconds`(0.5) / `postFadeInLockSeconds`(**0.25**、2026-09-12 に 0.5→0.25 へ半減)。インスペクター調整 |
@@ -536,3 +536,35 @@ Player を「削除 → 新しい Prefab インスタンスを配置」という
 - `EventSystem` / `Main Camera`: 単純な定型オブジェクトで、共通化のメリットが薄いため見送り。
 
 **`HUD_Canvas` / `StageFlow` / `DialogueSystem`（Prologue 除く）も 2026-09-12 中に Prefab 化済み**（上記参照）。UnityEvent の persistent listener 配線や Canvas の入れ子構造は、いずれも Prefab 階層の内部参照だったため Player/Enemy/Goal のときと同様に問題なく維持された。
+
+---
+
+## 16. 入力ロックの対象を「決定系」だけに限定（2026-09-12、同日中に3段階で調整）
+
+**問題**: `InputLock` は元々「画面が切り替わった直後、一定時間**すべての**入力を無効化する」仕組みだった。目的は「連打の勢いで意図せず決定・発動してしまう」ことの防止だが、これは同時に「意図した操作」まで塞いでしまっていた。具体例: 結果パネル（クリア/失敗）が表示された直後、下矢印キーでカーソルをもう1つ下の選択肢へ動かそうとしても、`MenuNavigation` の入力ロック（0.5秒）がカーソル移動そのものをブロックしていたため反応しなかった。
+
+**考え方の整理**: 「連打で誤爆する」のは**決定系（スペース / エンター / テンキー Enter / マウス左クリックが引き金になる、1回きりの操作）**だけで、**移動・カーソル移動のような連続的な操作**は「押しっぱなし」で誤って進んでしまうような性質のものではなく、意図して行った操作をそのまま反映してよい。この2つを区別せず一律ブロックしていたのが問題だった。ただし画面によって適切な対応が異なる：
+
+### 16-1. メニュー画面（Title / StageSelect / 結果パネル）: 3段階の状態
+
+シーン遷移でメニュー画面に入る場合、状態は次の3段階になる（結果パネルはシーン遷移を伴わないので実質②③のみ）:
+
+1. **`SceneTransition` のフェード演出中**（`InputLock.NavigationAllowed` が false）: カーソル移動・マウスホバーも含めて**いかなる入力も受け付けない**。画面がまだ遷移中で見えていないため。
+2. **フェードは終わったが、決定の猶予（`InputLock.LockFor` の残り時間）がまだ残っている**: **決定だけ**を無視する。カーソル移動（WASD/矢印キー・マウスホバー）は受け付け、実際に操作に反映する。さらに、カーソル移動が**実際に成立した**（＝そのパネルで意味のある操作だった）瞬間に決定の猶予も即座に解除する。
+3. **両方明けている**: 通常どおりすべて受け付ける。
+
+実装:
+- `InputLock.NavigationAllowed`（新設） = `!SceneTransition.Transitioning`。決定用の猶予タイマーは見ず、フェード中かどうかだけを見る。
+- `MenuNavigation.Update()`: `HandleMouseHover()` と `HandleKeyboardNav()` を `InputLock.NavigationAllowed` で包み、フェード中は両方まとめてスキップする（②③でのみ実行）。`HandleSubmit()`（決定）と `GraphicRaycaster` の有効/無効（マウスクリック止め）は従来どおり `InputLock.InputAllowed`（フェード中 or 猶予中の両方で false）のまま。
+- **カーソル移動が実際に成立したら決定のロックも即座に解除する**（②→③への早期遷移）: `HandleKeyboardNav()` は移動の前後で `_index` の変化を見て、変わっていれば `InputLock.Unlock()`（`_unlockAtUnscaled` を現在時刻にして即座に解除）を呼ぶ。「そのパネルで意味のある操作」だけが対象になる点がポイント: ステージ選択の横一列（Stage1〜5）なら WASD/矢印キー全部が該当しうるが、結果パネル（縦一列、左右移動は無効）では W/S・上下矢印キーだけが実際に `_index` を変え、A/D・左右矢印キーは候補が無く何も起きないので該当しない。個々のキーをハードコードして判定するのではなく「実際に動いたか」だけを見ているので、パネルごとの対応キーの違いを自動的に反映できる。
+- Play で3段階すべて確認済み: `Transitioning=true` 時は S キーを押しても `_index` 不変・`NavigationAllowed=False`。`Transitioning=false` に切り替えた直後（決定の猶予はまだ残っている想定）に S キーを押すと `_index` が変わり、同時に `InputAllowed` も即座に True へ。
+
+### 16-2. ステージ画面（Player の移動・メインアクション発動）: 両方ブロックのまま、早期解除も無し
+
+- **`PlayerController.Update()`**: 一度は移動（A/D・矢印キー）を `InputLock` の対象から外したが、「動けるのになぜメインアクションは出せないのか」という不自然さの方が問題だったため、同日中に差し戻した。現在は元の仕様どおり、会話中（`DialoguePlayer.IsPlaying`）**または**画面切り替え直後（`!InputLock.InputAllowed`）の両方で移動を止める。
+- `MainActionController`（メインアクション発動）はそのまま変更なし（元々ロック対象）。
+- ステージ画面にはメニューのカーソル移動に相当する「常に許可したい連続入力」が無いため、16-1 のような早期解除の仕組みは実装していない。「すべてブロックし続ける」ことで、ステージ選択や結果画面で連打した勢いのままステージに入って誤発動する事故を防ぐ。
+
+`DialoguePlayer`（会話送り）は元々「決定系の入力しか扱っていない」ため今回も変更不要。
+
+**Play で確認済み**: 結果パネル表示直後（ロック中、`InputLock.InputAllowed == false`）に下キーを押すとカーソルが実際に移動すること、その状態で Enter を押してもボタンの `onClick` が発火しないこと、ロックが明けてから Enter を押すと発火することを確認。また、ロック中でも `PlayerController` の移動入力（D キー）が `_moveInput` に反映されることを確認。
