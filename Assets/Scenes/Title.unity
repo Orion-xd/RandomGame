@@ -428,6 +428,8 @@ GameObject:
   - component: {fileID: 1263943158}
   - component: {fileID: 1263943157}
   - component: {fileID: 1263943156}
+  - component: {fileID: 1263943161}
+  - component: {fileID: 1263943162}
   m_Layer: 0
   m_Name: Canvas
   m_TagString: Untagged
@@ -531,6 +533,47 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0, y: 0}
+--- !u!114 &1263943161
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1263943155}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3b7ab08171bc3474cbf71973d77dd8d4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MenuNavigation
+  buttonsOverride: []
+  initialCursor: 0
+  frameColor: {r: 1, g: 0.85, b: 0.2, a: 1}
+  framePadding: 8
+  rowTolerance: 40
+  inputLockDuration: 0.5
+--- !u!114 &1263943162
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1263943155}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0699296f2df05b844a5660fcb1035714, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DevStorySeenToggles
+  stageSelectMenu: {fileID: 0}
+  stageButtons: []
+  prologueAnchorButton: {fileID: 816786894}
+  boxSize: 44
+  gap: 28
+  stageExtraLeftGap: 72
+  boxColor: {r: 1, g: 1, b: 1, a: 0.18}
+  checkColor: {r: 0.45, g: 0.72, b: 1, a: 1}
+  labelColor: {r: 1, g: 1, b: 1, a: 0.8}
+  labelFontSize: 24
+  labelGap: 8
 --- !u!1 &1419511076
 GameObject:
   m_ObjectHideFlags: 0
@@ -589,7 +632,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
+    m_Font: {fileID: 12800000, guid: d94dddb642e4ef343b62b3d99db71ce0, type: 3}
     m_FontSize: 120
     m_FontStyle: 1
     m_BestFit: 0

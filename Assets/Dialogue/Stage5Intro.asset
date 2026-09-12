@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c7eceec3c58bb4ca19f5e1fb59392b, type: 3}
+  m_Name: Stage5Intro
+  m_EditorClassIdentifier: Assembly-CSharp::DialogueSequence
+  pages:
+  - speaker: "\u30E9\u30B9\u30DC\u30B9"
+    text: "\u304A\u524D\u304C\u4FB5\u5165\u8005\u304B,\u3053\u3053\u307E\u3067\u304F\u308B\u3068\u306F..."
+    image: {fileID: 0}
+    layout: 2
+  - speaker: "\u52C7\u8005"
+    text: "\u3042\u306A\u305F\uFF1F\u546A\u3044\u3092\u304B\u3051\u305F\u306E\u306F\uFF1F"
+    image: {fileID: 0}
+    layout: 2
+  - speaker: "\u30E9\u30B9\u30DC\u30B9"
+    text: "\u305D\u3046\u3060"
+    image: {fileID: 0}
+    layout: 2
+  - speaker: "\u52C7\u8005"
+    text: "\u30C0\u30F3\u30B8\u30E7\u30F3\u306B\u5165\u3063\u305F\u4EBA\u305F\u3061\u306F\u3069\u3046\u3057\u305F\u306E\uFF1F"
+    image: {fileID: 0}
+    layout: 2
+  - speaker: "\u30E9\u30B9\u30DC\u30B9"
+    text: "(\u4E2D\u7565)\n\u305D\u3046\u307F\u305F\u3044\u3060\u306A\uFF08\u6226\u95D8\u958B\u59CB\uFF09"
+    image: {fileID: 0}
+    layout: 2

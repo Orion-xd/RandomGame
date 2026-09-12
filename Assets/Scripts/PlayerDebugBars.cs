@@ -1,7 +1,9 @@
 using UnityEngine;
 
 /// <summary>
-/// デバッグ表示：プレイヤー頭上に2本のゲージを出す。
+/// 【開発者用】デバッグ表示：プレイヤー頭上に2本のゲージを出す。
+/// 表示条件は <see cref="DeveloperSettings"/>.Active（エディタ内 かつ developerMode）。
+/// それ以外（ビルド含む）では Awake で GameObject ごと非アクティブにして何も出さない。
 ///  - コンボ受付ゲージ：1つ目のアクション発動後 comboGraceTime（0.8秒）かけて減少。
 ///    残っている間はコンボの追加入力を受け付ける。
 ///  - クールタイム残りゲージ：アクション発動後、そのクールタイムをかけて減少。
@@ -42,6 +44,12 @@ public class PlayerDebugBars : MonoBehaviour
 
     private void Awake()
     {
+        if (!DeveloperSettings.Active)
+        {
+            gameObject.SetActive(false); // 頭上ゲージ（ComboBar / CooldownBar）ごと隠す
+            return;
+        }
+
         if (cooldownFill == null) return;
 
         _cdFillBaseScaleY = cooldownFill.localScale.y;

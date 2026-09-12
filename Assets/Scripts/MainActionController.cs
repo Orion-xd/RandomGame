@@ -23,6 +23,9 @@ using UnityEngine.InputSystem;
 /// 空中でもジャンプの発動を許可し（接地チェック免除）、ダッシュ移動を中断してから跳ぶ。
 /// このとき無敵はダッシュの通常効果時間ぶん継続する（下記 _dashInvTimeLeft）。
 ///
+/// `StageSet.disableCombos` が true のステージ（ステージ1など）ではコンボを完全に無効化する。
+/// 1回発動したら comboGraceTime は無意味で、そのアクションのクールタイムが明けるまで次は出せない。
+///
 /// ── 先行入力（バッファ） ──
 /// クールタイム終了の inputBufferTime 秒前（既定 0.1 秒＝約6フレーム）から、スペースキーの押下を
 /// 「先行入力」として記憶する。キーを離していても、クールタイムが明けた瞬間に次のアクションを発動する。
@@ -61,7 +64,7 @@ public class MainActionController : MonoBehaviour
     [Tooltip("前方に出す攻撃判定（子オブジェクト）。通常は非アクティブ")]
     [SerializeField] private AttackHitbox attackHitbox;
     [Tooltip("攻撃判定が出ている時間")]
-    [SerializeField] private float attackDuration = 0.2f;
+    [SerializeField] private float attackDuration = 0.4f;
     [Tooltip("攻撃1ヒットのダメージ")]
     [SerializeField] private int attackDamage = 1;
 
@@ -86,6 +89,7 @@ public class MainActionController : MonoBehaviour
     private int _comboStep;                    // 0 = コンボ中でない / 1 = 1つ目発動済み・2つ目待ち
     private MainActionType _comboFirstAction;   // コンボの1つ目に何を使ったか
     private float _comboDeadline;               // この時刻までに2つ目を出せばコンボ扱い
+    private bool _combosEnabled = true;         // ステージ設定で無効化されると false（ステージ1など）
 
     // 先行入力（クールタイム終了直前に押しておくと、明けた瞬間に発動）
     private bool _bufferedInput;
@@ -158,10 +162,17 @@ public class MainActionController : MonoBehaviour
         _player = GetComponent<PlayerController>();
         _queue = GetComponent<MainActionQueue>();
         if (attackHitbox != null) attackHitbox.gameObject.SetActive(false);
+
+        // ステージ設定でコンボを無効化する（ステージ1など）。
+        _combosEnabled = !(GameFlow.Stages != null
+            && GameFlow.Stages.DisableCombosAt(GameFlow.ActiveStageIndex));
     }
 
     private void Update()
     {
+        // 会話中・画面切り替え直後（InputLock）はメインアクションの入力を受け付けない。
+        if (DialoguePlayer.IsPlaying || !InputLock.InputAllowed) return;
+
         // 先行入力の受付区間（InInputBufferZone / _bufferZoneFraction）を毎フレーム更新。
         UpdateInputBufferState();
 
@@ -306,7 +317,8 @@ public class MainActionController : MonoBehaviour
         if (_comboStep == 1 && Time.time > _comboDeadline) _comboStep = 0;
 
         // 1つ目の発動から comboGraceTime 秒以内なら、2つ目としての発動を許可する（クールタイムとは独立）。
-        bool comboContinuation = _comboStep == 1 && Time.time <= _comboDeadline;
+        // ただしステージでコンボが無効化されている場合は、常に「クールタイム待ち」のみ。
+        bool comboContinuation = _combosEnabled && _comboStep == 1 && Time.time <= _comboDeadline;
 
         if (!IsReady && !comboContinuation) return false;
 
@@ -341,9 +353,11 @@ public class MainActionController : MonoBehaviour
             _nextReadyTime = Time.time + _lastCooldownDuration;
         }
 
-        if (comboContinuation)
+        if (!_combosEnabled || comboContinuation)
         {
-            _comboStep = 0; // 2つ目まで使ったので打ち止め（最大2連続）
+            // コンボ無効ステージ、または 2つ目まで使ったので打ち止め（最大2連続）。
+            // どちらもこの後は純粋にクールタイム待ちになる。
+            _comboStep = 0;
         }
         else
         {

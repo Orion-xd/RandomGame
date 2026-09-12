@@ -62,6 +62,9 @@ public class PlayerController : MonoBehaviour
 
     private void Update()
     {
+        // 会話中・画面切り替え直後（InputLock）は移動入力を止める。
+        if (DialoguePlayer.IsPlaying || !InputLock.InputAllowed) { _moveInput = 0f; return; }
+
         var kb = Keyboard.current;
         float x = 0f;
         if (kb != null)
