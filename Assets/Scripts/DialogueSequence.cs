@@ -11,6 +11,9 @@ using UnityEngine;
 /// スペース / エンターで pages を1つずつ送る。分岐なしの一本道。
 /// テキスト量が増えて表計算で管理したくなったら、CSV → この .asset へ焼き込むエディタ拡張を足せば
 /// ランタイムは変えずに移行できる（今は .asset を直接編集）。
+///
+/// 各 Page の `useTypewriterEffect` で、1文字ずつ表示（タイプライター演出）するか本文を一括表示するかを
+/// ページ単位で選べる（既定 true）。速さ（`typewriterCharsPerSecond`）もページ単位で調整できる。
 /// </summary>
 [CreateAssetMenu(fileName = "DialogueSequence", menuName = "RandomGame/Dialogue Sequence")]
 public class DialogueSequence : ScriptableObject
@@ -41,6 +44,13 @@ public class DialogueSequence : ScriptableObject
 
         [Tooltip("表示レイアウト")]
         public Layout layout = Layout.BottomTextbox;
+
+        [Tooltip("true: 本文を先頭から1文字ずつ徐々に表示する（タイプライター演出）。" +
+                 "false: 本文を最初から丸ごと表示する")]
+        public bool useTypewriterEffect = true;
+
+        [Tooltip("1文字ずつ表示するときの速さ（1秒あたりに表示する文字数）。useTypewriterEffect が false のときは無視される")]
+        public float typewriterCharsPerSecond = 30f;
     }
 
     [Tooltip("会話のページ。スペース / エンターで1ページずつ進む")]
