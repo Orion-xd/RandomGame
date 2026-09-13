@@ -16,8 +16,16 @@ using UnityEngine.UI;
 ///  - 選択中（キーボードカーソル or マウスホバー）のボタンに色付きの枠を表示（実行時生成）。
 ///  - マウスホバーは「マウスを実際に動かしたとき」だけカーソルに反映する。シーン遷移直後や
 ///    パネル表示直後にマウスが据え置かれているだけでは反映しない（意図しないカーソル移動を防ぐ）。
-///  - 画面 / パネルが出たら <see cref="InputLock"/>.LockFor(inputLockDuration) を呼び、その間はキーボード入力を
-///    無視する（前の画面での連打の勢いで「次のステージへ」等を誤選択しないように）。
+///  - 画面 / パネルが出たら <see cref="InputLock"/>.LockFor(inputLockDuration) を呼び、その間は決定
+///    （Space/Enter/テンキー Enter・マウスクリック）だけ無視する（前の画面での連打の勢いで「次のステージへ」
+///    等を誤選択しないように）。カーソル移動（WASD/矢印キー・マウスホバー）はこの猶予タイマーの対象外で、
+///    猶予中でも常に反映される（2026-09-12。「下へ移動したい」という意図した操作までブロックしていた
+///    問題の修正）。さらに、カーソル移動が実際に成立した（＝そのパネルで意味のある操作だった）瞬間に
+///    <see cref="InputLock.Unlock"/> を呼び、決定のロックも即座に解除する（2026-09-12。キーで操作し
+///    始めた時点で「連打の勢い」ではなく「意図した操作」と判断できるため）。
+///    ただし <see cref="SceneTransition"/> のフェード演出中（<see cref="InputLock.NavigationAllowed"/> が
+///    false の間）はカーソル移動・マウスホバーも含めて完全にブロックする（2026-09-12。フェード中はまだ
+///    画面が見えていない・遷移中であり、猶予タイマーの対象外＝常時受け付け、とは別の話）。
 ///
 /// EventSystem / InputSystemUIInputModule のナビゲーション・Submit と二重処理にならないよう、
 /// 対象ボタンの navigation を None にし、毎フレーム選択状態をクリアする。マウスのクリック・ホバー着色は
@@ -118,16 +126,21 @@ public class MenuNavigation : MonoBehaviour
         var es = EventSystem.current;
         if (es != null && es.currentSelectedGameObject != null) es.SetSelectedGameObject(null);
 
-        // 入力ロック中はマウスの UI クリック・ホバーも止める（結果パネルの 1 秒など）。
+        // 入力ロック中はマウスの UI クリックも止める（結果パネルの 1 秒など）。カーソル移動（キーボード /
+        // マウスホバー）は「決定」ではないので決定用の猶予タイマーの対象外（2026-09-12。以前はロック中
+        // カーソル移動もできず、「下矢印キーで移動したい」という意図した操作までブロックしていた）。
+        // ただし SceneTransition のフェード演出中（NavigationAllowed が false）はカーソル移動も含めて
+        // 完全にブロックする（2026-09-12。フェード中は画面がまだ見えていない・遷移中なので、決定以外の
+        // 入力も一律止める。猶予タイマーだけを対象外にしたい、フェードそのものは対象外にしない）。
         if (_raycaster != null) _raycaster.enabled = InputLock.InputAllowed;
 
-        HandleMouseHover(); // マウスホバー（動かしたときのみ反映）
-
-        if (InputLock.InputAllowed)
+        if (InputLock.NavigationAllowed)
         {
-            HandleKeyboardNav();
-            HandleSubmit();
+            HandleMouseHover(); // マウスホバー（動かしたときのみ反映）
+            HandleKeyboardNav(); // カーソル移動は決定の猶予中でも受け付ける（フェード中は除く）
         }
+
+        if (InputLock.InputAllowed) HandleSubmit(); // 決定（Space/Enter/テンキー Enter）だけロック対象
 
         RefreshFrame(); // カーソル枠の表示はロック中も更新する
     }
@@ -161,10 +174,16 @@ public class MenuNavigation : MonoBehaviour
         var k = Keyboard.current;
         if (k == null) return;
 
+        int before = _index;
         if (k.wKey.wasPressedThisFrame || k.upArrowKey.wasPressedThisFrame) MoveVertical(+1);
         else if (k.sKey.wasPressedThisFrame || k.downArrowKey.wasPressedThisFrame) MoveVertical(-1);
         else if (k.aKey.wasPressedThisFrame || k.leftArrowKey.wasPressedThisFrame) MoveHorizontal(-1);
         else if (k.dKey.wasPressedThisFrame || k.rightArrowKey.wasPressedThisFrame) MoveHorizontal(+1);
+
+        // カーソルが実際に動いた＝このパネルで意味のある操作だった（例: 結果パネルでは上下だけが該当し、
+        // 何もしない左右は該当しない）。連打の勢いではなく意図した操作だと判断できるので、決定の
+        // ロックも合わせて解除する（2026-09-12）。
+        if (_index != before) InputLock.Unlock();
     }
 
     private void HandleSubmit()

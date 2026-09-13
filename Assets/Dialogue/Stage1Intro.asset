@@ -29,7 +29,7 @@ MonoBehaviour:
     text: .........
     image: {fileID: 0}
     layout: 0
-    useTypewriterEffect: 1
+    useTypewriterEffect: 0
     typewriterCharsPerSecond: 30
   - speaker: "\u52C7\u8005"
     text: "\u306A...\u4F55\u3053\u308C...\u4F53\u306B\u7E1B\u308A\u304C...\u52D5\u3051\u306A\u3044...?"

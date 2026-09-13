@@ -1,6 +1,6 @@
 # RandomGame 仕様・実装まとめ
 
-最終更新: 2026-09-12 / 対象ブランチ: `feature/action-assist`（地面・高台の Tilemap 化、日本語フォント対応は `feature/tilemap` ブランチで実施済み・マージ済み）
+最終更新: 2026-09-12 / 対象ブランチ: `feature/action-assist`（地面・高台の Tilemap 化、日本語フォント対応は `feature/tilemap` ブランチで実施済み・マージ済み。Player/Enemy/Goal の Prefab 化は §15）
 Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.GetAxis` は不可、`UnityEngine.InputSystem.Keyboard.current` を使う）
 
 このドキュメントは「後日、続きの作業をするとき」に現状を把握するためのもの。
@@ -274,7 +274,7 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
   - **スペース / Enter** で決定（`Button.onClick.Invoke()`）。
   - **初期カーソル位置**: `SetInitialFocus(Button)` で明示指定があればそれ（`StageSelectMenu` が「今挑戦できる一番先のステージ」＝`GameFlow.UnlockedStageIndex` のボタンを渡す）。無ければ `initialCursor` enum：`FirstUsable`（既定。Title / 結果画面）。実際の確定は Update 側（`OnEnable` 時点では他スクリプトの `Start` 未実行のことがあるため）。
   - **マウスホバー**：**マウスを実際に動かしたときだけ**カーソルに反映（`OnEnable` で現在のマウス位置を基準として覚え、そこから 2px 以上動くまでホバー無効）。シーン遷移直後や結果パネル表示直後にマウスが据え置かれているだけでは、初期カーソル位置が上書きされない（2026-09-08 修正。例：ステージ2クリア→ステージ選択でカーソルはステージ3のまま、マウスがステージ1上にあっても動かさない限り動かない）。
-  - **入力ロック（`InputLock`, 2026-09-08）**：`OnEnable` に `InputLock.LockFor(inputLockDuration)` を呼び、その間は入力（移動・決定）を無視する。`InputLock.InputAllowed` = `!SceneTransition.Transitioning && Time.unscaledTime >= 解除時刻`。`Time.unscaledTime` 基準。**ロックが明けたら通常どおり**（意図的な連打はそのまま通す）。ロック中は `GraphicRaycaster` も無効化してマウスクリックも止める（`OnDisable` で復帰）。
+  - **入力ロック（`InputLock`, 2026-09-08 / 対象を決定系のみに限定 2026-09-12、§16）**：`OnEnable` に `InputLock.LockFor(inputLockDuration)` を呼び、その間は**決定**（Space/Enter/テンキー Enter・マウスクリック＝`HandleSubmit()` と `GraphicRaycaster`）だけを無視する。`InputLock.InputAllowed` = `!SceneTransition.Transitioning && Time.unscaledTime >= 解除時刻`。`Time.unscaledTime` 基準。**カーソル移動（`HandleKeyboardNav()`・マウスホバー）はこの猶予タイマー中でも常に反映される**（以前は移動も含めて全部止めていたため、「下矢印キーでカーソルを動かしたい」という意図した操作までブロックしてしまう問題があった。決定だけを対象にすることで解消）。ただし `SceneTransition` の**フェード演出中**（`InputLock.NavigationAllowed` = `!SceneTransition.Transitioning` が false の間）はカーソル移動・マウスホバーも含めて完全にブロックする（フェード中はまだ画面が見えていないため。猶予タイマーの対象外＝常時受付、とは別の話）。さらに、フェードが終わった後にカーソル移動が実際に成立した（＝そのパネルで意味のある操作だった）瞬間に `InputLock.Unlock()` を呼び、**決定のロックも即座に解除する**（キー操作で動かし始めた時点で「連打の勢い」ではなく「意図した操作」と判断できるため）。**ロックが明けたら決定も通常どおり**（意図的な連打はそのまま通す）。
     - シーン遷移では `SceneTransition` が「暗転〜明転〜さらに 0.25 秒」を管理するので `OnEnable` の `LockFor` は実質冗長（害はない）。**結果パネル**（`ClearPanel` / `FailPanel`）はシーン遷移ではないので、この `LockFor` が効く時間（`inputLockDuration`）が本番。2026-09-12 に 1.0→0.5 秒へ半減し、現在は他画面の `MenuNavigation` と同じ 0.5 秒。
   - 選択中（キーボードカーソル or マウスホバー）のボタンに**色付きの枠**（`SelectionFrame`、実行時生成の黄色い矩形を背面に置き、`framePadding`(8px) ぶんはみ出させて枠に見せる）。
     - 枠の位置合わせ（2026-09-07 修正）: 枠は常に pivot (0.5,0.5) にし、ボタンの pivot が中心でなくても `sizeDelta*(0.5 - pivot)` で矩形中心へ補正して合わせる。以前はボタンの pivot をそのままコピーしていたため、中心 pivot でないボタン（左下配置の BackButton など）で枠が片側に寄っていた。中心 pivot のボタンでは補正 0 で従来と同じ。
@@ -331,22 +331,25 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 
 ### 9-1. ステージ1 = `Assets/Scenes/Stage1.unity`（旧 `SampleScene.unity`）
 
-（下記に加えて `EventSystem`、`StageFlow`（`StageManager` + `ResultCanvas`）、`Goal`（@x28, 縦長トリガー, 緑）を追加済み）
+（下記に加えて `EventSystem`、`StageFlow`（`StageManager` + `ResultCanvas`）、`Goal`（Prefab インスタンス, @x28, 縦長トリガー, 緑）を追加済み）
 
 ```
 Main Camera            [Camera, CameraFollow]  ortho size 6 @ (0,-0.5,-10)
 Global Light 2D
-Player                 @ (-10,-1.5)  [SpriteRenderer(PlayerArrow), BoxCollider2D, Rigidbody2D(grav 3, PlayerNoFriction),
+Player（Prefab インスタンス） @ (-10,-1.5)  [SpriteRenderer(PlayerArrow), BoxCollider2D, Rigidbody2D(grav 3, PlayerNoFriction),
                                       PlayerController, MainActionQueue, MainActionController, PlayerHealth]
   AttackHitbox         [SpriteRenderer, BoxCollider2D(trigger), AttackHitbox]  通常は非アクティブ
   DebugBars            [PlayerDebugBars]
     ComboBar / CooldownBar  各 BG(SpriteRenderer) + Fill(SpriteRenderer) + Label(TextMesh)
-Enemy_A                @ (-4,-1.5)  [SpriteRenderer, BoxCollider2D, Enemy(HP1), EnemyPatrol]
-Enemy_Boss             @ (15,-1.25) [SpriteRenderer, BoxCollider2D, Enemy(HP複数), EnemyPatrol]
+Enemy_A（Prefab インスタンス） @ (-4,-1.5)  [SpriteRenderer, BoxCollider2D, Enemy(HP1), EnemyPatrol]
+Enemy_Boss（Prefab インスタンス, EnemyBoss variant） @ (15,-1.25) [SpriteRenderer, BoxCollider2D, Enemy(HP複数), EnemyPatrol]
   HealthBar            [EnemyHealthBar] → BG / Fill / Label(TextMesh)
-HUD_Canvas             [Canvas, CanvasScaler, GraphicRaycaster]
+HUD_Canvas（Prefab インスタンス） [Canvas, CanvasScaler, GraphicRaycaster]
   ActionBar            [ActionBarUI] → Title(Text) + Slot0..3 (Image + 子 Label(Text))
   HealthPanel          [HealthUI] → HP0..2 (Image, 赤丸)
+StageFlow（Prefab インスタンス） [StageManager]
+  ResultCanvas         [Canvas, CanvasScaler, GraphicRaycaster] → ClearPanel/FailPanel（各 [MenuNavigation] + Title + ボタン群）
+DialogueSystem（Prefab インスタンス, Prologue を除く） [DialoguePlayer]
 Grid                   @ (0,0)  [Grid] cell size (1,1)
   Ground               layer=Ground  [Tilemap, TilemapRenderer(order -10), Rigidbody2D(Static),
                                       TilemapCollider2D(compositeOperation Merge), CompositeCollider2D(Polygons),
@@ -370,7 +373,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | `MainActionType` | (enum) | Jump / Dash / Attack |
 | `MainActionQueue` | Player | アクションの並び（決定的・連続禁止）。`Peek` / `Consume` / `OnChanged`。`StageSet.allowedActions` があれば `lottery` を上書き |
 | `MainActionController` | Player | メインアクションの発動・クールタイム・コンボ・先行入力・ダッシュ処理・無敵。発動入力はスペース / エンター / テンキー Enter / 左クリック（2026-09-12、会話送り・メニュー決定と統一）。会話中／画面切り替え直後は入力停止。`StageSet.disableCombos` のステージでは `_combosEnabled=false`（コンボ無効） |
-| `PlayerController` | Player | 左右移動・向き・接地判定・コヨーテ/落下猶予・ノックバック受け・着地時間予測（`TryPredictLandingTime`）。会話中／画面切り替え直後（`InputLock`）は入力停止 |
+| `PlayerController` | Player | 左右移動・向き・接地判定・コヨーテ/落下猶予・ノックバック受け・着地時間予測（`TryPredictLandingTime`）。会話中／画面切り替え直後（`InputLock`）は入力停止（§16-2） |
 | `PlayerHealth` | Player | 体力・被弾・無敵時間。`TakeDamage -> bool`、`OnHealthChanged` |
 | `AttackHitbox` | Player/AttackHitbox | 前方の一時的な攻撃判定（トリガー） |
 | `PlayerDebugBars` | Player/DebugBars | 頭上のデバッグゲージ 2 本。`Awake` で `!DeveloperSettings.Active` なら GameObject ごと非アクティブ（開発者用） |
@@ -379,9 +382,9 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | `EnemyHealthBar` | Enemy_Boss/HealthBar | ボスの体力ゲージ + 数値 |
 | `OneWayPlatform` | Stage3/`Grid/Platform`（Tilemap の CompositeCollider2D） | 一方通行 + 重なり率での着地判定。単体 Collider2D でも Tilemap の CompositeCollider2D でも動く（`Awake` が CompositeCollider2D を優先） |
 | `TilemapColliderBootstrap` | 各ステージ `Grid/Ground` | `Awake` でタイルを貼り直し、`TilemapCollider2D`/`CompositeCollider2D` の形状を再生成させる（eval 生成 Tilemap が Play 開始時に当たり判定を持たない問題の対策）。§7 |
-| `CameraFollow` | Main Camera | 横方向のみ追従 |
-| `ActionBarUI` | HUD_Canvas/ActionBar | アクション先読み表示 |
-| `HealthUI` | HUD_Canvas/HealthPanel | 体力アイコン表示 |
+| `CameraFollow` | Main Camera | 横方向のみ追従。`target`（Player の Transform）は未設定なら Tag=Player から自動取得（2026-09-12） |
+| `ActionBarUI` | HUD_Canvas/ActionBar | アクション先読み表示。`queue`（Player の MainActionQueue）は未設定なら Tag=Player から自動取得（2026-09-12） |
+| `HealthUI` | HUD_Canvas/HealthPanel | 体力アイコン表示。`playerHealth`（Player の PlayerHealth）は未設定なら Tag=Player から自動取得（2026-09-12） |
 | `StageSet` | ScriptableObject（`Assets/Resources/StageSet.asset`） | ステージの並び。`stages[]` = `displayName` + `sceneName` + `intro`（会話）+ `allowedActions`（そのステージの抽選対象）+ `disableCombos`。全体の `prologue`。`AllowedActionsAt`/`DisableCombosAt`/`IndexOfScene`。GameFlow が Resources.Load |
 | `GameFlow` | (static クラス) | 画面遷移（`SceneTransition.Go` 経由）+ ステージ解放 + 会話既読。`Stages`（StageSet）、`StageCount`、`StartGame`（未読ならPrologue経由）/`LoadStage`/`RetryStage`/`NextStage`/`GoStageSelect`/`GoTitle`、`CurrentStageIndex`、`ActiveStageIndex`（アクティブシーン名から StageSet index を解決）、クリア状況（`IsStageCleared`/`SetStageCleared`/`MarkStageCleared`、PlayerPrefs ビットマスク）、`IsStageUnlocked`/`UnlockedStageIndex`、ステージ会話既読（`HasSeenIntro`/`SetIntroSeen`/`MarkIntroSeen`、ビットマスク）、プロローグ既読（`HasSeenPrologue`/`SetPrologueSeen`/`MarkPrologueSeen`、0/1）、`ResetStageProgress`（クリア＋ステージ既読の2キー消去、プロローグは残す）、`ResetProgress`（3キー消去） |
 | `DeveloperSettings` | ScriptableObject（`Assets/Resources/DeveloperSettings.asset`） | 開発者機能の総合スイッチ。`developerMode` bool をインスペクター編集。静的 `Active` = エディタ内 かつ `developerMode`（`#if UNITY_EDITOR` ガード。ビルドでは常に false）。`DevStageClearToggles` / `DevStorySeenToggles` / `DevProgressResetButton` が従う |
@@ -397,7 +400,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | `FreshBuildGuardBuildCheck` | (`Assets/Scripts/Editor/`, `IPreprocessBuildWithReport`) | `Policy = OnEveryBuild` のまま非開発ビルドを作ろうとしたら確認ダイアログでビルドを止める |
 | `StageManager` | 各ステージ/StageFlow | クリア/失敗判定・結果画面表示・結果ボタン処理・落下死判定（killY）・初回入場時の開始会話（`TryPlayIntro`, `Time.timeScale=0`）・ステージ開始時 / 会話終了時に `InputLock.LockFor(inputLockDuration=0.25)`（2026-09-12 に 0.5→0.25 へ半減） |
 | `Goal` | 各ステージ/Goal | 右端トリガー。ボス全滅後にプレイヤーが触れると `StageManager.Clear()` |
-| `MenuNavigation` | Title/StageSelect の Canvas, 各ステージの ClearPanel/FailPanel | メニュー UI のキーボード操作。位置ベース 2D 移動（W/S=上下・最近傍＋端ループ、A/D=同じ行内＋端ループ）、Space/Enter で決定、選択枠の自動生成。マウスホバーは移動時のみ反映。`OnEnable` で `InputLock.LockFor(inputLockDuration)`（全画面共通 0.5s、2026-09-12 に結果パネルの 1.0s を統一）、ロック中は `GraphicRaycaster` も無効化。`AddButton()` / `SetInitialFocus()` |
+| `MenuNavigation` | Title/StageSelect の Canvas, 各ステージの ClearPanel/FailPanel | メニュー UI のキーボード操作。位置ベース 2D 移動（W/S=上下・最近傍＋端ループ、A/D=同じ行内＋端ループ）、Space/Enter で決定、選択枠の自動生成。マウスホバーは移動時のみ反映。`OnEnable` で `InputLock.LockFor(inputLockDuration)`（全画面共通 0.5s、2026-09-12 に結果パネルの 1.0s を統一）。カーソル移動・マウスホバーは `InputLock.NavigationAllowed`（フェード中だけ false）を見る、決定（`HandleSubmit()`/`GraphicRaycaster`）は `InputLock.InputAllowed`（フェード中 or 猶予中は false）を見る——猶予中でもカーソル移動は効き、実際に成立したら `InputLock.Unlock()` で決定の猶予も即解除する（2026-09-12、§16-1）。`AddButton()` / `SetInitialFocus()` |
 | `InputLock` | (static クラス) | 入力ロック。`InputAllowed` = `!SceneTransition.Transitioning && Time.unscaledTime >= 解除時刻`。`LockFor(秒)` で一定時間 false に（一番遅い解除時刻を採用）。`MenuNavigation`/`DialoguePlayer`/`StageManager`/`SceneTransition` が LockFor、`MenuNavigation`/`DialoguePlayer`/`MainActionController`/`PlayerController` が参照 |
 | `SceneTransition` | (実行時生成, `DontDestroyOnLoad`) | 全シーン遷移で暗転→読み込み→明転。`Go(シーン名)`。演出中 `Transitioning=true`（＝入力全無効）、明転後 `InputLock.LockFor(postFadeInLockSeconds)`。全面黒 Image（sortingOrder 32760, raycastTarget）でマウスも遮断 |
 | `SceneTransitionSettings` | ScriptableObject（`Assets/Resources/SceneTransitionSettings.asset`） | `fadeOutSeconds`(0.5) / `fadeInSeconds`(0.5) / `postFadeInLockSeconds`(**0.25**、2026-09-12 に 0.5→0.25 へ半減)。インスペクター調整 |
@@ -494,3 +497,74 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 6. **アクションの並びはステージ固定・決定的**（seed ベース）。同じアクションは 2 連続しない。
 7. **ダッシュ以外の敵接触はすり抜けない**（ノックバック + ダメージ）。すり抜けるのはダッシュ中のみ。
 8. **敵接触ダメージは本体コライダーのみ**（`GetComponent`、`GetComponentInParent` を使わない。子の攻撃判定で自傷しないため）。
+
+---
+
+## 15. 共通オブジェクトの Prefab 化（2026-09-12）
+
+全ステージで共通の `Player` / `Enemy_A` / `Enemy_Boss` / `Goal` を Prefab 化した。`Assets/Prefabs/` に置き、各ステージシーンには**直接配置した Prefab インスタンス**（実行時に動的生成する仕組みは無い・不要）。
+
+- **`Assets/Prefabs/Player.prefab`**: Stage1 の `Player`（子の `AttackHitbox` / `DebugBars` ツリーごと）をそのまま Prefab 化。Stage2〜5 は元の GameObject を削除し、このプレハブをインスタンス化して差し替えた。
+  - **ステージごとに残す上書き（インスタンス側の override）**: `Transform.position`（全ステージ実は (-10,-1.5,0) で共通）、`MainActionQueue.stageSeed`（Stage1〜5 = 12345 / 22222 / 33333 / 44444 / 55555）。他のフィールドはプレハブ側の値がそのまま使われる。
+- **`Assets/Prefabs/Enemy.prefab`**: Stage1 の `Enemy_A`（HP1 の雑魚。`Enemy` + `EnemyPatrol`）を Prefab 化。Stage3 の `Enemy_A` はこのプレハブのインスタンスに差し替え（Stage2/4/5 に敵は無し、元々の仕様どおり）。
+- **`Assets/Prefabs/EnemyBoss.prefab`**: `Enemy.prefab` の **Prefab Variant**（`PrefabUtility` の Variant 機構。ベースの差分だけを持つ）。差分は `Enemy.maxHealth`（1→5）、`EnemyPatrol`（speed 1.5→1 / range 3→2）、そして `HealthBar` 子（`EnemyHealthBar` + BG/Fill/Label）の追加。Stage1 の元の `Enemy_Boss` から `HealthBar` 子をそのまま移設して作成したので、見た目・参照とも作り直しではなく既存資産の再利用。Stage3 の `Enemy_Boss` もこのプレハブのインスタンスに差し替え。
+  - 今後 HP や巡回範囲を変えたいときは `EnemyBoss.prefab` 自体を編集すれば、Stage1・Stage3 両方の `Enemy_Boss` に自動反映される（**Play で実証済み**: `Enemy.prefab` の `contactDamage` を一時的に 1→2 に変えて、Stage1 のシーンファイルには一切触れずに `Enemy_A` インスタンス側が 2 を返すことを確認 → 1 に戻した）。
+- **`Assets/Prefabs/Goal.prefab`**: Stage1 の `Goal` を Prefab 化。`stageManager` フィールドは未設定のままにしてある（`Awake` で `FindAnyObjectByType<StageManager>()` に自動解決するので、シーンをまたいだ参照を持たせる必要が無い＝そのままプレハブ化しても安全）。Stage2〜5 の `Goal` もこのプレハブのインスタンスに差し替え。位置はステージごとに override（Stage1 = x28、Stage2〜5 = x25）。
+- **`Assets/Prefabs/HUD_Canvas.prefab`**（2026-09-12 追加分）: Stage1 の `HUD_Canvas`（`ActionBarUI` + `HealthPanel`）を Prefab 化。Stage2〜5 もこのプレハブのインスタンスに差し替え。override は無し（全ステージ完全に同一構成）。
+- **`Assets/Prefabs/StageFlow.prefab`**（2026-09-12 追加分）: Stage1 の `StageFlow`（`StageManager` + `ResultCanvas` の `ClearPanel`/`FailPanel`/`MenuNavigation` 一式）を Prefab 化。`StageManager.clearPanel`/`failPanel`/`nextButton`、各ボタンの `onClick` persistent listener は全部同じ Prefab 階層の内部参照なので、そのまま正しく維持される。Stage2〜5 もこのプレハブのインスタンスに差し替え。override は無し。
+- **`Assets/Prefabs/DialogueSystem.prefab`**（2026-09-12 追加分）: `DialoguePlayer` 単体を Prefab 化（**Stage1〜5 のみ**）。**Prologue シーンの `DialogueSystem` は対象外**（`DialoguePlayer` に加えて `PrologueRunner` が付いており、他のどのシーンとも構成が違う一点物なので、共通化のメリットが無く従来どおりの通常 GameObject のまま）。
+
+**Prefab 化のあと確認したこと**: `HUD_Canvas`/`StageFlow`/`DialogueSystem` を差し替える前に、それぞれの内部（`ActionBarUI`/`HealthUI`/`StageManager`/`DialoguePlayer`/`MenuNavigation`/`PrologueRunner`）の `[SerializeField]` を全スクリプト横断で洗い出し、**外部の別オブジェクトから直接参照されている箇所が無いこと**を確認してから実施した（§15-1 の教訓を踏まえた事前チェック）。唯一の外部参照だった `Goal.stageManager` は元々 auto-resolve 済みで無害。差し替え後、Stage1〜5 すべてで Play 確認（コンソールエラー・警告 0、`ActionBarUI`/`HealthUI`/`CameraFollow` の自動解決も正常、`StageManager.Clear()` 呼び出しも正常動作）。
+
+**Prefab に関する重要な訂正（ユーザーの認識との相違）**: 「プレハブを直置きすると、あとでプレハブ本体を変更しても反映されない」というのは誤り。**プレハブインスタンスはシーンに直接置いても元のプレハブアセットとリンクしたままで、プレハブ側を編集すれば全インスタンスへ自動反映される**（Unity の Prefab の中核機能）。反映されないのは「そのインスタンスだけ個別に上書き（override）した項目」のみ。よって、今回のような「あとで調整しやすくしたい」という目的には、シーンに直接プレハブインスタンスを置くだけで十分であり、**実行時の動的生成（`Instantiate`）は実装していない・不要**。動的生成が要るのは、敵の湧き方をランダムにしたい／オブジェクトプールしたいなど別の目的が出てきたときで、現状の仕様には無い。
+
+### 15-1. 副作用バグとその修正（2026-09-12、Prefab 化の直後に発生）
+
+Player を「削除 → 新しい Prefab インスタンスを配置」という手順で差し替えた際、**Player とは別の GameObject が Player 側のコンポーネントを直接参照（Inspector 上のオブジェクト参照）していた箇所**が、古い Player の破棄と同時にすべて null になった（Tag 検索ではなく直接参照なので、Unity が自動的に新しいインスタンスへ繋ぎ直してはくれない）。影響は Stage2〜5（Stage1 は既存の Player をそのまま `SaveAsPrefabAssetAndConnect` したため同一インスタンスが継続し無事）。
+
+判明した被害（Stage2〜5 全部）:
+- **`CameraFollow.target`**（Main Camera）→ カメラがプレイヤーに追従しない。
+- **`ActionBarUI.queue`**（HUD_Canvas/ActionBar）→ アクションバーの4枠が空のまま更新されない。
+- **`HealthUI.playerHealth`**（HUD_Canvas/HealthPanel）→ 被弾しても体力アイコンが減らない（ユーザー未報告・調査で発見）。**Stage2 はカメラのみユーザーが手動修正済みだったため、これと ActionBarUI はまだ壊れていた**。
+
+**対応**: 各シーンで3つの参照を Player の実インスタンスへ張り直して保存。加えて**再発防止**として、`CameraFollow` / `ActionBarUI` / `HealthUI` の3スクリプトに `Awake()` を追加し、参照が未設定（null）なら `GameObject.FindGameObjectWithTag("Player")` から自動解決するようにした（`Goal.stageManager` や `OneWayPlatform.playerCollider` と同じ、このプロジェクトで既に使われている流儀）。見つからなければ `Debug.LogWarning` を出す。Play で意図的に3つとも null にした状態から検証し、自動解決が効いて正しいインスタンスに繋がることを確認済み。
+
+**教訓 / 次に Prefab 化する（HUD_Canvas・StageFlow・DialogueSystem）ときの注意**: GameObject を「削除して Prefab インスタンスに差し替える」操作をするときは、**その GameObject を Inspector 上で直接参照している他のスクリプトが無いか事前に確認する**（`grep -n "SerializeField" *.cs` で該当型のフィールドを洗い出す、など）。Tag/Find 経由の参照は無事だが、直接参照は同じ壊れ方をする。今回のように参照する側に自動解決フォールバックを仕込んでおくと、今後同種の差し替えをしても壊れない。
+
+**Prefab 化を見送ったもの（理由つき）**:
+- `Grid/Ground`・`Grid/Platform`（Tilemap 地形）: コンポーネント構成は共通だが、塗ったタイルのデータ自体はステージごとに意図的に異なる（レベルデザインの本体）。Tilemap のタイルデータを Prefab の override として持たせるのは大きめのデータになり扱いにくいため、今回は見送り。コンポーネント構成を変える（例: `TilemapColliderBootstrap` にロジックを足す）ときは、既存の 5+1 シーンへ手作業で反映する必要がある点は変わらず。
+- `EventSystem` / `Main Camera`: 単純な定型オブジェクトで、共通化のメリットが薄いため見送り。
+
+**`HUD_Canvas` / `StageFlow` / `DialogueSystem`（Prologue 除く）も 2026-09-12 中に Prefab 化済み**（上記参照）。UnityEvent の persistent listener 配線や Canvas の入れ子構造は、いずれも Prefab 階層の内部参照だったため Player/Enemy/Goal のときと同様に問題なく維持された。
+
+---
+
+## 16. 入力ロックの対象を「決定系」だけに限定（2026-09-12、同日中に3段階で調整）
+
+**問題**: `InputLock` は元々「画面が切り替わった直後、一定時間**すべての**入力を無効化する」仕組みだった。目的は「連打の勢いで意図せず決定・発動してしまう」ことの防止だが、これは同時に「意図した操作」まで塞いでしまっていた。具体例: 結果パネル（クリア/失敗）が表示された直後、下矢印キーでカーソルをもう1つ下の選択肢へ動かそうとしても、`MenuNavigation` の入力ロック（0.5秒）がカーソル移動そのものをブロックしていたため反応しなかった。
+
+**考え方の整理**: 「連打で誤爆する」のは**決定系（スペース / エンター / テンキー Enter / マウス左クリックが引き金になる、1回きりの操作）**だけで、**移動・カーソル移動のような連続的な操作**は「押しっぱなし」で誤って進んでしまうような性質のものではなく、意図して行った操作をそのまま反映してよい。この2つを区別せず一律ブロックしていたのが問題だった。ただし画面によって適切な対応が異なる：
+
+### 16-1. メニュー画面（Title / StageSelect / 結果パネル）: 3段階の状態
+
+シーン遷移でメニュー画面に入る場合、状態は次の3段階になる（結果パネルはシーン遷移を伴わないので実質②③のみ）:
+
+1. **`SceneTransition` のフェード演出中**（`InputLock.NavigationAllowed` が false）: カーソル移動・マウスホバーも含めて**いかなる入力も受け付けない**。画面がまだ遷移中で見えていないため。
+2. **フェードは終わったが、決定の猶予（`InputLock.LockFor` の残り時間）がまだ残っている**: **決定だけ**を無視する。カーソル移動（WASD/矢印キー・マウスホバー）は受け付け、実際に操作に反映する。さらに、カーソル移動が**実際に成立した**（＝そのパネルで意味のある操作だった）瞬間に決定の猶予も即座に解除する。
+3. **両方明けている**: 通常どおりすべて受け付ける。
+
+実装:
+- `InputLock.NavigationAllowed`（新設） = `!SceneTransition.Transitioning`。決定用の猶予タイマーは見ず、フェード中かどうかだけを見る。
+- `MenuNavigation.Update()`: `HandleMouseHover()` と `HandleKeyboardNav()` を `InputLock.NavigationAllowed` で包み、フェード中は両方まとめてスキップする（②③でのみ実行）。`HandleSubmit()`（決定）と `GraphicRaycaster` の有効/無効（マウスクリック止め）は従来どおり `InputLock.InputAllowed`（フェード中 or 猶予中の両方で false）のまま。
+- **カーソル移動が実際に成立したら決定のロックも即座に解除する**（②→③への早期遷移）: `HandleKeyboardNav()` は移動の前後で `_index` の変化を見て、変わっていれば `InputLock.Unlock()`（`_unlockAtUnscaled` を現在時刻にして即座に解除）を呼ぶ。「そのパネルで意味のある操作」だけが対象になる点がポイント: ステージ選択の横一列（Stage1〜5）なら WASD/矢印キー全部が該当しうるが、結果パネル（縦一列、左右移動は無効）では W/S・上下矢印キーだけが実際に `_index` を変え、A/D・左右矢印キーは候補が無く何も起きないので該当しない。個々のキーをハードコードして判定するのではなく「実際に動いたか」だけを見ているので、パネルごとの対応キーの違いを自動的に反映できる。
+- Play で3段階すべて確認済み: `Transitioning=true` 時は S キーを押しても `_index` 不変・`NavigationAllowed=False`。`Transitioning=false` に切り替えた直後（決定の猶予はまだ残っている想定）に S キーを押すと `_index` が変わり、同時に `InputAllowed` も即座に True へ。
+
+### 16-2. ステージ画面（Player の移動・メインアクション発動）: 両方ブロックのまま、早期解除も無し
+
+- **`PlayerController.Update()`**: 一度は移動（A/D・矢印キー）を `InputLock` の対象から外したが、「動けるのになぜメインアクションは出せないのか」という不自然さの方が問題だったため、同日中に差し戻した。現在は元の仕様どおり、会話中（`DialoguePlayer.IsPlaying`）**または**画面切り替え直後（`!InputLock.InputAllowed`）の両方で移動を止める。
+- `MainActionController`（メインアクション発動）はそのまま変更なし（元々ロック対象）。
+- ステージ画面にはメニューのカーソル移動に相当する「常に許可したい連続入力」が無いため、16-1 のような早期解除の仕組みは実装していない。「すべてブロックし続ける」ことで、ステージ選択や結果画面で連打した勢いのままステージに入って誤発動する事故を防ぐ。
+
+`DialoguePlayer`（会話送り）は元々「決定系の入力しか扱っていない」ため今回も変更不要。
+
+**Play で確認済み**: 結果パネル表示直後（ロック中、`InputLock.InputAllowed == false`）に下キーを押すとカーソルが実際に移動すること、その状態で Enter を押してもボタンの `onClick` が発火しないこと、ロックが明けてから Enter を押すと発火することを確認。また、ロック中でも `PlayerController` の移動入力（D キー）が `_moveInput` に反映されることを確認。
