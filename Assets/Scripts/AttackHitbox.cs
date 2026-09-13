@@ -8,9 +8,6 @@ using UnityEngine;
 [RequireComponent(typeof(Collider2D))]
 public class AttackHitbox : MonoBehaviour
 {
-    [Tooltip("キャラ中心から前方へのオフセット")]
-    [SerializeField] private float forwardOffset = 0.9f;
-
     private int _damage = 1;
     private readonly HashSet<Enemy> _hit = new HashSet<Enemy>();
 
@@ -19,12 +16,16 @@ public class AttackHitbox : MonoBehaviour
         GetComponent<Collider2D>().isTrigger = true;
     }
 
-    /// <summary>向きとダメージをセットし、前方へ配置する。</summary>
+    /// <summary>
+    /// 向きとダメージをセットし、前方へ配置する。
+    /// 前方距離は Transform の localPosition.x の絶対値をそのまま使うので、
+    /// インスペクターで Transform の X を直接調整すればそれが反映される。
+    /// </summary>
     public void Configure(int facingSign, int damage)
     {
         _damage = damage;
         Vector3 p = transform.localPosition;
-        p.x = forwardOffset * (facingSign < 0 ? -1f : 1f);
+        p.x = Mathf.Abs(p.x) * (facingSign < 0 ? -1f : 1f);
         transform.localPosition = p;
     }
 
