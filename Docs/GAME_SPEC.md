@@ -64,7 +64,7 @@ Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.Ge
     - 後方入力: **急ブレーキ**（`dashBrakeDecel` = 160 u/s²）＋**無敵解除**（`_dashInvBroken` ラッチ。一度解除したらこのダッシュ中は戻らない）。
   - `IsDashing` が true の間、`Enemy` 側がプレイヤーとの物理衝突を `Physics2D.IgnoreCollision` で無視（すり抜け）。
   - `OverridesMovement` が true の間、`PlayerController` は速度・向きを書かない（ダッシュが制御）。
-- **攻撃 (`DoAttack` コルーチン + `AttackHitbox`)**: 前方 `forwardOffset`（0.9）に子オブジェクトの当たり判定を `attackDuration`（**0.4 秒**、2026-09-11 に 0.2→0.4 変更、全ステージ共通）だけ有効化。触れた敵に `attackDamage`（1）。同じ敵を多重ヒットしない（`HashSet<Enemy>`、有効化時にクリア）。攻撃判定はトリガー。
+- **攻撃 (`DoAttack` コルーチン + `AttackHitbox`)**: 前方に子オブジェクトの当たり判定を `attackDuration`（**0.4 秒**、2026-09-11 に 0.2→0.4 変更、全ステージ共通）だけ有効化。触れた敵に `attackDamage`（1）。同じ敵を多重ヒットしない（`HashSet<Enemy>`、有効化時にクリア）。攻撃判定はトリガー。前方距離は**専用の `forwardOffset` フィールドを廃止**し（2026-09-13）、`AttackHitbox` の `Transform.localPosition.x` の絶対値をそのまま使う方式に変更。`Configure()` は毎回その絶対値を向き（`facingSign`）に応じて符号だけ反転させる。これにより、インスペクターで Transform の X を直接編集すればそのまま前後距離の調整として反映される（Y座標・Scaleは元々スクリプトで一切触られないので常に直接編集可能）。
 
 ### 2-4. クールタイム
 
@@ -167,14 +167,45 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 
 ## 6. 敵（`Enemy` + `EnemyPatrol` + `EnemyHealthBar`）
 
+敵キャラは3種類（Enemy1/Enemy2/Enemy3）を計画中（2026-09-13、企画側の仕様確定）。**Enemy1・Enemy2は実装済み**、Enemy3は仕様確定のみで未実装。
+
+### 6-0. 共通の`Enemy`コンポーネント（`Assets/Scripts/Enemy.cs`）
+
 - `maxHealth`（既定 1 = 一撃）。`maxHealth >= 2` で頭上に体力ゲージ + 数値（`EnemyHealthBar`、ボス用）。
 - **当たり判定は実体（非トリガー）**。`Rigidbody2D` は無い（`Ground_*` と同じ「静的コライダー」）。
 - 毎 `FixedUpdate`、`Physics2D.IgnoreCollision(playerCollider, ownCollider, playerMainAction.IsDashing)` をトグル → **ダッシュ中だけすり抜け**、それ以外は物理衝突。
 - `OnCollisionEnter2D` / `Stay2D` でプレイヤー本体（`other.GetComponent<PlayerHealth>()`、`InParent` にしない = 子の `AttackHitbox` に反応しない）に接触したら:
   - `PlayerHealth.TakeDamage(contactDamage=1)` → 実際に入ったら `PlayerController.ApplyKnockback`（敵の反対方向へ `knockbackSpeed`=8、上向き `knockbackUpSpeed`=4、`knockbackDuration`=0.25 秒）。
 - 攻撃を受ける経路は `AttackHitbox`（トリガー）側の `OnTriggerEnter2D` → `Enemy.TakeDamage`。敵コライダーが非トリガーでも、当たった相手（AttackHitbox）がトリガーなのでトリガー通知は届く。
-- `EnemyPatrol`: `Rigidbody` を使わず transform を直接動かしてスポーン地点中心に左右往復（`speed` ゆっくりめ、`range` 片側距離）。進行方向に `flipX`。
-- シーンには `Enemy_A`（HP1、x=-4）と `Enemy_Boss`（HP 複数・ゲージ付き、x=15）。
+- 弾（`Bullet.cs`、Enemy2/Enemy3共通）も同じ考え方で実装（実体コライダー + ダッシュ中IgnoreCollision + AttackHitboxのトリガーで即破壊）。ただし弾には体力の概念が無く、`AttackHitbox`に触れたら`DestroyByAttack()`で無条件消滅する（`AttackHitbox.TryHit`は`Enemy`が見つからなければ`Bullet`を探して破壊する、という順で処理）。
+- **ステージクリアの新経路（2026-09-13追加）**: `Enemy`に`clearStageOnDeath`（既定false）を追加。trueの敵は`Die()`時に`StageManager.Clear()`を直接呼ぶ。Goalオブジェクトが無いステージ（Stage4/5想定）のボス撃破クリア用。
+
+### 6-1. Enemy1（実装済み） — 単純な左右パトロール
+
+- スクリプト: `Enemy`（共通） + `EnemyPatrol`。**2026-09-13 に `Enemy.prefab` → `Enemy1.prefab` へリネーム**（既存のプレハブが元々このEnemy1仕様と完全一致していたため、新規実装ではなくリネームのみで対応。`EnemyBoss.prefab` はこの `Enemy1.prefab` の Prefab Variant のままGUID経由でリンク維持）。
+- `EnemyPatrol`: `Rigidbody` を使わず transform を直接動かしてスポーン地点中心に左右往復（`speed` ゆっくりめ既定1.5、`range` 片側距離既定3。共にインスペクターから調整可）。進行方向に `flipX`。
+- 接触ダメージ・攻撃一撃死・ジャンプで飛び越え・ダッシュですり抜け、は6-0の共通挙動そのまま（`maxHealth=1`, `contactDamage=1`, プレイヤー`attackDamage=1`で一致）。
+- **2026-09-14**: `DialoguePlayer.IsPlaying`（ストーリー再生中）は`EnemyPatrol.Update()`が早期returnし、一切移動しない（理不尽な行動を防ぐため）。
+
+### 6-2. Enemy2（実装済み、2026-09-13）— 据え置き砲台
+
+- スクリプト: `Enemy`（共通、`EnemyPatrol`は付けない＝移動しない） + `EnemyShooter`（発射のみ担当）。プレハブ: `Assets/Prefabs/Enemy2.prefab`（紫色のSpriteRendererでEnemy1と区別）。
+  - **バグ修正（2026-09-14）**: プレハブ作成時にスプライト未割り当ての状態で`BoxCollider2D`を追加したため`size=(0,0)`になっており、プレイヤーの攻撃（AttackHitbox）が一切当たらなかった。`(1,1)`に修正済み（Stage3/Stage4のインスタンス側でコライダーを上書きしていなかったため、プレハブ修正だけで両方に反映された）。
+- `EnemyShooter`: `fireInterval`秒ごとに`Bullet.prefab`を`firePoint`（未設定なら自身の位置）から発射。`homingOnFire`（既定true）がtrueなら発射位置からプレイヤー方向へのベクトルを発射時に一度だけ計算しその方向へ直進。falseなら**上下は狙わず、プレイヤーが左右どちらにいるかだけを見て`Vector2.left`/`Vector2.right`へ水平に発射**（2026-09-14修正。以前はプレイヤーの位置によらず常に`transform.right`固定で右にしか飛ばなかったバグがあった）。プレイヤーが見つからない場合のみ`transform.right`にフォールバック。`bulletSpeed`・`fireInterval`・`homingOnFire`はいずれもインスペクターから調整可。
+- `Bullet.cs`: `Configure(direction, speed, damage)`で方向・速度・威力を受け取り、毎フレーム`transform.position`を直進させる（Rigidbody無し、EnemyPatrolと同じ「transform直接移動」方式）。プレイヤー本体に接触でダメージ（既定1）+ 弾自身は消滅、ダッシュ中は`Physics2D.IgnoreCollision`ですり抜け（Enemyと同じFixedUpdateパターン）、Ground レイヤーのコライダーに当たると消滅、`maxLifetime`（既定6秒）経過でも自動消滅（画面外に飛び続けて残留するのを防止。仕様上の要求ではなく安全策として追加）。
+- 敵本体（`Enemy`側）の接触ダメージ／攻撃一撃死／ジャンプ飛び越え／ダッシュすり抜けは6-0の共通挙動そのまま。
+- **2026-09-14**: `EnemyShooter`は`DialoguePlayer.IsPlaying`中はタイマーの加算ごと止まる（ストーリー中は発射しない）。また`SpriteRenderer.isVisible`（＝いずれかのカメラに映っているか、Unity標準のカリング判定）が false のときは発射をスキップする（画面外からの理不尽な弾を防ぐ）。どちらもタイマー自体は発射のたびに0にリセットされる通常のロジックのままなので、条件を満たさない間は単に「その回の発射を見送る」だけで、条件が揃った次の周期でまた判定される。
+
+### 6-3. Enemy3（未実装・仕様確定のみ、2026-09-13）— 3行動のミニボス
+
+- 体力複数（一撃では倒せない、プレイヤー攻撃1発＝1ダメージ、頭上に体力バー表示）。
+- 3種の行動を排他的に実行。行動①終了後、②③を抽選。②③には発動後クールタイムがあり、その間は無行動。
+  - **①離脱移動**: プレイヤーから遠ざかる方向へ左右移動。一定距離離れるまで継続。
+  - **②放射弾**: 自身を中心に複数弾を放射状に発射（ホーミング無し、角度・弾数は固定値としてインスペクター/スクリプトで指定）。発射した瞬間にクールタイム開始。
+  - **③追尾弾**: プレイヤーへホーミングし続ける弾を1発発射。弾がプレイヤーに命中 or 地面/壁に当たって消滅した瞬間にクールタイム開始（弾が存在する間はクールタイムに入らず、何もできない）。
+- 弾は地面/壁（壁は未実装）に当たると消滅する（＝弾を地形に誘導するのも攻略法）。
+- 移動速度・①を終了する距離・各行動のクールタイム・弾速・同時発射数・ホーミング強度は、いずれもインスペクターから調整可。
+- 弾・敵本体の接触/攻撃/ジャンプ/ダッシュのルールは6-0と同じ（ただし敵本体は多段階HP）。
 
 ---
 
@@ -197,7 +228,7 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
   - 実装は `PlatformEffector2D` ではなく、毎 `FixedUpdate` で `Physics2D.IgnoreCollision(player, platform, !solid)` をトグル。`solid = 足が天面より上（`topTolerance` 0.05） && 下降中 && 重なり率 >= requiredOverlap`。単体 BoxCollider2D でも Tilemap の CompositeCollider2D でも動くよう、`Awake` は `CompositeCollider2D` を優先して `_col` に採用する（2026-09-11 追加）。
   - `overlapX = min(右端どうし) - max(左端どうし)`、重なり率 = `overlapX / プレイヤー横幅`。ソース内に具体例つきの長いコメントあり。
   - Play で確認済み: `CompositeCollider2D.pathCount=1`（天面3マス分が1つに合成、bounds が天面3マス分の範囲と一致）、柱範囲は `OverlapBox` で完全に無反応、着地条件を満たすと `IgnoreCollision` が解除されソリッドになる（横に外れる／下から上昇中は再びすり抜け）ことを確認。
-- **カメラ**（`CameraFollow`, Main Camera）: 横方向のみ `Mathf.SmoothDamp`（`smoothTime` 0.15）で追従。Y/Z は開始時の値で固定（縦追従なし）。ortho size 6、位置 (0,-0.5,-10)。
+- **カメラ**（`CameraFollow`, Main Camera）: `Mathf.SmoothDamp`（`smoothTime` 0.15）で追従。**2026-09-13 に `followHorizontal`/`followVertical`（インスペクターのbool）を追加**し、横方向・縦方向を個別にオン/オフできるようにした（既定は横=true・縦=false＝これまで通りの横スクロール）。オフにした方向は`Start()`時点の位置で固定。Stage1〜3・5は既定のまま（横のみ）、**Stage4のみ横=false・縦=true**（縦スクロール、詳細は§9-1）。ortho size 6、位置 (0,-0.5,-10)（Stage4は別途§9-1参照）。
 - **レイヤー**: user layer 8 = "Ground"。`Grid/Ground`（Tilemap）/ `Grid/Platform`（Tilemap, Stage3 のみ）に設定。`Enemy` はわざと外している（敵の上に乗ってもジャンプが回復しないように）。
 
 ---
@@ -255,8 +286,12 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
     - `Disabled`: 自動リセットなし。
   - **事故防止**: `Policy = OnEveryBuild` のまま **Development Build 以外**をビルドしようとすると、`FreshBuildGuardBuildCheck`（`IPreprocessBuildWithReport`, `Assets/Scripts/Editor/`）が確認ダイアログを出してビルドを止める（バッチモードでは `BuildFailedException`）。「毎ビルド全消し」仕様を忘れたまま配布するのを防ぐ。リリース時は `Policy` を `OnTokenChange` / `Disabled` に変える。
 - **ボタンの `onClick` はすべて永続 UnityEvent リスナー**（Inspector に表示される。`UnityEventTools.AddPersistentListener` で設定済み）。結果画面の各ボタンも同様に `StageManager` の `OnNextStage`/`OnRetry`/`OnStageSelect` を指す。EventSystem は `InputSystemUIInputModule` + `Assets/InputSystem_Actions.inputactions`。
-- **Stage2, Stage4, Stage5**: Stage1 を複製して敵・高台を削除し、地面を**落とし穴なしの連続 Tilemap**（x セル [-19,27)）にしただけの**プレースホルダー**（Stage4/5 は Stage3 を複製した時点のもの。以下の Stage3 変更後も追随していない）。中身の設計は未着手。`stageSeed` は 22222 / 44444 / 55555。各シーンに `EventSystem` / `StageFlow`(`StageManager`+`ResultCanvas`) / `Goal`(@x25) / 結果パネルの `MenuNavigation` を含む（Stage1 と同構成）。
-- **Stage3（2026-09-11、地形・敵配置を Stage1 と同一化 → 同日中に高台を Tilemap 版へ置き換え）**: 地面・敵の配置を Stage1 と一致させた。地面 Tilemap は Stage1 と同じ x セル [-19,7) ＋ [10,30)（落とし穴 x≈7〜10 あり）。`Enemy_A`（HP1 @x≈-4）、`Enemy_Boss`（HP5 @x≈15, `HealthBar` 子付き）を Stage1 から複製して配置。高台は当初 Stage1 から GameObject 版 `OneWayPlatform` を複製していたが、同日中に **Tilemap 版の `Grid/Platform`**（x セル 2,3,4・天面行 y=-1、直下に柱行 y=-2）へ置き換えた（詳細は §7「一方通行の高台」）。`Goal`（@x25）・`stageSeed`（33333）はそのまま変更していない。
+- **Stage1（2026-09-13、敵配置を変更）**: 地面は x セル [-19,7) ＋ [10,30)（落とし穴 x≈7〜10 あり）。敵は **`Enemy1` を2体のみ**（@x≈-4, @x≈15。旧`Enemy_Boss`(HP5)は Enemy1(HP1) に置き換え済み）。Goal（@x28）は HP2以上の敵（ボス扱い）が生存しているとゴール不可（`Goal.AnyBossAlive()`）という既存仕様があるため、**Stage1に一撃で倒せないボスを置いてはいけない**（Stage1は`allowedActions`が`Dash`のみで攻撃自体ができないため、以前の`Enemy_Boss`配置だとゴール不可能なバグになっていた。今回の置き換えで解消）。
+- **Stage2（2026-09-13、Stage1と同一構成化）**: 地面・敵配置ともに Stage1 と完全に同じ（x セル [-19,7)＋[10,30)、`Enemy1`を@x≈-4,@x≈15の2体、Goal@x28）。詳細なレベルデザインは別プランナーが今後担当する前提の暫定構成。`stageSeed`は22222のまま。
+- **Stage3（2026-09-11、地形・敵配置を Stage1 と同一化 → 高台を Tilemap 版へ置き換え → 2026-09-13、敵をEnemy1+Enemy2に変更）**: 地面 Tilemap は Stage1 と同じ x セル [-19,7) ＋ [10,30)（落とし穴あり）。高台は **Tilemap 版の `Grid/Platform`**（x セル 2,3,4・天面行 y=-1、直下に柱行 y=-2）（詳細は §7「一方通行の高台」）。敵は `Enemy1`（HP1 @x≈-4）と `Enemy2`（据え置き砲台 @x≈15、旧`Enemy_Boss`から置き換え）。`Goal`（@x25）・`stageSeed`（33333）は変更なし。
+- **Stage4（2026-09-13、縦スクロールステージとして再構築）**: **Goal オブジェクトは無い**。地面 Tilemap（`Grid/Ground`）を、下部の床（xセル-5〜5, yセル-8〜-4）＋そこから上へ2ユニット間隔で交互に積んだ1マス厚の足場6段（surface y=0,2,4,6,8,10。タイル行はそれぞれの1つ下）に作り直した（プレイヤーの最大ジャンプ高さ ≈2.45 なので2ユニット間隔なら届く）。`Player`初期位置は`(0,-1.5,0)`に変更（横方向はカメラが追従しないため、床の中央に合わせた）。`Main Camera`は`CameraFollow.followHorizontal=false / followVertical=true`（x=0固定・y追従）、初期位置`(0,-1.5,-10)`。敵は`Enemy1`(@-3,2.5)・`Enemy2`(@-3,6.5)・**ボス`Enemy1_Boss`**(@0,10.5、一番上の足場)を配置。ボスは`Enemy1`プレハブのインスタンスに、シーン側オーバーライドで`Enemy.maxHealth=3`・`Enemy.clearStageOnDeath=true`を設定したもの（`EnemyPatrol`はそのまま残しているので足場の幅ぴったりで往復する）。**まだ地形・敵配置ともに「縦スクロールが正しく動くかを試すための簡易版」であり、正式なレベルデザインではない。** ボスを倒すと`Enemy.Die()`から`StageManager.Clear()`が直接呼ばれてクリアになる（Goalに触れた場合と同じ扱い）。
+  - **2026-09-14、高台（一方通行）を1セット追加**: ユーザーが自分でジャンプ力調整のために高台を試そうとしたが、`Grid/Ground`（`OneWayPlatform`が付いていない普通の地面Tilemap）に直接タイルを描いてしまい機能しなかった（天面が下から通り抜けられない＝一方通行ではなくただの全方向ブロックになっていた）ため、Stage3と同じ構造の`Grid/Platform`（Tilemap + TilemapRenderer(order -9) + Rigidbody2D(Static) + TilemapCollider2D(Merge) + CompositeCollider2D(Polygons) + TilemapColliderBootstrap + OneWayPlatform、layer=Ground）を新規作成し、タイルをそちらへ移設して修正。位置は天面 x=2,3,4 / y=-2（左右で正しく左/中央/右のアセットを使うよう修正）、柱 x=2,3,4 / y=-3。**一方通行の高台を機能させるには、タイルの colliderType 設定だけでなく、必ず`OneWayPlatform`付きの専用Tilemap GameObjectに置く必要がある**（既存の`Grid/Ground`に描いても一方通行にはならない）。
+- **Stage5（未着手、2026-09-13時点で構想のみ）**: Enemy3との決戦ステージになる予定だが、具体的なレベルデザインは未確定。Stage4と同様「Goalオブジェクトが無く、ボス撃破でクリア」という構成になる見込みなので、`Enemy.clearStageOnDeath`の仕組みはそのまま流用できる。
 - **使用可能アクション（`StageSet.stages[i].allowedActions`, 2026-09-09）**: Stage1 = `Dash` のみ（`disableCombos` も実質 on）／ Stage2 = `Dash`+`Attack` ／ Stage3〜5 = `Jump`+`Dash`+`Attack`。`StageSet.asset` で編集。
 - **結果画面**は各ステージシーン内の `StageFlow/ResultCanvas`（`ClearPanel` / `FailPanel`、`sortingOrder 100`、通常は非アクティブ）。`StageManager` が表示と遷移を管理。
   - 表示中は `Time.timeScale = 0`、`PlayerController` / `MainActionController` を無効化。
@@ -341,9 +376,8 @@ Player（Prefab インスタンス） @ (-10,-1.5)  [SpriteRenderer(PlayerArrow)
   AttackHitbox         [SpriteRenderer, BoxCollider2D(trigger), AttackHitbox]  通常は非アクティブ
   DebugBars            [PlayerDebugBars]
     ComboBar / CooldownBar  各 BG(SpriteRenderer) + Fill(SpriteRenderer) + Label(TextMesh)
-Enemy_A（Prefab インスタンス） @ (-4,-1.5)  [SpriteRenderer, BoxCollider2D, Enemy(HP1), EnemyPatrol]
-Enemy_Boss（Prefab インスタンス, EnemyBoss variant） @ (15,-1.25) [SpriteRenderer, BoxCollider2D, Enemy(HP複数), EnemyPatrol]
-  HealthBar            [EnemyHealthBar] → BG / Fill / Label(TextMesh)
+Enemy1（Prefab インスタンス, 旧名 Enemy_A） @ (-4,-1.5)  [SpriteRenderer, BoxCollider2D, Enemy(HP1), EnemyPatrol]
+Enemy1_B（Prefab インスタンス, 2026-09-13にEnemy_Bossから置き換え） @ (15,-1.5) [SpriteRenderer, BoxCollider2D, Enemy(HP1), EnemyPatrol]
 HUD_Canvas（Prefab インスタンス） [Canvas, CanvasScaler, GraphicRaycaster]
   ActionBar            [ActionBarUI] → Title(Text) + Slot0..3 (Image + 子 Label(Text))
   HealthPanel          [HealthUI] → HP0..2 (Image, 赤丸)
@@ -375,14 +409,16 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | `MainActionController` | Player | メインアクションの発動・クールタイム・コンボ・先行入力・ダッシュ処理・無敵。発動入力はスペース / エンター / テンキー Enter / 左クリック（2026-09-12、会話送り・メニュー決定と統一）。会話中／画面切り替え直後は入力停止。`StageSet.disableCombos` のステージでは `_combosEnabled=false`（コンボ無効） |
 | `PlayerController` | Player | 左右移動・向き・接地判定・コヨーテ/落下猶予・ノックバック受け・着地時間予測（`TryPredictLandingTime`）。会話中／画面切り替え直後（`InputLock`）は入力停止（§16-2） |
 | `PlayerHealth` | Player | 体力・被弾・無敵時間。`TakeDamage -> bool`、`OnHealthChanged` |
-| `AttackHitbox` | Player/AttackHitbox | 前方の一時的な攻撃判定（トリガー） |
+| `AttackHitbox` | Player/AttackHitbox | 前方の一時的な攻撃判定（トリガー）。`Enemy`にヒットすればダメージ、`Bullet`にヒットすれば`DestroyByAttack()`で即消滅（2026-09-13） |
 | `PlayerDebugBars` | Player/DebugBars | 頭上のデバッグゲージ 2 本。`Awake` で `!DeveloperSettings.Active` なら GameObject ごと非アクティブ（開発者用） |
-| `Enemy` | Enemy_A, Enemy_Boss | 体力・接触ダメージ + ノックバック・ダッシュ中すり抜け |
-| `EnemyPatrol` | Enemy_A, Enemy_Boss | 左右往復（transform 直接移動） |
+| `Enemy` | Enemy1, Enemy2, Enemy_Boss, Stage4のEnemy1_Boss | 体力・接触ダメージ + ノックバック・ダッシュ中すり抜け。`clearStageOnDeath`（既定false、2026-09-13追加）trueなら`Die()`時に`StageManager.Clear()`を呼ぶ（Goal無しステージのボス用） |
+| `EnemyPatrol` | Enemy1, Enemy_Boss, Stage4のEnemy1_Boss | 左右往復（transform 直接移動）。**2026-09-14**: `DialoguePlayer.IsPlaying`中は移動しない |
+| `EnemyShooter` | Enemy2（2026-09-13追加） | 一定間隔で`Bullet`を発射。発射の瞬間だけプレイヤーへホーミングするオプション付き。**2026-09-14**: `SpriteRenderer.isVisible`が false（画面外）のときは発射しない、`DialoguePlayer.IsPlaying`中はタイマーごと停止（行動しない）、ホーミング無効時はプレイヤーがいる左右方向へ発射（以前は常に右固定になっていたバグを修正） |
+| `Bullet` | Enemy2/Enemy3の弾（2026-09-13追加） | 発射時に設定した方向へ直進する弾。プレイヤー接触ダメージ・ダッシュ中すり抜け・地面接触/攻撃で消滅・`maxLifetime`で自動消滅 |
 | `EnemyHealthBar` | Enemy_Boss/HealthBar | ボスの体力ゲージ + 数値 |
 | `OneWayPlatform` | Stage3/`Grid/Platform`（Tilemap の CompositeCollider2D） | 一方通行 + 重なり率での着地判定。単体 Collider2D でも Tilemap の CompositeCollider2D でも動く（`Awake` が CompositeCollider2D を優先） |
 | `TilemapColliderBootstrap` | 各ステージ `Grid/Ground` | `Awake` でタイルを貼り直し、`TilemapCollider2D`/`CompositeCollider2D` の形状を再生成させる（eval 生成 Tilemap が Play 開始時に当たり判定を持たない問題の対策）。§7 |
-| `CameraFollow` | Main Camera | 横方向のみ追従。`target`（Player の Transform）は未設定なら Tag=Player から自動取得（2026-09-12） |
+| `CameraFollow` | Main Camera | 追従。`target`（Player の Transform）は未設定なら Tag=Player から自動取得（2026-09-12）。`followHorizontal`/`followVertical`（各既定true/false、2026-09-13追加）で横縦を個別にオン/オフでき、オフの方向は開始位置で固定（Stage4のみ縦追従に設定） |
 | `ActionBarUI` | HUD_Canvas/ActionBar | アクション先読み表示。`queue`（Player の MainActionQueue）は未設定なら Tag=Player から自動取得（2026-09-12） |
 | `HealthUI` | HUD_Canvas/HealthPanel | 体力アイコン表示。`playerHealth`（Player の PlayerHealth）は未設定なら Tag=Player から自動取得（2026-09-12） |
 | `StageSet` | ScriptableObject（`Assets/Resources/StageSet.asset`） | ステージの並び。`stages[]` = `displayName` + `sceneName` + `intro`（会話）+ `allowedActions`（そのステージの抽選対象）+ `disableCombos`。全体の `prologue`。`AllowedActionsAt`/`DisableCombosAt`/`IndexOfScene`。GameFlow が Resources.Load |
@@ -421,7 +457,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | ダッシュ | dashCooldown | 2 秒 | MainActionController |
 | 攻撃 | attackDuration / attackDamage | **0.4 秒**（2026-09-11 変更） / 1 | MainActionController |
 | 攻撃 | attackCooldown | 2 秒 | MainActionController |
-| 攻撃 | forwardOffset（判定の前方オフセット） | 0.9 | AttackHitbox |
+| 攻撃 | 判定の前方オフセット | Transform.localPosition.x の絶対値（既定 0.9、専用フィールドは廃止 2026-09-13） | AttackHitbox |
 | コンボ | comboGraceTime（受付猶予） | 0.8 秒 | MainActionController |
 | 先行入力 | inputBufferTime（CD 明け前の受付） | 0.1 秒（≒6フレーム） | MainActionController |
 | 先行入力 | BufferedInputMaxLife（記憶の失効, const） | 0.4 秒 | MainActionController |
@@ -432,8 +468,12 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | 体力 | maxHealth / invulnTime | 3 / 0.8 秒 | PlayerHealth |
 | 敵 | maxHealth / contactDamage | 1 / 1 | Enemy |
 | 敵 | knockbackSpeed / knockbackUpSpeed / knockbackDuration | 8 / 4 / 0.25 秒 | Enemy |
+| 敵 | clearStageOnDeath（倒すと即クリア） | false（Stage4のボスだけtrue） | Enemy |
+| 砲台 | fireInterval / bulletSpeed / homingOnFire | 2 秒 / 6 / true | EnemyShooter |
+| 弾 | damage / maxLifetime | 1 / 6 秒 | Bullet |
 | 高台 | requiredOverlap / topTolerance | 0.5 / 0.05 | OneWayPlatform |
 | カメラ | smoothTime | 0.15 | CameraFollow |
+| カメラ | followHorizontal / followVertical | true / false（Stage4のみ false / true） | CameraFollow |
 | キュー | slotCount / stageSeed | 4 / 12345（Stage2〜5: 22222 / 33333 / 44444 / 55555） | MainActionQueue |
 | 物理 | Rigidbody2D.gravityScale | 3 | Player |
 | ステージ | killY（落下死ライン） | -12 | StageManager |
@@ -468,14 +508,16 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 ## 13. 未実装 / TODO
 
 **画面の流れは最小実装で通ったが、以下は未着手 / 仮:**
-- **Stage2, Stage4, Stage5 の中身**（今は落とし穴なしの連続 Tilemap 地面のみ。敵・地形・ゴール配置など）。**Stage3 は Stage1 と同一構成に変更済み**（2026-09-11）だが、レベルデザインとして意図されたものではなく暫定。
+- **Stage2, Stage4, Stage5 の中身**。Stage2は2026-09-13にStage1と完全同一構成化（暫定、別プランナーが詳細設計予定）。Stage4は2026-09-13に縦スクロール構成へ作り直したが「スクロールが動くかの簡易確認用」で正式なレベルデザインではない。Stage5はEnemy3との決戦になる想定のみでレベル自体は未着手。Stage3はStage1と同一構成（2026-09-11）＋Enemy2追加（2026-09-13）。
 - **会話テキストは全部仮**（`DialogueSequence` アセットの中身）。プロローグの一枚絵も未準備（仮イラスト表示中）。本番の絵は主人公＝左 / ダンジョン＝右の構図で用意予定。
 - **会話 UI の体裁**（日本語表示自体は 2026-09-11 に対応済み — §9-2「日本語フォント」。文字送り演出は 2026-09-12 対応済み — §9-2。常用漢字外の漢字は現状のフォントサブセットに無いので表示できない）。
 - **UI の日本語化**（メニューは今は英語のまま。日本語にする場合、`Text` はレンダリングだけなら §9-2 のフォントを流用できるが、見た目を作り込むなら TMP 移行も検討）。
 - 結果画面 / メニューの見た目（配置・色は最小限）。
 - **ロック中ステージの見た目**は Unity 既定のグレーアウトのみ（「LOCKED」表記や鍵アイコンは未実装）。クリア進捗のセーブは `PlayerPrefs` の 1 キーだけ（スロット/複数セーブ無し）。
 - `StageManager.nextButton` の表示可否は `GameFlow.CurrentStageIndex` 依存。エディタでステージシーンを直接 Play すると index=0 扱いになる（フロー経由なら正しい）。
-- ボスの行動（今の `Enemy_Boss` は HP が多いだけの巡回。攻撃パターン無し）。1 発 1 ダメージ・攻撃CT 2秒なので撃破は単調。
+- ボスの行動（`Enemy_Boss` / Stage4の`Enemy1_Boss` は今のところ HP が多いだけの巡回。攻撃パターン無し）。
+- **Enemy3（3行動ミニボス）が未実装**。仕様は §6-3 に確定済み（2026-09-13）。Enemy1・Enemy2 は実装済み（§6-1 / §6-2）。
+- **Stage4のボス`Enemy1_Boss`は仮**。ユーザー指定により「Enemy1のHPを3にしただけ」の暫定実装（頭上体力バー無し。`Enemy1.prefab`に体力バーの子オブジェクトが無いため）。本番のボス仕様が決まり次第差し替え予定。
 - **地面 / 高台 Tilemap の本番タイル素材**（今は仮の `GroundTile.png` と `PlatformTop*.png`/`PlatformPillar*.png`。90×90px / PPU 90 を保って上書きすれば差し替わる。高台は天面・柱それぞれ左/中央/右で見た目を区別できる本番絵を想定）。
 - **高台（Tilemap 版）は現状 Stage3 に 1 基のみ**。複数配置する場合、`OneWayPlatform` の着地判定が `_col.bounds`（＝合成コライダー全体の外接矩形）ベースなので、同じ `Platform` Tilemap 上に離れた高台を複数置くと bounds が全体を覆ってしまい正しく判定できない。複数基必要になったら高台ごとに別の `Platform` GameObject（別 Tilemap）に分けること。
 - ステージのカメラ左右クランプ、スポーン地点の明示。
@@ -506,8 +548,8 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 
 - **`Assets/Prefabs/Player.prefab`**: Stage1 の `Player`（子の `AttackHitbox` / `DebugBars` ツリーごと）をそのまま Prefab 化。Stage2〜5 は元の GameObject を削除し、このプレハブをインスタンス化して差し替えた。
   - **ステージごとに残す上書き（インスタンス側の override）**: `Transform.position`（全ステージ実は (-10,-1.5,0) で共通）、`MainActionQueue.stageSeed`（Stage1〜5 = 12345 / 22222 / 33333 / 44444 / 55555）。他のフィールドはプレハブ側の値がそのまま使われる。
-- **`Assets/Prefabs/Enemy.prefab`**: Stage1 の `Enemy_A`（HP1 の雑魚。`Enemy` + `EnemyPatrol`）を Prefab 化。Stage3 の `Enemy_A` はこのプレハブのインスタンスに差し替え（Stage2/4/5 に敵は無し、元々の仕様どおり）。
-- **`Assets/Prefabs/EnemyBoss.prefab`**: `Enemy.prefab` の **Prefab Variant**（`PrefabUtility` の Variant 機構。ベースの差分だけを持つ）。差分は `Enemy.maxHealth`（1→5）、`EnemyPatrol`（speed 1.5→1 / range 3→2）、そして `HealthBar` 子（`EnemyHealthBar` + BG/Fill/Label）の追加。Stage1 の元の `Enemy_Boss` から `HealthBar` 子をそのまま移設して作成したので、見た目・参照とも作り直しではなく既存資産の再利用。Stage3 の `Enemy_Boss` もこのプレハブのインスタンスに差し替え。
+- **`Assets/Prefabs/Enemy.prefab`**（**2026-09-13 に `Enemy1.prefab` へリネーム**、詳細は §6-1）: Stage1 の `Enemy_A`（HP1 の雑魚。`Enemy` + `EnemyPatrol`）を Prefab 化。Stage3 の `Enemy_A` はこのプレハブのインスタンスに差し替え（Stage2/4/5 に敵は無し、元々の仕様どおり）。
+- **`Assets/Prefabs/EnemyBoss.prefab`**: `Enemy.prefab`（現 `Enemy1.prefab`）の **Prefab Variant**（`PrefabUtility` の Variant 機構。ベースの差分だけを持つ）。差分は `Enemy.maxHealth`（1→5）、`EnemyPatrol`（speed 1.5→1 / range 3→2）、そして `HealthBar` 子（`EnemyHealthBar` + BG/Fill/Label）の追加。Stage1 の元の `Enemy_Boss` から `HealthBar` 子をそのまま移設して作成したので、見た目・参照とも作り直しではなく既存資産の再利用。Stage3 の `Enemy_Boss` もこのプレハブのインスタンスに差し替え。
   - 今後 HP や巡回範囲を変えたいときは `EnemyBoss.prefab` 自体を編集すれば、Stage1・Stage3 両方の `Enemy_Boss` に自動反映される（**Play で実証済み**: `Enemy.prefab` の `contactDamage` を一時的に 1→2 に変えて、Stage1 のシーンファイルには一切触れずに `Enemy_A` インスタンス側が 2 を返すことを確認 → 1 に戻した）。
 - **`Assets/Prefabs/Goal.prefab`**: Stage1 の `Goal` を Prefab 化。`stageManager` フィールドは未設定のままにしてある（`Awake` で `FindAnyObjectByType<StageManager>()` に自動解決するので、シーンをまたいだ参照を持たせる必要が無い＝そのままプレハブ化しても安全）。Stage2〜5 の `Goal` もこのプレハブのインスタンスに差し替え。位置はステージごとに override（Stage1 = x28、Stage2〜5 = x25）。
 - **`Assets/Prefabs/HUD_Canvas.prefab`**（2026-09-12 追加分）: Stage1 の `HUD_Canvas`（`ActionBarUI` + `HealthPanel`）を Prefab 化。Stage2〜5 もこのプレハブのインスタンスに差し替え。override は無し（全ステージ完全に同一構成）。

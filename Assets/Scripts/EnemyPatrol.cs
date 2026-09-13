@@ -23,6 +23,8 @@ public class EnemyPatrol : MonoBehaviour
 
     private void Update()
     {
+        if (DialoguePlayer.IsPlaying) return; // ストーリー再生中は敵を行動させない
+
         Vector3 p = transform.position;
         p.x += _dir * speed * Time.deltaTime;
 

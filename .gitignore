@@ -108,3 +108,7 @@ InitTestScene*.unity*
 # Scene recovery files Unity creates after a crash/force-quit
 /[Aa]ssets/_Recovery/
 /[Aa]ssets/_Recovery.meta
+
+# Local-only test material for trying out import workflows (not part of the game)
+/[Aa]ssets/_ImportTests/
+/[Aa]ssets/_ImportTests.meta
