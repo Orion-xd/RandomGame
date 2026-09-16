@@ -24,6 +24,10 @@ public class Enemy : MonoBehaviour
     [Tooltip("ノックバックで入力を受け付けなくする時間")]
     [SerializeField] private float knockbackDuration = 0.25f;
 
+    [Header("ステージクリア")]
+    [Tooltip("この敵を倒した瞬間にステージクリアとする（Goal オブジェクトが無いステージのボス用）")]
+    [SerializeField] private bool clearStageOnDeath = false;
+
     private Collider2D _col;
     private Collider2D _playerCollider;
     private PlayerController _playerController;
@@ -84,6 +88,11 @@ public class Enemy : MonoBehaviour
 
     private void Die()
     {
+        if (clearStageOnDeath)
+        {
+            var stageManager = FindAnyObjectByType<StageManager>();
+            if (stageManager != null) stageManager.Clear();
+        }
         Destroy(gameObject);
     }
 

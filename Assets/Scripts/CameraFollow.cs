@@ -1,7 +1,9 @@
 using UnityEngine;
 
 /// <summary>
-/// カメラをプレイヤーに追従させる。横スクロールのみ（Y は開始時の高さで固定）。
+/// カメラをプレイヤーに追従させる。横方向・縦方向それぞれ個別に追従のオン/オフを切り替えられる
+/// （横スクロールのステージは横のみ、縦スクロールのステージは縦のみ、という使い分けを想定）。
+/// オフにした方向は開始時の位置で固定される。
 ///
 /// `target` は他 GameObject（Player）への直接参照のため、Player を削除して作り直す
 /// （Prefab 化に伴う差し替えなど）と参照が外れてカメラが追従しなくなる事故が起きやすい。
@@ -15,10 +17,20 @@ public class CameraFollow : MonoBehaviour
     [SerializeField] private float smoothTime = 0.15f;
     [Tooltip("プレイヤーからの水平オフセット")]
     [SerializeField] private float xOffset = 0f;
+    [Tooltip("プレイヤーからの垂直オフセット")]
+    [SerializeField] private float yOffset = 0f;
 
+    [Header("追従方向")]
+    [Tooltip("横方向に追従するか。オフなら開始時の X で固定（縦スクロールのステージ用）")]
+    [SerializeField] private bool followHorizontal = true;
+    [Tooltip("縦方向に追従するか。オフなら開始時の Y で固定（横スクロールのステージ用）")]
+    [SerializeField] private bool followVertical = false;
+
+    private float _fixedX;
     private float _fixedY;
     private float _fixedZ;
     private float _velX;
+    private float _velY;
 
     private void Awake()
     {
@@ -32,6 +44,7 @@ public class CameraFollow : MonoBehaviour
 
     private void Start()
     {
+        _fixedX = transform.position.x;
         _fixedY = transform.position.y;
         _fixedZ = transform.position.z;
     }
@@ -40,8 +53,20 @@ public class CameraFollow : MonoBehaviour
     {
         if (target == null) return;
 
-        float targetX = target.position.x + xOffset;
-        float x = Mathf.SmoothDamp(transform.position.x, targetX, ref _velX, smoothTime);
-        transform.position = new Vector3(x, _fixedY, _fixedZ); // 縦追従なし
+        float x = _fixedX;
+        if (followHorizontal)
+        {
+            float targetX = target.position.x + xOffset;
+            x = Mathf.SmoothDamp(transform.position.x, targetX, ref _velX, smoothTime);
+        }
+
+        float y = _fixedY;
+        if (followVertical)
+        {
+            float targetY = target.position.y + yOffset;
+            y = Mathf.SmoothDamp(transform.position.y, targetY, ref _velY, smoothTime);
+        }
+
+        transform.position = new Vector3(x, y, _fixedZ);
     }
 }

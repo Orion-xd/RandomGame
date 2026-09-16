@@ -4,6 +4,7 @@ using UnityEngine;
 /// <summary>
 /// プレイヤーの前方に一定時間だけ出現する攻撃判定。GameObject の有効/無効で ON/OFF する。
 /// 有効化中に敵へ触れると 1 回だけダメージを与える（同じ敵を多重ヒットしない）。
+/// 敵の弾（Bullet）に触れた場合は、体力の概念が無いので一撃で即座に破壊する。
 /// </summary>
 [RequireComponent(typeof(Collider2D))]
 public class AttackHitbox : MonoBehaviour
@@ -37,8 +38,15 @@ public class AttackHitbox : MonoBehaviour
     private void TryHit(Collider2D other)
     {
         var enemy = other.GetComponentInParent<Enemy>();
-        if (enemy == null || _hit.Contains(enemy)) return;
-        _hit.Add(enemy);
-        enemy.TakeDamage(_damage);
+        if (enemy != null)
+        {
+            if (_hit.Contains(enemy)) return;
+            _hit.Add(enemy);
+            enemy.TakeDamage(_damage);
+            return;
+        }
+
+        var bullet = other.GetComponentInParent<Bullet>();
+        if (bullet != null) bullet.DestroyByAttack();
     }
 }
