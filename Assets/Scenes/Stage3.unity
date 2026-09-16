@@ -711,7 +711,7 @@ GameObject:
   - component: {fileID: 1053400321}
   - component: {fileID: 1053400320}
   m_Layer: 8
-  m_Name: Platform
+  m_Name: HighGround
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
