@@ -21,6 +21,11 @@ public class Enemy3AI : MonoBehaviour
     [Tooltip("弾の飛行速度（②③共通）")]
     [SerializeField] private float bulletSpeed = 5f;
 
+    [Header("行動選択の確率")]
+    [Range(0f, 1f)]
+    [Tooltip("①離脱移動が終わった後、②放射弾を選ぶ確率（0〜1）。残り(1-この値)が③追尾弾になる")]
+    [SerializeField] private float radialChance = 0.5f;
+
     [Header("②放射弾")]
     [Tooltip("放射状に同時発射する弾の数")]
     [SerializeField] private int radialBulletCount = 8;
@@ -106,6 +111,9 @@ public class Enemy3AI : MonoBehaviour
 
     private void UpdateRetreating()
     {
+        // 画面外にいるときは移動/発射しない。
+        if (_sr != null && !_sr.isVisible) return;
+
         float dx = transform.position.x - _player.position.x;
         _dir = dx < 0f ? -1 : 1; // プレイヤーと反対方向へ
 
@@ -114,14 +122,12 @@ public class Enemy3AI : MonoBehaviour
         transform.position = p;
         if (_sr != null) _sr.flipX = _dir < 0;
 
+        // プレイヤーから十分離れていれば、次の攻撃を行う。そうでなければ、このフレームにおける行動を終了する
         float distance = Mathf.Abs(transform.position.x - _player.position.x);
         if (distance < retreatDistance) return;
 
-        // 画面外にいるときは発射しない（画面外からの理不尽な弾を防ぐ）。
-        // 条件を満たしていなければ、乗れる位置に戻るまで離脱移動を続ける扱いにする。
-        if (_sr != null && !_sr.isVisible) return;
-
-        if (Random.value < 0.5f) FireRadial();
+        // 放射状に発射/追尾弾を発射のどちらかの攻撃を、radialChance の確率で抽選して実行する
+        if (Random.value < radialChance) FireRadial();
         else FireHoming();
     }
 

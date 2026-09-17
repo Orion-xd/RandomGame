@@ -98,10 +98,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8f8f067b82885884694daacca3462fbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Enemy3AI
-  moveSpeed: 2
-  retreatDistance: 5
+  moveSpeed: 4
+  retreatDistance: 7
   bulletPrefab: {fileID: 8944913330095386953, guid: eb63c598242ca574681f998abce32ac2, type: 3}
   bulletSpeed: 5
+  radialChance: 0.5
   radialBulletCount: 8
   radialCooldown: 3
   homingTurnSpeed: 90
