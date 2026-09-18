@@ -39,6 +39,9 @@ public class Enemy : MonoBehaviour
     public int Health => _health;
     public int MaxHealth => maxHealth;
 
+    /// <summary>ダメージを受けるたびに発火（体力が実際に減った時のみ）。ボスの行動制御などに使う。</summary>
+    public event System.Action OnDamaged;
+
     private void Awake()
     {
         _col = GetComponent<Collider2D>();
@@ -81,6 +84,7 @@ public class Enemy : MonoBehaviour
         if (_health <= 0) return;
 
         _health -= amount;
+        OnDamaged?.Invoke();
         if (healthBar != null && maxHealth >= 2) healthBar.Set(Mathf.Max(_health, 0), maxHealth);
 
         if (_health <= 0) Die();

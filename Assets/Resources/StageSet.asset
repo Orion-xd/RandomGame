@@ -39,8 +39,3 @@ MonoBehaviour:
     intro: {fileID: 11400000, guid: 7ae84ca9687afa647abbdabda0e98188, type: 2}
     allowedActions: 000000000100000002000000
     disableCombos: 0
-  - displayName: 
-    sceneName: _Test
-    intro: {fileID: 0}
-    allowedActions: 000000000100000002000000
-    disableCombos: 0

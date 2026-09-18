@@ -167,7 +167,7 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 
 ## 6. 敵（`Enemy` + `EnemyPatrol` + `EnemyHealthBar`）
 
-敵キャラは3種類（Enemy1/Enemy2/Enemy3）を計画中（2026-09-13、企画側の仕様確定）。**Enemy1・Enemy2は実装済み**、Enemy3は仕様確定のみで未実装。
+敵キャラは3種類（Enemy1/Enemy2/Enemy3）を計画中（2026-09-13、企画側の仕様確定）。**Enemy1・Enemy2・Enemy3すべて実装済み**（2026-09-16、Enemy3=ラスボスとしてStage5に配置）。
 
 ### 6-0. 共通の`Enemy`コンポーネント（`Assets/Scripts/Enemy.cs`）
 
@@ -192,20 +192,31 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 - スクリプト: `Enemy`（共通、`EnemyPatrol`は付けない＝移動しない） + `EnemyShooter`（発射のみ担当）。プレハブ: `Assets/Prefabs/Enemy2.prefab`（紫色のSpriteRendererでEnemy1と区別）。
   - **バグ修正（2026-09-14）**: プレハブ作成時にスプライト未割り当ての状態で`BoxCollider2D`を追加したため`size=(0,0)`になっており、プレイヤーの攻撃（AttackHitbox）が一切当たらなかった。`(1,1)`に修正済み（Stage3/Stage4のインスタンス側でコライダーを上書きしていなかったため、プレハブ修正だけで両方に反映された）。
 - `EnemyShooter`: `fireInterval`秒ごとに`Bullet.prefab`を`firePoint`（未設定なら自身の位置）から発射。`homingOnFire`（既定true）がtrueなら発射位置からプレイヤー方向へのベクトルを発射時に一度だけ計算しその方向へ直進。falseなら**上下は狙わず、プレイヤーが左右どちらにいるかだけを見て`Vector2.left`/`Vector2.right`へ水平に発射**（2026-09-14修正。以前はプレイヤーの位置によらず常に`transform.right`固定で右にしか飛ばなかったバグがあった）。プレイヤーが見つからない場合のみ`transform.right`にフォールバック。`bulletSpeed`・`fireInterval`・`homingOnFire`はいずれもインスペクターから調整可。
-- `Bullet.cs`: `Configure(direction, speed, damage)`で方向・速度・威力を受け取り、毎フレーム`transform.position`を直進させる（Rigidbody無し、EnemyPatrolと同じ「transform直接移動」方式）。プレイヤー本体に接触でダメージ（既定1）+ 弾自身は消滅、ダッシュ中は`Physics2D.IgnoreCollision`ですり抜け（Enemyと同じFixedUpdateパターン）、Ground レイヤーのコライダーに当たると消滅、`maxLifetime`（既定6秒）経過でも自動消滅（画面外に飛び続けて残留するのを防止。仕様上の要求ではなく安全策として追加）。
+- `Bullet.cs`: `Configure(direction, speed, damage)`で方向・速度・威力を受け取り、毎フレーム`transform.position`を直進させる。**当たり判定はトリガー**（`Awake()`で`isTrigger = true`を強制。2026-09-17に非トリガーから変更、理由は下記バグ修正参照）。プレイヤー本体に触れるとダメージ（既定1）+ 弾自身は消滅、ダッシュ中は`Physics2D.IgnoreCollision`ですり抜け（Enemyと同じFixedUpdateパターン。トリガーでも`IgnoreCollision`は効く）、Ground レイヤーのコライダーに触れると消滅、`maxLifetime`（既定6秒）経過でも自動消滅（画面外に飛び続けて残留するのを防止。仕様上の要求ではなく安全策として追加）。**2026-09-17**: この時間経過による自動消滅は**追尾弾（`homingTurnSpeed > 0`）には適用しない**よう`Start()`で分岐した。追尾弾は「プレイヤーに命中／地面に接触／ボスが攻撃を受ける」のいずれかが起こるまで永久に飛び続ける仕様のため（Enemy2の直進弾・Enemy3の②放射弾は従来通り`maxLifetime`で消える）。
+  - **一連のバグ修正（2026-09-17、地面すり抜け→トリガー化で最終解決）**: 「地面に接触しても消えず、そのまま地面の中を飛んでいく」という不具合をユーザーが発見（デバッグログで`HandleCollision`自体が呼ばれていないことまで特定してもらった）。当初の原因は`Bullet`に`Rigidbody2D`が一切付いていなかったこと。**非トリガーの物理衝突**はUnityのPhysics2Dでは`Rigidbody2D`の`BodyType`の組み合わせで判定の有無が決まり、`Dynamic`が絡まない組み合わせ（Static-Static, Static-Kinematic, Kinematic-Kinematic）は衝突イベントが一切発生しない。`Rigidbody2D`が無いコライダーは実質Staticとして扱われるため、地面（`Static`）と弾（Rigidbody2D無し＝実質Static）の組み合わせでは`OnCollisionEnter2D`/`Stay2D`が発火しなかった（プレイヤーへの命中は、プレイヤー側が`Dynamic`のため正常に動いていた）。
+    - 1回目の修正で`Rigidbody2D`（Body Type = Kinematic）を追加したが、**Kinematic vs Staticも衝突判定が発生しない組み合わせ**であるため、これでも直っていなかった（ユーザーが実機で確認して発覚）。
+    - 2回目の修正で`Rigidbody2D`を**Dynamic**（`gravityScale=0`）に変更し、移動も`linearVelocity`経由にしたところ、今度は「発射直後、弾が生成された位置から動かなくなる」という新しい不具合が発生。原因は、弾が発射元の敵自身の位置（＝当たり判定が重なった状態）で生成されるため、Dynamic化によって**発射元自身の当たり判定と物理的に衝突**してしまっていたこと（発射元の敵は`Rigidbody2D`が無い＝実質Staticで、Dynamic vs Staticは衝突判定される組み合わせのため）。
+    - **3回目の修正（採用・最終形）**: ユーザーの指摘により、そもそも弾は「プレイヤーを物理的に押し返す必要が無く、接触の検知だけできればよい」ため、**`isTrigger = true`にする**のが正しい解決だったと判明。トリガー判定は「どちらか一方がトリガーで、どちらかの側に`Rigidbody2D`があればよい」という、非トリガーの物理衝突よりずっと緩いルールで発生するため、`BodyType`の組み合わせを一切気にする必要が無くなる。`transform.position`直接書き換えの単純な移動方法に戻し、`OnCollisionEnter2D`/`Stay2D`を`OnTriggerEnter2D`/`Stay2D`に変更。発射元との衝突が問題にならなくなったため、2回目の修正で追加した`IgnoreCollisionWithShooter`は不要になり削除（`HandleTrigger`内の「`Enemy`に触れたら何もせず貫通する」という分岐だけで、発射元を含むあらゆる敵をすり抜けるようになる）。
+    - **`Rigidbody2D`の要否について（2026-09-17、ユーザーが実機で最終確認）**: 一旦`Bullet.prefab`から`Rigidbody2D`を削除したが、それだと地面接触の判定が働かず、弾が地面をすり抜けたままだった（ユーザーが発見）。トリガー判定の「どちらかの側に`Rigidbody2D`があればよい」という条件を満たすため、**`Bullet.prefab`に`Rigidbody2D`（Body Type = Kinematic）を付け直す必要がある**とユーザーが判断し、実際に付け直したことで正しく動作するようになった。それ以外（`isTrigger = true`、`transform.position`直接移動、`IgnoreCollisionWithShooter`を使わない構成）はそのままで問題なし。
 - 敵本体（`Enemy`側）の接触ダメージ／攻撃一撃死／ジャンプ飛び越え／ダッシュすり抜けは6-0の共通挙動そのまま。
 - **2026-09-14**: `EnemyShooter`は`DialoguePlayer.IsPlaying`中はタイマーの加算ごと止まる（ストーリー中は発射しない）。また`SpriteRenderer.isVisible`（＝いずれかのカメラに映っているか、Unity標準のカリング判定）が false のときは発射をスキップする（画面外からの理不尽な弾を防ぐ）。どちらもタイマー自体は発射のたびに0にリセットされる通常のロジックのままなので、条件を満たさない間は単に「その回の発射を見送る」だけで、条件が揃った次の周期でまた判定される。
 
-### 6-3. Enemy3（未実装・仕様確定のみ、2026-09-13）— 3行動のミニボス
+### 6-3. Enemy3（実装済み、2026-09-16）— 3行動のラスボス
 
-- 体力複数（一撃では倒せない、プレイヤー攻撃1発＝1ダメージ、頭上に体力バー表示）。
-- 3種の行動を排他的に実行。行動①終了後、②③を抽選。②③には発動後クールタイムがあり、その間は無行動。
-  - **①離脱移動**: プレイヤーから遠ざかる方向へ左右移動。一定距離離れるまで継続。
-  - **②放射弾**: 自身を中心に複数弾を放射状に発射（ホーミング無し、角度・弾数は固定値としてインスペクター/スクリプトで指定）。発射した瞬間にクールタイム開始。
-  - **③追尾弾**: プレイヤーへホーミングし続ける弾を1発発射。弾がプレイヤーに命中 or 地面/壁に当たって消滅した瞬間にクールタイム開始（弾が存在する間はクールタイムに入らず、何もできない）。
-- 弾は地面/壁（壁は未実装）に当たると消滅する（＝弾を地形に誘導するのも攻略法）。
-- 移動速度・①を終了する距離・各行動のクールタイム・弾速・同時発射数・ホーミング強度は、いずれもインスペクターから調整可。
-- 弾・敵本体の接触/攻撃/ジャンプ/ダッシュのルールは6-0と同じ（ただし敵本体は多段階HP）。
+- スクリプト: `Enemy`（共通、`EnemyPatrol`は付けない） + `Enemy3AI`（移動＋発射の状態機械）。プレハブ: `Assets/Prefabs/Enemy3.prefab`（`EnemyBoss.prefab`の構造を流用して作成＝`HealthBar`子をそのまま持つ。`maxHealth=8`、`contactDamage=1`、`clearStageOnDeath=true`。SpriteRendererは黒に近い暗赤 `(0.15, 0.05, 0.08)` でEnemy1/2と区別）。
+- `Enemy3AI`の状態機械（`State` enum: `Retreating` / `CoolingDown` / `WaitingForHomingBullet`）:
+  - **①離脱移動（`Retreating`）**: `moveSpeed`でプレイヤーと反対方向へ移動。プレイヤーとの距離が`retreatDistance`（既定5）以上になったら終了。**2026-09-17、ユーザー修正**: `SpriteRenderer.isVisible`（画面外）判定は`UpdateRetreating()`の一番最初で行うよう変更（画面外にいる間は移動そのものも一切行わない。以前は距離判定の後、発射の可否だけを画面外判定していたため、画面外にいる間もずっと移動し続け、ボスが気づかないうちに遠くまで移動してしまう不具合があった）。画面外の間は移動も攻撃選択もせず、その場で待機する。visibleに戻ったら再開し、距離条件を満たしていれば`radialChance`（既定0.5、**2026-09-17追加、インスペクターで調整可**）の確率で②、残りの確率で③を発動する（以前はコード中に`0.5f`を直接埋め込んでいた）。
+  - **②放射弾**: `radialBulletCount`（既定8）個の弾を、`360°/個数`で均等な角度に同時発射（ホーミング無し、`Bullet.Configure`のhomingパラメータ省略＝0のまま）。発射した瞬間に`radialCooldown`（既定3秒）の`CoolingDown`へ。
+  - **③追尾弾（`WaitingForHomingBullet`）**: 発射直後のプレイヤー方向へ`Bullet`を1発発射し、`Bullet.Configure`の第4引数`homingTurnSpeed`（既定90度/秒＝ホーミングの強度）を渡して継続追尾を有効化。発射した弾への参照を保持し、それが破壊される（`== null`になる）まで`WaitingForHomingBullet`のまま何もしない。破壊された瞬間に`homingCooldown`（既定3秒）の`CoolingDown`へ移行する（弾が生きている間はクールタイムが進まないという仕様通り）。
+    - **2026-09-16追加**: ボス自身がプレイヤーの攻撃を受けた瞬間、追尾弾を発射中であれば**その弾を問答無用で消滅させ、即座にクールタイムへ移行する**。`Enemy.cs`に`public event Action OnDamaged`を追加し（`TakeDamage`で体力が実際に減るたびに発火）、`Enemy3AI`がこれを購読して`_state == WaitingForHomingBullet`のときだけ弾を`Destroy`してクールタイムへ切り替える。それ以外の状態（離脱移動中・クールタイム中）で攻撃を受けても、この処理は何もしない（ダメージ自体は6-0の通常経路でそのまま入る）。
+    - **2026-09-17**: 追尾弾は`Bullet.maxLifetime`による時間経過での自動消滅の対象から外した。**「プレイヤーに命中／地面に接触／ボスが攻撃を受ける」の3つのいずれかが起こるまで永久に飛び続ける**仕様（`Bullet.Start()`で`homingTurnSpeed > 0`のときは`Destroy(gameObject, maxLifetime)`を呼ばないよう分岐）。
+  - **`CoolingDown`**: タイマーが0になったら`Retreating`へ戻り、①からループする。
+  - `DialoguePlayer.IsPlaying`中は`Update()`が早期returnし、状態機械ごと完全に停止する（Enemy1/2と同じ理不尽防止ルール）。
+- **`Bullet.cs`の拡張（2026-09-16）**: `Configure(direction, speed, damage, homingTurnSpeedDegPerSec = 0)`に第4引数を追加。0（既定、Enemy2はこのまま）なら従来通り発射時の方向に直進するだけ。0より大きいと、`Update()`毎に`Vector3.RotateTowards`で現在の進行方向をプレイヤー方向へ最大`homingTurnSpeedDegPerSec`度/秒だけ回転させ続ける「継続ホーミング」になる（＝仕様の「ホーミングし続ける弾」「ホーミングの強度」に対応）。Enemy2の弾は第4引数を渡さないため影響を受けない。
+- 弾は地面/壁（壁は未実装）に当たると消滅する。既存の`Bullet.cs`の地面判定・攻撃での即破壊・ダッシュすり抜けをそのまま利用（6-0参照）。
+- 敵本体の接触ダメージ／攻撃1発＝1ダメージ（一撃死ではない）／ジャンプ飛び越え／ダッシュすり抜けは6-0の共通挙動そのまま。頭上体力バーは`EnemyHealthBar`（`EnemyBoss.prefab`と同じ仕組み）。
+- Play で検証済み: 放射弾は指定個数ぶん均等な8方向（45度間隔）に飛ぶこと、追尾弾は実際にプレイヤー方向へ`RotateTowards`で旋回すること、体力0でボスを倒すと`clearStageOnDeath`経由でクリアパネルが表示される（`Time.timeScale=0`になる）ことを確認。
+- **未指定だった数値はこちらで判断して実装**（後からInspectorで自由に調整可能）: 最大体力8、離脱移動速度2、離脱終了距離5、②③のクールタイムは各3秒、放射弾8個、ホーミング旋回速度90度/秒、弾速5。ゲームバランスとして違和感があれば調整してほしい。
 
 ---
 
@@ -318,7 +329,7 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
     - **修正**: `Grid/HighGround`（低い方、x=2-4）はそのまま。左側の高台を`Grid/HighGround2`（柱 x=-4〜-2 y=-3〜-1 + 天面 y=0）という**独立したTilemap**に分割。真ん中の`GroundTile`の島（x=2-4,y=2）は一方通行にする意図が無い普通の地面なので`Grid/Ground`へ移設。天面のみ・柱なしで空中に浮いていた`PlatformTallUpper`（y=4）は、ユーザーが「適当に置いただけ」と確認したため削除済み。Play で残った高台がそれぞれ個別に`pathCount=1`・独立したboundsになっていること、`HighGround2`で「上に乗って下降中はソリッド」「柱の中を上昇中はすり抜け」を確認済み。
     - **命名の整理（2026-09-16）**: 「高台」の英訳が"high ground"であることから、`Platform`という名前を使っていたGameObject・アセット群をすべて`HighGround`系の名前へ統一（`Grid/Platform`→`Grid/HighGround`、`PlatformTop*`/`PlatformPillar*`タイル→`HighGroundTop*`/`HighGroundPillar*`、プレハブ→`HighGroundTilemap.prefab`）。スクリプト名`OneWayPlatform.cs`自体は当たり判定の挙動を表す技術的な名前として変更していない（GameObject名とコンポーネント名が一致しなくなる点は他プランナーへの説明で明記が必要）。
     - **高台を追加する際の運用（2026-09-16、ユーザー方針）**: `HighGroundTilemap.prefab`は「毎回使うもの」ではなく、**新しく独立した高台を1つ増やす最初の1回だけ**使う（あるいは開発側が用意する）もの。一度その専用Tilemapがシーンに存在すれば、以後はTile Paletteで`Ground`と全く同じ感覚で直接ペイント/消去して高さ・形を調整してよい（詳細な使い方ガイドは別途、他プランナー向けに整理）。
-- **Stage5（未着手、2026-09-13時点で構想のみ）**: Enemy3との決戦ステージになる予定だが、具体的なレベルデザインは未確定。Stage4と同様「Goalオブジェクトが無く、ボス撃破でクリア」という構成になる見込みなので、`Enemy.clearStageOnDeath`の仕組みはそのまま流用できる。
+- **Stage5（2026-09-16、ラスボス戦として最小構成）**: 地面はそれまでの連続Tilemapのまま変更なし。**Goalオブジェクトは削除済み**（Stage4と同じくボス撃破でクリア）。`Enemy3`（ラスボス、詳細は§6-3）を地面中央付近 `(4, -1.5)` に配置。`Player`(@x-10)はそのまま。まだ「地面があってプレイヤーとラスボスがいるだけ」の最小構成で、正式なレベルデザインではない。
 - **使用可能アクション（`StageSet.stages[i].allowedActions`, 2026-09-09）**: Stage1 = `Dash` のみ（`disableCombos` も実質 on）／ Stage2 = `Dash`+`Attack` ／ Stage3〜5 = `Jump`+`Dash`+`Attack`。`StageSet.asset` で編集。
 - **結果画面**は各ステージシーン内の `StageFlow/ResultCanvas`（`ClearPanel` / `FailPanel`、`sortingOrder 100`、通常は非アクティブ）。`StageManager` が表示と遷移を管理。
   - 表示中は `Time.timeScale = 0`、`PlayerController` / `MainActionController` を無効化。
@@ -438,11 +449,14 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | `PlayerHealth` | Player | 体力・被弾・無敵時間。`TakeDamage -> bool`、`OnHealthChanged` |
 | `AttackHitbox` | Player/AttackHitbox | 前方の一時的な攻撃判定（トリガー）。`Enemy`にヒットすればダメージ、`Bullet`にヒットすれば`DestroyByAttack()`で即消滅（2026-09-13） |
 | `PlayerDebugBars` | Player/DebugBars | 頭上のデバッグゲージ 2 本。`Awake` で `!DeveloperSettings.Active` なら GameObject ごと非アクティブ（開発者用） |
-| `Enemy` | Enemy1, Enemy2, Enemy_Boss, Stage4のEnemy1_Boss | 体力・接触ダメージ + ノックバック・ダッシュ中すり抜け。`clearStageOnDeath`（既定false、2026-09-13追加）trueなら`Die()`時に`StageManager.Clear()`を呼ぶ（Goal無しステージのボス用） |
+| `Enemy` | Enemy1, Enemy2, Enemy3, Enemy_Boss, Stage4のEnemy1_Boss | 体力・接触ダメージ + ノックバック・ダッシュ中すり抜け。`clearStageOnDeath`（既定false、2026-09-13追加）trueなら`Die()`時に`StageManager.Clear()`を呼ぶ（Goal無しステージのボス用）。`OnDamaged`イベント（2026-09-16追加、`TakeDamage`で体力が減るたびに発火）を`Enemy3AI`が購読し、追尾弾発射中に被弾したら即座にクールタイムへ移行する処理に使用 |
 | `EnemyPatrol` | Enemy1, Enemy_Boss, Stage4のEnemy1_Boss | 左右往復（transform 直接移動）。**2026-09-14**: `DialoguePlayer.IsPlaying`中は移動しない |
 | `EnemyShooter` | Enemy2（2026-09-13追加） | 一定間隔で`Bullet`を発射。発射の瞬間だけプレイヤーへホーミングするオプション付き。**2026-09-14**: `SpriteRenderer.isVisible`が false（画面外）のときは発射しない、`DialoguePlayer.IsPlaying`中はタイマーごと停止（行動しない）、ホーミング無効時はプレイヤーがいる左右方向へ発射（以前は常に右固定になっていたバグを修正） |
-| `Bullet` | Enemy2/Enemy3の弾（2026-09-13追加） | 発射時に設定した方向へ直進する弾。プレイヤー接触ダメージ・ダッシュ中すり抜け・地面接触/攻撃で消滅・`maxLifetime`で自動消滅 |
-| `EnemyHealthBar` | Enemy_Boss/HealthBar | ボスの体力ゲージ + 数値 |
+| `Bullet` | Enemy2/Enemy3の弾（2026-09-13追加） | 発射時に設定した方向へ直進する弾。`transform.position`直接移動、当たり判定は**トリガー**（2026-09-17に非トリガーから変更）。`Rigidbody2D`（Body Type = Kinematic）付き（トリガー判定の成立に必要。地面側にも`Rigidbody2D`があるが弾側にも付けておくことで確実にする）。プレイヤー接触ダメージ・ダッシュ中すり抜け・地面接触/攻撃で消滅・`maxLifetime`で自動消滅。**2026-09-16**: `Configure`に`homingTurnSpeedDegPerSec`（既定0）を追加、0より大きいと`Update()`毎に`RotateTowards`でプレイヤー方向へ継続的に旋回する追尾弾になる（Enemy3の③用、Enemy2は使わず従来通り）。**2026-09-17**: 追尾弾（`homingTurnSpeed > 0`）は`maxLifetime`による自動消滅の対象から除外。**2026-09-18**: 敵キャラに触れた場合、発射直後の`selfHitGraceTime`（既定0.2秒、発射元自身との重なり対策）を過ぎていれば`enemyDamage`（既定2）を与えて消滅する（それまでは常にすり抜けだった。追尾弾をラスボスへ誘導してヒットさせる攻略に対応）。
+  - **反転モード（2026-09-17追加）**: ダッシュで弾をすり抜けられた直後など、現在の速度ベクトルとプレイヤー方向のなす角が`reversalAngleThreshold`（C#側の既定値は170度。**`Bullet.prefab`ではユーザーが150度に変更済み**）を超えたときは、`RotateTowards`による回転ではなく、**速度ベクトルの大きさを`Vector2.MoveTowards`で直線的に減速→0→反対向きへ加速**させることで向きを変える（`_reversing`フラグで目標速度に達するまで維持）。理由: ほぼ180度の回転は回転軸の計算が数値的に不安定になり、回転の途中で地面/壁方向を意図せず向いてしまうことがあった。速度ベクトルを直線で繋ぐ方式なら、常に元の進行方向の延長線上を通るため横方向を向かない。反転にかかる速さは、`homingTurnSpeed`から自動計算される基準値（＝同じ`homingTurnSpeed`で180度回転するのと同じ時間で反転が完了する速さ）に、`reversalRateMultiplier`（既定1、インスペクターで調整可）を掛けたもの。Playで、なす角が閾値を超えた瞬間から速度のY成分（横方向）が終始0のまま、X成分だけが直線的に反転することを確認済み。
+  - **敵キャラへのヒット（2026-09-18追加）**: 追尾弾をラスボスへ誘導してヒットさせられるように、`HandleTrigger`で敵キャラ（`Enemy`）に触れた場合の扱いを変更。以前は敵キャラには一切反応せず常にすり抜けていたが、**発射から`selfHitGraceTime`（既定0.2秒）が経過していれば、`enemyDamage`（既定2、インスペクターで調整可）のダメージを与えて弾自身も消滅する**ようにした。猶予時間は、弾が発射元の敵自身の位置（＝重なった状態）で生成されるため、発射直後に発射元自身へ即座にヒットしてしまうのを防ぐためのもの（`_age`という経過時間カウンタで管理）。猶予時間内は今まで通り完全に無視する。Playで、猶予時間内は無反応・経過後はダメージが入って消滅することを確認済み。
+| `Enemy3AI` | Enemy3（2026-09-16追加） | ①離脱移動→②放射弾/③追尾弾を抽選→クールタイム→①…の状態機械。`DialoguePlayer.IsPlaying`中・画面外での発射禁止はEnemy1/2と同じルール |
+| `EnemyHealthBar` | Enemy_Boss/HealthBar, Enemy3/HealthBar | ボスの体力ゲージ + 数値 |
 | `OneWayPlatform` | Stage3/`Grid/HighGround`（Tilemap の CompositeCollider2D） | 一方通行 + 重なり率での着地判定。単体 Collider2D でも Tilemap の CompositeCollider2D でも動く（`Awake` が CompositeCollider2D を優先） |
 | `TilemapColliderBootstrap` | 各ステージ `Grid/Ground` | `Awake` でタイルを貼り直し、`TilemapCollider2D`/`CompositeCollider2D` の形状を再生成させる（eval 生成 Tilemap が Play 開始時に当たり判定を持たない問題の対策）。§7 |
 | `CameraFollow` | Main Camera | 追従。`target`（Player の Transform）は未設定なら Tag=Player から自動取得（2026-09-12）。`followHorizontal`/`followVertical`（各既定true/false、2026-09-13追加）で横縦を個別にオン/オフでき、オフの方向は開始位置で固定（Stage4のみ縦追従に設定） |
@@ -495,6 +509,13 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | 体力 | maxHealth / invulnTime | 3 / 0.8 秒 | PlayerHealth |
 | 敵 | maxHealth / contactDamage | 1 / 1 | Enemy |
 | 敵 | knockbackSpeed / knockbackUpSpeed / knockbackDuration | 8 / 4 / 0.25 秒 | Enemy |
+| ラスボス | moveSpeed / retreatDistance | 2 / 5 | Enemy3AI |
+| ラスボス | radialChance（②を選ぶ確率、2026-09-17追加） | 0.5 | Enemy3AI |
+| ラスボス | radialBulletCount / radialCooldown | 8 / 3 秒 | Enemy3AI |
+| ラスボス | homingTurnSpeed / homingCooldown | 90 度/秒 / 3 秒 | Enemy3AI |
+| 弾 | reversalAngleThreshold / reversalRateMultiplier（反転モード、2026-09-17追加） | 170 度（Bullet.prefabでは150） / 1 | Bullet |
+| 弾 | enemyDamage / selfHitGraceTime（敵キャラへのヒット、2026-09-18追加） | 2 / 0.2 秒 | Bullet |
+| ラスボス | bulletSpeed | 5 | Enemy3AI |
 | 敵 | clearStageOnDeath（倒すと即クリア） | false（Stage4のボスだけtrue） | Enemy |
 | 砲台 | fireInterval / bulletSpeed / homingOnFire | 2 秒 / 6 / true | EnemyShooter |
 | 弾 | damage / maxLifetime | 1 / 6 秒 | Bullet |
@@ -535,7 +556,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 ## 13. 未実装 / TODO
 
 **画面の流れは最小実装で通ったが、以下は未着手 / 仮:**
-- **Stage2, Stage4, Stage5 の中身**。Stage2は2026-09-13にStage1と完全同一構成化（暫定、別プランナーが詳細設計予定）。Stage4は2026-09-13に縦スクロール構成へ作り直したが「スクロールが動くかの簡易確認用」で正式なレベルデザインではない。Stage5はEnemy3との決戦になる想定のみでレベル自体は未着手。Stage3はStage1と同一構成（2026-09-11）＋Enemy2追加（2026-09-13）。
+- **Stage2, Stage4, Stage5 の中身**。Stage2は2026-09-13にStage1と完全同一構成化（暫定、別プランナーが詳細設計予定）。Stage4は2026-09-13に縦スクロール構成へ作り直したが「スクロールが動くかの簡易確認用」で正式なレベルデザインではない。Stage5は2026-09-16にラスボス(Enemy3)を配置したが「地面とプレイヤーとラスボスがいるだけ」の最小構成で、正式なレベルデザインではない。Stage3はStage1と同一構成（2026-09-11）＋Enemy2追加（2026-09-13）。
 - **会話テキストは全部仮**（`DialogueSequence` アセットの中身）。プロローグの一枚絵も未準備（仮イラスト表示中）。本番の絵は主人公＝左 / ダンジョン＝右の構図で用意予定。
 - **会話 UI の体裁**（日本語表示自体は 2026-09-11 に対応済み — §9-2「日本語フォント」。文字送り演出は 2026-09-12 対応済み — §9-2。常用漢字外の漢字は現状のフォントサブセットに無いので表示できない）。
 - **UI の日本語化**（メニューは今は英語のまま。日本語にする場合、`Text` はレンダリングだけなら §9-2 のフォントを流用できるが、見た目を作り込むなら TMP 移行も検討）。
@@ -543,7 +564,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 - **ロック中ステージの見た目**は Unity 既定のグレーアウトのみ（「LOCKED」表記や鍵アイコンは未実装）。クリア進捗のセーブは `PlayerPrefs` の 1 キーだけ（スロット/複数セーブ無し）。
 - `StageManager.nextButton` の表示可否は `GameFlow.CurrentStageIndex` 依存。エディタでステージシーンを直接 Play すると index=0 扱いになる（フロー経由なら正しい）。
 - ボスの行動（`Enemy_Boss` / Stage4の`Enemy1_Boss` は今のところ HP が多いだけの巡回。攻撃パターン無し）。
-- **Enemy3（3行動ミニボス）が未実装**。仕様は §6-3 に確定済み（2026-09-13）。Enemy1・Enemy2 は実装済み（§6-1 / §6-2）。
+- Enemy1・Enemy2・Enemy3（ラスボス）すべて実装済み（§6-1〜§6-3）。Enemy3の各種数値（体力8、クールタイム3秒など）は未指定だったため仮に決めたもの。バランス調整はこれから。
 - **Stage4のボス`Enemy1_Boss`は仮**。ユーザー指定により「Enemy1のHPを3にしただけ」の暫定実装（頭上体力バー無し。`Enemy1.prefab`に体力バーの子オブジェクトが無いため）。本番のボス仕様が決まり次第差し替え予定。
 - **地面 / 高台 Tilemap の本番タイル素材**（今は仮の `GroundTile.png` と `HighGroundTop*.png`/`HighGroundPillar*.png`。90×90px / PPU 90 を保って上書きすれば差し替わる。高台は天面・柱それぞれ左/中央/右で見た目を区別できる本番絵を想定）。
 - **HighGround（高台）の使い方・注意点は §7 に使い方ガイドとしてまとめてある**（1基=1Tilemap厳守、Groundに描かない、天面/柱・左中央右の機能差の有無、など）。他プランナーへの説明はそちらを参照。
