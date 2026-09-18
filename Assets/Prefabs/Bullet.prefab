@@ -176,3 +176,5 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 256
   homingTurnSpeed: 0
+  reversalAngleThreshold: 150
+  reversalRateMultiplier: 1

@@ -7,6 +7,8 @@ using UnityEngine;
 /// 当たり判定はトリガー（プレイヤーを物理的に押し返す必要が無いため。接触時の処理は全てスクリプト側で行う）。
 /// Enemy と同じ接触仕様：プレイヤー本体に触れるとダメージ、ダッシュ中はすり抜け、
 /// プレイヤーの攻撃（AttackHitbox）に触れると一撃で消滅。地面に当たっても消滅する。
+/// 敵キャラに触れると enemyDamage を与えて消滅する（selfHitGraceTime の間だけは発射元自身と
+/// 重なっているため無視する）。追尾弾をラスボスへ誘導してヒットさせる攻略に対応するための仕様。
 ///
 /// 【反転（急激な方向転換）について、2026-09-17追加】
 /// 追尾中にダッシュで弾をすり抜けられると、次の瞬間「プレイヤーへ向かうべき方向」がほぼ真逆になる。
@@ -35,9 +37,17 @@ public class Bullet : MonoBehaviour
     [Tooltip("反転（減速→反対向きへの加速）にかかる速さの倍率。既定の1なら" +
              "「homingTurnSpeedで180度回転するのと同じ時間」で反転が完了する。大きいほど反転が速く鋭くなる")]
     [SerializeField] private float reversalRateMultiplier = 1f;
+    [Tooltip("敵キャラ（ラスボスなど）にヒットしたときに与えるダメージ。" +
+             "追尾弾をラスボスへ誘導してヒットさせる、という攻略に使う")]
+    [SerializeField] private int enemyDamage = 2;
+    [Tooltip("発射直後、この秒数だけは敵キャラに触れてもダメージを与えず素通りする。" +
+             "弾は発射元の敵自身の位置（＝重なった状態）で生成されるため、発射直後に発射元自身へ即座に" +
+             "命中してしまうのを防ぐための猶予時間")]
+    [SerializeField] private float selfHitGraceTime = 0.2f;
 
     private Vector2 _velocity;
     private bool _reversing;
+    private float _age;
     private Collider2D _col;
     private Collider2D _playerCollider;
     private MainActionController _playerMainAction;
@@ -77,6 +87,8 @@ public class Bullet : MonoBehaviour
 
     private void Update()
     {
+        _age += Time.deltaTime;
+
         if (homingTurnSpeed > 0f && _playerCollider != null)
         {
             Vector2 toPlayer = (Vector2)_playerCollider.transform.position - (Vector2)transform.position;
@@ -136,8 +148,16 @@ public class Bullet : MonoBehaviour
             return;
         }
 
-        // 発射元を含め、敵キャラには一切反応しない（すり抜ける）。
-        if (other.GetComponentInParent<Enemy>() != null) return;
+        // 敵キャラに当たった場合：発射直後の猶予時間内（発射元自身と重なっている間）は素通りする。
+        // それ以降は、追尾弾をラスボスへ誘導してヒットさせられるよう、ダメージを与えて消滅する。
+        var enemy = other.GetComponentInParent<Enemy>();
+        if (enemy != null)
+        {
+            if (_age < selfHitGraceTime) return;
+            enemy.TakeDamage(enemyDamage);
+            Destroy(gameObject);
+            return;
+        }
 
         var health = other.GetComponent<PlayerHealth>();
         if (health == null) return;
