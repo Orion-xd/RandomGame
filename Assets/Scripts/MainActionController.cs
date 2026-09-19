@@ -122,6 +122,10 @@ public class MainActionController : MonoBehaviour
     /// <summary>ダッシュ中か（Enemy が接触をすり抜けさせるかどうかの判定に使う）。</summary>
     public bool IsDashing { get; private set; }
 
+    /// <summary>ジャンプ由来のクールタイム中か（着地するまで明けない＝経過割合を安定して計算できない）。
+    /// アクションバーUIが、ジャンプの次アクション表示を通常のグラデーションではなく「着地まで一律で暗い」扱いにするために使う。</summary>
+    public bool IsJumpCooldownActive => _jumpCdActive;
+
     /// <summary>次のアクションを発動できるか（時間ベースのクールタイム外、かつジャンプのクールタイム中でない）。</summary>
     public bool IsReady => Time.time >= _nextReadyTime && !_jumpCdActive;
 

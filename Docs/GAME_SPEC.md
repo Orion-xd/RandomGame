@@ -52,6 +52,14 @@ Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.Ge
 ### 2-2. アクションバー UI（`ActionBarUI`, HUD_Canvas/ActionBar）
 
 - `Slot0..3` の背景 Image 色とラベル Text を `queue.Peek(i)` で更新。色: Jump=青 / Dash=黄 / Attack=赤。
+- **クールタイム/コンボ受付の可視化（2026-09-19追加）**: 各スロットに背景 Image（常に「暗い」色）と、その上に重ねた `Fill` という子 Image（常に「明るい＝デフォルト」色、`Image.type=Filled` / `fillMethod=Vertical` / `fillOrigin=Bottom`）を持つ。`fillAmount`（0〜1）を毎フレーム変えることで、長方形の**下からどれだけ明るいか**を表現する。「明るい」＝今までのデフォルト色そのもの、「暗い」＝それを`dimAmount`（`[Range(0,1)]`、既定0.6）ぶん黒に寄せた色（`Color.Lerp(color, Color.black, dimAmount)`）。`dimAmount`を大きくするほど暗い部分が黒に近づきコントラストが強くなり、小さくするほど元の色に近づいてコントラストが弱くなる。
+  - 状況によって明るさが変わるのは**Slot0（次に発動するアクション）だけ**。**Slot1以降は状況によらず常に`fillAmount=1`（全体明るい）**（2026-09-19、実装直後にユーザーがプレイして「他の3枠は常に明るいままの方がよい」と判断し、コンボ受付中/クールタイム中でのSlot1以降の暗転を撤廃）。
+  - Slot0：通常時は`fillAmount=1`。**コンボ受付中**（`MainActionController.ComboGraceFraction01 > 0`）は受付時間の**残り割合**をそのまま`fillAmount`に（時間経過とともに下から暗くなっていく）。**クールタイム中**（コンボ待ちではなく発動不可）はクールタイムの**経過割合**を`fillAmount`に（時間経過とともに下から明るくなっていく）。**ジャンプ由来のクールタイム**（`MainActionController.IsJumpCooldownActive`）は着地時刻が不定で経過割合を安定して出せないため、着地するまで常に`fillAmount=0`（全体暗いまま、グラデーションなし）で扱う。
+  - コンボ受付時間終了後にそのままクールタイムへ移行した場合、「クールタイム開始時点で既にある程度経過しているように見える」現象は仕様通り（`_nextReadyTime`がアクション発動と同時に1回だけ設定され、コンボ受付時間とクールタイムが同じ`Time.time`基準で並行して進むため、別途引き算のロジックは不要）。
+  - 先行入力（`InInputBufferZone`/`InputBufferZoneFraction01`、既存の頭上デバッグゲージ`PlayerDebugBars`が使用）は、このアクションバーUIには反映しない（ユーザー確認済み、対象外のまま）。
+  - `ActionBarUI`は`MainActionQueue.OnChanged`に加えて毎フレーム`Update()`でも再計算するように変更（割合は毎フレーム変わるため）。`controller`（`MainActionController`）フィールドを新規追加、`queue`と同様Tag=Playerから自動解決。
+  - **バグ修正（2026-09-19）**: 実装直後、`dimAmount`をどんな値にしても見た目が変化しない不具合があった。原因は`Fill`のImageに`Source Image`（Sprite）が未設定だったこと。Unityの`Image`は**Spriteが無いと`type=Filled`/`fillAmount`の設定を無視して常に単純な塗りつぶし四角形として描画する**仕様のため、スクリプト側の計算は正しくても見た目には反映されなかった。`Assets/Art/WhiteSquare.png`（既存の未使用アセット、`spriteImportMode`を`Multiple`→`Single`に変更）を`Fill`のSource Imageに割り当てて解決。Playで、クールタイム中（経過70%）・コンボ受付中（残り20%）とも`fillAmount`が正しい値になり、見た目にも明暗の境目が出ることをスクリーンショットで確認済み。
+  - **発動可能な瞬間を明示する枠（`nextActionBorder`、2026-09-19追加）**: 「クールタイムがほぼ明けている状態」と「完全に発動可能な状態」が明るさだけだと見分けにくいというユーザー指摘への対策。`HUD_Canvas/ActionBar/Slot0Border`（Slot0より一回り大きい白いImage、Slot0の背後・同じ`ActionBar`の子として配置し、Slot0の直前のsibling indexに置くことで縁だけが見える）を、**発動可能なとき（待機中、またはコンボ受付中）だけ`SetActive(true)`**、クールタイム中（ジャンプ含む）は`SetActive(false)`にする。Slot1以降には付けない（Slot0専用）。Playで3状態（待機/クールタイム中/コンボ受付中）とも期待通りの表示・非表示を確認済み。
 
 ### 2-3. 各アクションの挙動（`MainActionController`）
 
@@ -419,7 +427,7 @@ Player（Prefab インスタンス） @ (-10,-1.5)  [SpriteRenderer(PlayerArrow)
 Enemy1（Prefab インスタンス, 旧名 Enemy_A） @ (-4,-1.5)  [SpriteRenderer, BoxCollider2D, Enemy(HP1), EnemyPatrol]
 Enemy1_B（Prefab インスタンス, 2026-09-13にEnemy_Bossから置き換え） @ (15,-1.5) [SpriteRenderer, BoxCollider2D, Enemy(HP1), EnemyPatrol]
 HUD_Canvas（Prefab インスタンス） [Canvas, CanvasScaler, GraphicRaycaster]
-  ActionBar            [ActionBarUI] → Title(Text) + Slot0..3 (Image + 子 Label(Text))
+  ActionBar            [ActionBarUI] → Title(Text) + Slot0Border(Image, 2026-09-19追加、Slot0専用の発動可能枠) + Slot0..3 (Image + 子 Fill(Image, Filled/Vertical/Bottom, 2026-09-19追加) + 子 Label(Text))
   HealthPanel          [HealthUI] → HP0..2 (Image, 赤丸)
 StageFlow（Prefab インスタンス） [StageManager]
   ResultCanvas         [Canvas, CanvasScaler, GraphicRaycaster] → ClearPanel/FailPanel（各 [MenuNavigation] + Title + ボタン群）
@@ -462,7 +470,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | `OneWayPlatform` | Stage3/`Grid/HighGround`（Tilemap の CompositeCollider2D） | 一方通行 + 重なり率での着地判定。単体 Collider2D でも Tilemap の CompositeCollider2D でも動く（`Awake` が CompositeCollider2D を優先） |
 | `TilemapColliderBootstrap` | 各ステージ `Grid/Ground` | `Awake` でタイルを貼り直し、`TilemapCollider2D`/`CompositeCollider2D` の形状を再生成させる（eval 生成 Tilemap が Play 開始時に当たり判定を持たない問題の対策）。§7 |
 | `CameraFollow` | Main Camera | 追従。`target`（Player の Transform）は未設定なら Tag=Player から自動取得（2026-09-12）。`followHorizontal`/`followVertical`（各既定true/false、2026-09-13追加）で横縦を個別にオン/オフでき、オフの方向は開始位置で固定（Stage4のみ縦追従に設定） |
-| `ActionBarUI` | HUD_Canvas/ActionBar | アクション先読み表示。`queue`（Player の MainActionQueue）は未設定なら Tag=Player から自動取得（2026-09-12） |
+| `ActionBarUI` | HUD_Canvas/ActionBar | アクション先読み表示。`queue`（Player の MainActionQueue）は未設定なら Tag=Player から自動取得（2026-09-12）。`controller`（MainActionController）も同様に自動取得（2026-09-19追加）。クールタイム/コンボ受付の可視化については§2-2参照 |
 | `HealthUI` | HUD_Canvas/HealthPanel | 体力アイコン表示。`playerHealth`（Player の PlayerHealth）は未設定なら Tag=Player から自動取得（2026-09-12） |
 | `StageSet` | ScriptableObject（`Assets/Resources/StageSet.asset`） | ステージの並び。`stages[]` = `displayName` + `sceneName` + `intro`（会話）+ `allowedActions`（そのステージの抽選対象）+ `disableCombos`。全体の `prologue`。`AllowedActionsAt`/`DisableCombosAt`/`IndexOfScene`。GameFlow が Resources.Load |
 | `GameFlow` | (static クラス) | 画面遷移（`SceneTransition.Go` 経由）+ ステージ解放 + 会話既読。`Stages`（StageSet）、`StageCount`、`StartGame`（未読ならPrologue経由）/`LoadStage`/`RetryStage`/`NextStage`/`GoStageSelect`/`GoTitle`、`CurrentStageIndex`、`ActiveStageIndex`（アクティブシーン名から StageSet index を解決）、クリア状況（`IsStageCleared`/`SetStageCleared`/`MarkStageCleared`、PlayerPrefs ビットマスク）、`IsStageUnlocked`/`UnlockedStageIndex`、ステージ会話既読（`HasSeenIntro`/`SetIntroSeen`/`MarkIntroSeen`、ビットマスク）、プロローグ既読（`HasSeenPrologue`/`SetPrologueSeen`/`MarkPrologueSeen`、0/1）、`ResetStageProgress`（クリア＋ステージ既読の2キー消去、プロローグは残す）、`ResetProgress`（3キー消去） |
