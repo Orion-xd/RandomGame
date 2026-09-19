@@ -8,13 +8,19 @@ using UnityEngine;
 /// </summary>
 public class Enemy3AI : MonoBehaviour
 {
-    private enum State { Retreating, CoolingDown, WaitingForHomingBullet }
+    private enum State { Retreating, CoolingDown, WaitingForHomingBullet, FirstActionWait }
 
     [Header("①離脱移動")]
     [Tooltip("プレイヤーから遠ざかる速度")]
     [SerializeField] private float moveSpeed = 2f;
     [Tooltip("プレイヤーとの距離がこれ以上になったら離脱移動を終了する")]
     [SerializeField] private float retreatDistance = 5f;
+
+    [Header("初回行動の遅延")]
+    [Tooltip("ステージ開始後、一番最初の行動（②か③のどちらか）だけ、選択されてから" +
+             "実際に発射するまでこの秒数だけ待つ。画面に映った瞬間にいきなり攻撃されると" +
+             "難しすぎるための救済（2回目以降の行動には適用しない）")]
+    [SerializeField] private float firstActionDelay = 3f;
 
     [Header("弾")]
     [SerializeField] private Bullet bulletPrefab;
@@ -45,6 +51,8 @@ public class Enemy3AI : MonoBehaviour
     private SpriteRenderer _sr;
     private Enemy _enemy;
     private int _dir = 1;
+    private bool _firstActionDone;
+    private bool _pendingIsRadial;
 
     private void Awake()
     {
@@ -71,8 +79,9 @@ public class Enemy3AI : MonoBehaviour
     /// <summary>プレイヤーの攻撃を受けた瞬間に呼ばれる。追尾弾を発射中なら、問答無用でその弾を消してクールタイムへ移行する。</summary>
     private void HandleDamaged()
     {
+        Debug.Log("aaa");
         if (_state != State.WaitingForHomingBullet) return;
-
+        Debug.Log("bbb");
         if (_pendingHomingBullet != null)
         {
             Destroy(_pendingHomingBullet.gameObject);
@@ -106,6 +115,16 @@ public class Enemy3AI : MonoBehaviour
                     _state = State.CoolingDown;
                 }
                 break;
+
+            case State.FirstActionWait:
+                // 一番最初の行動だけ、選択されてから実際に発射するまで少し待つ。
+                _cooldownTimer -= Time.deltaTime;
+                if (_cooldownTimer <= 0f)
+                {
+                    if (_pendingIsRadial) FireRadial();
+                    else FireHoming();
+                }
+                break;
         }
     }
 
@@ -126,8 +145,19 @@ public class Enemy3AI : MonoBehaviour
         float distance = Mathf.Abs(transform.position.x - _player.position.x);
         if (distance < retreatDistance) return;
 
-        // 放射状に発射/追尾弾を発射のどちらかの攻撃を、radialChance の確率で抽選して実行する
-        if (Random.value < radialChance) FireRadial();
+        // 放射状に発射/追尾弾を発射のどちらかの攻撃を、radialChance の確率で抽選する。
+        // ただしステージ開始後の一番最初の行動だけは、選択してすぐには実行せず firstActionDelay 秒待つ。
+        bool isRadial = Random.value < radialChance;
+        if (!_firstActionDone)
+        {
+            _firstActionDone = true;
+            _pendingIsRadial = isRadial;
+            _cooldownTimer = firstActionDelay;
+            _state = State.FirstActionWait;
+            return;
+        }
+
+        if (isRadial) FireRadial();
         else FireHoming();
     }
 
