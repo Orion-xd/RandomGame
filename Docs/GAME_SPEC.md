@@ -65,6 +65,7 @@ Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.Ge
   - `IsDashing` が true の間、`Enemy` 側がプレイヤーとの物理衝突を `Physics2D.IgnoreCollision` で無視（すり抜け）。
   - `OverridesMovement` が true の間、`PlayerController` は速度・向きを書かない（ダッシュが制御）。
 - **攻撃 (`DoAttack` コルーチン + `AttackHitbox`)**: 前方に子オブジェクトの当たり判定を `attackDuration`（**0.4 秒**、2026-09-11 に 0.2→0.4 変更、全ステージ共通）だけ有効化。触れた敵に `attackDamage`（1）。同じ敵を多重ヒットしない（`HashSet<Enemy>`、有効化時にクリア）。攻撃判定はトリガー。前方距離は**専用の `forwardOffset` フィールドを廃止**し（2026-09-13）、`AttackHitbox` の `Transform.localPosition.x` の絶対値をそのまま使う方式に変更。`Configure()` は毎回その絶対値を向き（`facingSign`）に応じて符号だけ反転させる。これにより、インスペクターで Transform の X を直接編集すればそのまま前後距離の調整として反映される（Y座標・Scaleは元々スクリプトで一切触られないので常に直接編集可能）。
+  - **バグ修正（2026-09-19、ラスボスに攻撃が当たらないことがある）**: 追尾弾がしばらく生成されて画面に映っている状況でラスボスを攻撃すると、ダメージが入らず、かつ追尾弾も消滅しない不具合があった。原因は `AttackHitbox` にも `Enemy3`（ラスボス）にも `Rigidbody2D` が付いておらず、双方とも実質 Static 扱いだったこと。**プレイヤーが移動しながら攻撃すると、`AttackHitbox` はプレイヤーの `Rigidbody2D`（Dynamic）の子として動いている状態になるため `OnTrigger` 系が正常に発火するが、プレイヤーが静止した状態で攻撃を発動すると `AttackHitbox` も静止した状態になり、たとえラスボスの当たり判定と重なっていても `OnTrigger` が発火しないことがある**（ユーザーが実機検証で特定）。追尾弾の存在・経過時間・画面内かどうかはいずれも本質的には無関係で、「それらの条件が満たされているときはボスが動かず、プレイヤーも静止して攻撃するケースが多かった」という間接的な相関に過ぎなかった。**対処として `AttackHitbox` のプレハブに `Rigidbody2D` を追加**（プレイヤー自身が静止していても `AttackHitbox` 自体が常に有効な物理ボディを持つようにする）。これにより本不具合は解消。
 
 ### 2-4. クールタイム
 
@@ -206,6 +207,7 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 - スクリプト: `Enemy`（共通、`EnemyPatrol`は付けない） + `Enemy3AI`（移動＋発射の状態機械）。プレハブ: `Assets/Prefabs/Enemy3.prefab`（`EnemyBoss.prefab`の構造を流用して作成＝`HealthBar`子をそのまま持つ。`maxHealth=8`、`contactDamage=1`、`clearStageOnDeath=true`。SpriteRendererは黒に近い暗赤 `(0.15, 0.05, 0.08)` でEnemy1/2と区別）。
 - `Enemy3AI`の状態機械（`State` enum: `Retreating` / `CoolingDown` / `WaitingForHomingBullet`）:
   - **①離脱移動（`Retreating`）**: `moveSpeed`でプレイヤーと反対方向へ移動。プレイヤーとの距離が`retreatDistance`（既定5）以上になったら終了。**2026-09-17、ユーザー修正**: `SpriteRenderer.isVisible`（画面外）判定は`UpdateRetreating()`の一番最初で行うよう変更（画面外にいる間は移動そのものも一切行わない。以前は距離判定の後、発射の可否だけを画面外判定していたため、画面外にいる間もずっと移動し続け、ボスが気づかないうちに遠くまで移動してしまう不具合があった）。画面外の間は移動も攻撃選択もせず、その場で待機する。visibleに戻ったら再開し、距離条件を満たしていれば`radialChance`（既定0.5、**2026-09-17追加、インスペクターで調整可**）の確率で②、残りの確率で③を発動する（以前はコード中に`0.5f`を直接埋め込んでいた）。
+  - **初回行動の遅延（`FirstActionWait`、2026-09-18追加）**: ステージ開始直後は既にプレイヤーと十分離れている（＝離脱移動の見た目が発生しないままいきなり②③が選ばれる）ため、画面に映った瞬間に攻撃されると難しすぎるという理由で救済を追加。**一番最初の行動選択（②③どちらを行うかの抽選）だけ**、選択した瞬間には発射せず、`firstActionDelay`（既定3秒、インスペクターで調整可）だけ`FirstActionWait`状態で待ってから実際に発射する（`_firstActionDone`フラグで最初の1回だけに限定。2回目以降の行動には遅延を適用しない）。Playで、1回目のUpdateで行動が選択されて`FirstActionWait`に入り、タイマー経過後に実際に弾が発射される（`FireRadial`/`FireHoming`が呼ばれ、`WaitingForHomingBullet`等へ正しく遷移する）ことを確認済み。
   - **②放射弾**: `radialBulletCount`（既定8）個の弾を、`360°/個数`で均等な角度に同時発射（ホーミング無し、`Bullet.Configure`のhomingパラメータ省略＝0のまま）。発射した瞬間に`radialCooldown`（既定3秒）の`CoolingDown`へ。
   - **③追尾弾（`WaitingForHomingBullet`）**: 発射直後のプレイヤー方向へ`Bullet`を1発発射し、`Bullet.Configure`の第4引数`homingTurnSpeed`（既定90度/秒＝ホーミングの強度）を渡して継続追尾を有効化。発射した弾への参照を保持し、それが破壊される（`== null`になる）まで`WaitingForHomingBullet`のまま何もしない。破壊された瞬間に`homingCooldown`（既定3秒）の`CoolingDown`へ移行する（弾が生きている間はクールタイムが進まないという仕様通り）。
     - **2026-09-16追加**: ボス自身がプレイヤーの攻撃を受けた瞬間、追尾弾を発射中であれば**その弾を問答無用で消滅させ、即座にクールタイムへ移行する**。`Enemy.cs`に`public event Action OnDamaged`を追加し（`TakeDamage`で体力が実際に減るたびに発火）、`Enemy3AI`がこれを購読して`_state == WaitingForHomingBullet`のときだけ弾を`Destroy`してクールタイムへ切り替える。それ以外の状態（離脱移動中・クールタイム中）で攻撃を受けても、この処理は何もしない（ダメージ自体は6-0の通常経路でそのまま入る）。
@@ -447,7 +449,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | `MainActionController` | Player | メインアクションの発動・クールタイム・コンボ・先行入力・ダッシュ処理・無敵。発動入力はスペース / エンター / テンキー Enter / 左クリック（2026-09-12、会話送り・メニュー決定と統一）。会話中／画面切り替え直後は入力停止。`StageSet.disableCombos` のステージでは `_combosEnabled=false`（コンボ無効） |
 | `PlayerController` | Player | 左右移動・向き・接地判定・コヨーテ/落下猶予・ノックバック受け・着地時間予測（`TryPredictLandingTime`）。会話中／画面切り替え直後（`InputLock`）は入力停止（§16-2） |
 | `PlayerHealth` | Player | 体力・被弾・無敵時間。`TakeDamage -> bool`、`OnHealthChanged` |
-| `AttackHitbox` | Player/AttackHitbox | 前方の一時的な攻撃判定（トリガー）。`Enemy`にヒットすればダメージ、`Bullet`にヒットすれば`DestroyByAttack()`で即消滅（2026-09-13） |
+| `AttackHitbox` | Player/AttackHitbox | 前方の一時的な攻撃判定（トリガー）。`Enemy`にヒットすればダメージ、`Bullet`にヒットすれば`DestroyByAttack()`で即消滅（2026-09-13）。`Rigidbody2D`付き（2026-09-19追加。プレイヤー静止中でも`OnTrigger`が確実に発火するようにするため。§2-3参照） |
 | `PlayerDebugBars` | Player/DebugBars | 頭上のデバッグゲージ 2 本。`Awake` で `!DeveloperSettings.Active` なら GameObject ごと非アクティブ（開発者用） |
 | `Enemy` | Enemy1, Enemy2, Enemy3, Enemy_Boss, Stage4のEnemy1_Boss | 体力・接触ダメージ + ノックバック・ダッシュ中すり抜け。`clearStageOnDeath`（既定false、2026-09-13追加）trueなら`Die()`時に`StageManager.Clear()`を呼ぶ（Goal無しステージのボス用）。`OnDamaged`イベント（2026-09-16追加、`TakeDamage`で体力が減るたびに発火）を`Enemy3AI`が購読し、追尾弾発射中に被弾したら即座にクールタイムへ移行する処理に使用 |
 | `EnemyPatrol` | Enemy1, Enemy_Boss, Stage4のEnemy1_Boss | 左右往復（transform 直接移動）。**2026-09-14**: `DialoguePlayer.IsPlaying`中は移動しない |
@@ -455,7 +457,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | `Bullet` | Enemy2/Enemy3の弾（2026-09-13追加） | 発射時に設定した方向へ直進する弾。`transform.position`直接移動、当たり判定は**トリガー**（2026-09-17に非トリガーから変更）。`Rigidbody2D`（Body Type = Kinematic）付き（トリガー判定の成立に必要。地面側にも`Rigidbody2D`があるが弾側にも付けておくことで確実にする）。プレイヤー接触ダメージ・ダッシュ中すり抜け・地面接触/攻撃で消滅・`maxLifetime`で自動消滅。**2026-09-16**: `Configure`に`homingTurnSpeedDegPerSec`（既定0）を追加、0より大きいと`Update()`毎に`RotateTowards`でプレイヤー方向へ継続的に旋回する追尾弾になる（Enemy3の③用、Enemy2は使わず従来通り）。**2026-09-17**: 追尾弾（`homingTurnSpeed > 0`）は`maxLifetime`による自動消滅の対象から除外。**2026-09-18**: 敵キャラに触れた場合、発射直後の`selfHitGraceTime`（既定0.2秒、発射元自身との重なり対策）を過ぎていれば`enemyDamage`（既定2）を与えて消滅する（それまでは常にすり抜けだった。追尾弾をラスボスへ誘導してヒットさせる攻略に対応）。
   - **反転モード（2026-09-17追加）**: ダッシュで弾をすり抜けられた直後など、現在の速度ベクトルとプレイヤー方向のなす角が`reversalAngleThreshold`（C#側の既定値は170度。**`Bullet.prefab`ではユーザーが150度に変更済み**）を超えたときは、`RotateTowards`による回転ではなく、**速度ベクトルの大きさを`Vector2.MoveTowards`で直線的に減速→0→反対向きへ加速**させることで向きを変える（`_reversing`フラグで目標速度に達するまで維持）。理由: ほぼ180度の回転は回転軸の計算が数値的に不安定になり、回転の途中で地面/壁方向を意図せず向いてしまうことがあった。速度ベクトルを直線で繋ぐ方式なら、常に元の進行方向の延長線上を通るため横方向を向かない。反転にかかる速さは、`homingTurnSpeed`から自動計算される基準値（＝同じ`homingTurnSpeed`で180度回転するのと同じ時間で反転が完了する速さ）に、`reversalRateMultiplier`（既定1、インスペクターで調整可）を掛けたもの。Playで、なす角が閾値を超えた瞬間から速度のY成分（横方向）が終始0のまま、X成分だけが直線的に反転することを確認済み。
   - **敵キャラへのヒット（2026-09-18追加）**: 追尾弾をラスボスへ誘導してヒットさせられるように、`HandleTrigger`で敵キャラ（`Enemy`）に触れた場合の扱いを変更。以前は敵キャラには一切反応せず常にすり抜けていたが、**発射から`selfHitGraceTime`（既定0.2秒）が経過していれば、`enemyDamage`（既定2、インスペクターで調整可）のダメージを与えて弾自身も消滅する**ようにした。猶予時間は、弾が発射元の敵自身の位置（＝重なった状態）で生成されるため、発射直後に発射元自身へ即座にヒットしてしまうのを防ぐためのもの（`_age`という経過時間カウンタで管理）。猶予時間内は今まで通り完全に無視する。Playで、猶予時間内は無反応・経過後はダメージが入って消滅することを確認済み。
-| `Enemy3AI` | Enemy3（2026-09-16追加） | ①離脱移動→②放射弾/③追尾弾を抽選→クールタイム→①…の状態機械。`DialoguePlayer.IsPlaying`中・画面外での発射禁止はEnemy1/2と同じルール |
+| `Enemy3AI` | Enemy3（2026-09-16追加） | ①離脱移動→②放射弾/③追尾弾を抽選→クールタイム→①…の状態機械。`DialoguePlayer.IsPlaying`中・画面外での発射禁止はEnemy1/2と同じルール。**2026-09-18**: 一番最初の行動選択だけ`firstActionDelay`秒`FirstActionWait`状態で待ってから発射（難易度緩和） |
 | `EnemyHealthBar` | Enemy_Boss/HealthBar, Enemy3/HealthBar | ボスの体力ゲージ + 数値 |
 | `OneWayPlatform` | Stage3/`Grid/HighGround`（Tilemap の CompositeCollider2D） | 一方通行 + 重なり率での着地判定。単体 Collider2D でも Tilemap の CompositeCollider2D でも動く（`Awake` が CompositeCollider2D を優先） |
 | `TilemapColliderBootstrap` | 各ステージ `Grid/Ground` | `Awake` でタイルを貼り直し、`TilemapCollider2D`/`CompositeCollider2D` の形状を再生成させる（eval 生成 Tilemap が Play 開始時に当たり判定を持たない問題の対策）。§7 |
@@ -511,6 +513,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | 敵 | knockbackSpeed / knockbackUpSpeed / knockbackDuration | 8 / 4 / 0.25 秒 | Enemy |
 | ラスボス | moveSpeed / retreatDistance | 2 / 5 | Enemy3AI |
 | ラスボス | radialChance（②を選ぶ確率、2026-09-17追加） | 0.5 | Enemy3AI |
+| ラスボス | firstActionDelay（初回行動の遅延、2026-09-18追加） | 3 秒 | Enemy3AI |
 | ラスボス | radialBulletCount / radialCooldown | 8 / 3 秒 | Enemy3AI |
 | ラスボス | homingTurnSpeed / homingCooldown | 90 度/秒 / 3 秒 | Enemy3AI |
 | 弾 | reversalAngleThreshold / reversalRateMultiplier（反転モード、2026-09-17追加） | 170 度（Bullet.prefabでは150） / 1 | Bullet |
