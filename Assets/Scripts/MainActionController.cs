@@ -161,6 +161,26 @@ public class MainActionController : MonoBehaviour
         }
     }
 
+    /// <summary>デバッグ表示用：コンボ受付時間の残り秒数（受付中でなければ0）。</summary>
+    public float ComboGraceRemainingSeconds
+        => _comboStep == 1 ? Mathf.Max(0f, _comboDeadline - Time.time) : 0f;
+
+    /// <summary>デバッグ表示用：クールタイムの残り秒数。
+    /// ジャンプ由来のクールタイムは「着地するまで」で本来の残り時間が不定なので、
+    /// jumpAirCooldownCap を基準にした目安の秒数を返す（実際の着地の方が早いことが多い）。</summary>
+    public float CooldownRemainingSeconds
+    {
+        get
+        {
+            if (_jumpCdActive)
+            {
+                if (!_jumpCdLeftGround || jumpAirCooldownCap <= 0f) return jumpAirCooldownCap;
+                return Mathf.Max(0f, jumpAirCooldownCap - (Time.time - _jumpCdLeftGroundTime));
+            }
+            return Mathf.Max(0f, _nextReadyTime - Time.time);
+        }
+    }
+
     private void Awake()
     {
         _rb = GetComponent<Rigidbody2D>();

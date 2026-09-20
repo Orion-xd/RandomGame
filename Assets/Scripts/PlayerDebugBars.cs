@@ -84,9 +84,9 @@ public class PlayerDebugBars : MonoBehaviour
 
         UpdateBufferZone();
 
-        if (comboLabel != null) comboLabel.text = "COMBO " + combo.ToString("0.00");
+        if (comboLabel != null) comboLabel.text = "COMBO " + controller.ComboGraceRemainingSeconds.ToString("0.00");
         if (cooldownLabel != null)
-            cooldownLabel.text = "CD " + cd.ToString("0.00") + (controller.InInputBufferZone ? "  BUF" : "");
+            cooldownLabel.text = "CD " + controller.CooldownRemainingSeconds.ToString("0.00") + (controller.InInputBufferZone ? "  BUF" : "");
     }
 
     private void UpdateBufferZone()

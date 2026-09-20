@@ -280,10 +280,11 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 プレイヤー頭上にワールド空間のゲージ 2 本（左端固定で伸縮）+ 数値ラベル。
 **開発者用**（2026-09-08）: `Awake` で `!DeveloperSettings.Active` なら `DebugBars` GameObject ごと `SetActive(false)`。＝ エディタ内で `developerMode` が true のときだけ表示。ビルドでは常に非表示（`CooldownBufferZone` も生成されない）。
 
-- **COMBO バー（シアン）**: `MainActionController.ComboGraceFraction01`。1 つ目のアクション発動後 `comboGraceTime`（0.8 秒）かけて減少。残っている間はコンボの追加入力を受け付ける。
-- **CD バー（オレンジ）**: `MainActionController.CooldownFraction01`。「これが残っている」かつ「COMBO バーが空」= アクション実行不可。
+- **COMBO バー（シアン）**: バー本体（`SetFill`）の伸縮は `MainActionController.ComboGraceFraction01`（0..1の割合）で駆動。1 つ目のアクション発動後 `comboGraceTime`（0.8 秒）かけて減少。残っている間はコンボの追加入力を受け付ける。
+- **CD バー（オレンジ）**: バー本体の伸縮は `MainActionController.CooldownFraction01`（0..1の割合）。「これが残っている」かつ「COMBO バーが空」= アクション実行不可。
   - ダッシュ / 攻撃 → `(_nextReadyTime - Time.time) / _lastCooldownDuration`。
   - ジャンプ → 着地ベースで時間が不定なので `jumpAirCooldownCap`（3 秒）を基準に減少。接地中は満タン、離陸後は 3 秒に向けて減り、着地で 0。
+- **ラベルの数字（2026-09-20変更）**: 以前は上記の割合（0.00〜1.00）をそのまま表示していたが、**秒数表示に変更**。新設の `MainActionController.ComboGraceRemainingSeconds`（受付中でなければ0）/ `CooldownRemainingSeconds`（ジャンプ由来のクールタイムは `jumpAirCooldownCap` を基準にした目安の秒数）を使う。バー本体の伸縮（割合ベース）はそのまま変更していない。
 - **先行入力ゾーン**（CD バーの空側の端に重ねた色付き区間）: 幅 = `MainActionController.InputBufferZoneFraction01`（最小 `minBufferZoneWidthFrac` = 4%）。`cooldownFill` の SpriteRenderer を複製したスプライトを**実行時に自動生成**（`CooldownBufferZone`、sortingOrder = fill+1。シーン編集不要）。
   - 受付前は半透明シアン（`bufferZoneIdleColor`）、**実際に受付中（`InInputBufferZone`）は明るい緑**（`bufferZoneActiveColor`）。CD ラベルに `BUF` を付す。
   - CD バーの先端がこの色付き区間に入っている ≒ 先行入力できる、という見た目。ジャンプは §2-6 のとおり区間位置は目安（受付判定は着地予測）。
