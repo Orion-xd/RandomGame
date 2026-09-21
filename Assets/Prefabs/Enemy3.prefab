@@ -8,6 +8,22 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 1055620272138999152, guid: fdb520ebbb06f3d4cb79a350f241b90b, type: 3}
+      propertyPath: m_Sprite
+      value: 
+      objectReference: {fileID: 21300000, guid: e3ff59f7bb2b80c4287f5eb1963a77a2, type: 3}
+    - target: {fileID: 1055620272138999152, guid: fdb520ebbb06f3d4cb79a350f241b90b, type: 3}
+      propertyPath: m_WasSpriteAssigned
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2239675791893010601, guid: fdb520ebbb06f3d4cb79a350f241b90b, type: 3}
+      propertyPath: m_Sprite
+      value: 
+      objectReference: {fileID: 21300000, guid: e3ff59f7bb2b80c4287f5eb1963a77a2, type: 3}
+    - target: {fileID: 2239675791893010601, guid: fdb520ebbb06f3d4cb79a350f241b90b, type: 3}
+      propertyPath: m_WasSpriteAssigned
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 4393396281787361719, guid: fdb520ebbb06f3d4cb79a350f241b90b, type: 3}
       propertyPath: m_LocalPosition.x
       value: -4
@@ -100,6 +116,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Enemy3AI
   moveSpeed: 4
   retreatDistance: 7
+  firstActionDelay: 3
   bulletPrefab: {fileID: 8944913330095386953, guid: eb63c598242ca574681f998abce32ac2, type: 3}
   bulletSpeed: 5
   radialChance: 0.5

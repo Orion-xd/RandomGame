@@ -48,6 +48,7 @@ public class Enemy3AI : MonoBehaviour
     private float _cooldownTimer;
     private Bullet _pendingHomingBullet;
     private Transform _player;
+    private Transform _playerHomingTarget;
     private SpriteRenderer _sr;
     private Enemy _enemy;
     private int _dir = 1;
@@ -73,7 +74,14 @@ public class Enemy3AI : MonoBehaviour
     private void Start()
     {
         var p = GameObject.FindGameObjectWithTag("Player");
-        if (p != null) _player = p.transform;
+        if (p != null)
+        {
+            _player = p.transform;
+            // 追尾弾の発射時の初期方向も、専用の目印（HomingTarget、心臓のあたりに置く想定）を狙う。
+            // 無ければ今まで通りプレイヤー本体を狙う（フォールバック）。
+            var homingTargetTf = p.transform.Find("HomingTarget");
+            _playerHomingTarget = homingTargetTf != null ? homingTargetTf : _player;
+        }
     }
 
     /// <summary>プレイヤーの攻撃を受けた瞬間に呼ばれる。追尾弾を発射中なら、問答無用でその弾を消してクールタイムへ移行する。</summary>
@@ -182,7 +190,7 @@ public class Enemy3AI : MonoBehaviour
     {
         if (bulletPrefab != null)
         {
-            Vector2 dir = ((Vector2)_player.position - (Vector2)transform.position).normalized;
+            Vector2 dir = ((Vector2)_playerHomingTarget.position - (Vector2)transform.position).normalized;
             _pendingHomingBullet = Instantiate(bulletPrefab, transform.position, Quaternion.identity);
             _pendingHomingBullet.Configure(dir, bulletSpeed, 1, homingTurnSpeed);
         }
