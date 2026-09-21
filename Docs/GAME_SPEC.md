@@ -114,14 +114,8 @@ Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.Ge
 
 プレイヤーの見た目のイラスト素材は準備済みだが、まだUnityエディターにはインポートしていない（担当イラストレーターがAI学習利用を懸念しており、プログラミング側を一通り終えてからインポートする方針のため）。そのため、実際のイラストが入るまでの仮素材として、既存の`PlayerArrow`スプライト（`SpriteRenderer.color`で青に着色されているだけの矢印）を**状態ごとに色だけ変える**方式にした。実際のイラストが入ったら、各Clipの中身（スプライト差し替えなど）を作り直すだけで、スクリプト側は変更不要な想定。
 
-- **バグ修正（2026-09-21、初回実装直後）**: 仮のAnimationClipとして最初`Transform.m_LocalPosition.x`に同じ値の2キーフレームを打った「見た目に一切変化のないダミーカーブ」を使っていたところ、**プレイヤーが一切移動できなくなる**不具合が発生した（見た目の左右反転は機能するが、位置が変わらない）。原因は、Animator が Player 自身の GameObject に付いており、Playerの`Transform.m_LocalPosition`を**毎フレーム、どの状態でも常に同じ値へ強制的に書き戻していた**ため（アニメーションが物理演算による位置変更を毎フレーム上書きしてしまっていた）。対処として、ダミーカーブを`Transform`ではなく`SpriteRenderer.m_Color`（RGBA、計4本のfloatカーブ）に変更。これなら位置には一切影響せず、しかも「状態ごとに色を変える」という下記の仮素材仕様をそのまま兼ねられる。
-- **状態ごとの色（`SpriteRenderer.color`、2026-09-21）**: いずれも既存のIdle色 `(0.25, 0.55, 0.95)` を基準に、`Color.Lerp`で暗く/明るくしたもの、またはアクションバーUIの配色を流用。
-  - `Idle`: `(0.25, 0.55, 0.95, 1)` — 今まで通りの青（無変更）
-  - `Move`: `(0.15, 0.33, 0.57, 1)` — 暗めの青（Idle色を黒に40%寄せた値）
-  - `Jump`: `(0.30, 0.70, 1.0, 1)` — 明るめの青（`ActionBarUI.jumpColor`と同じ値を流用）
-  - `Dash`: `(1.0, 0.85, 0.25, 1)` — 黄（`ActionBarUI.dashColor`と同じ値を流用）
-  - `Attack`: `(1.0, 0.40, 0.40, 1)` — 赤（`ActionBarUI.attackColor`と同じ値を流用）
-  - `Dead`: `(0.05, 0.05, 0.05, 1)` — ほぼ黒
+- **バグ修正（2026-09-21、初回実装直後）**: 仮のAnimationClipとして最初`Transform.m_LocalPosition.x`に同じ値の2キーフレームを打った「見た目に一切変化のないダミーカーブ」を使っていたところ、**プレイヤーが一切移動できなくなる**不具合が発生した（見た目の左右反転は機能するが、位置が変わらない）。原因は、Animator が Player 自身の GameObject に付いており、Playerの`Transform.m_LocalPosition`を**毎フレーム、どの状態でも常に同じ値へ強制的に書き戻していた**ため（アニメーションが物理演算による位置変更を毎フレーム上書きしてしまっていた）。対処として、ダミーカーブを`Transform`ではなく`SpriteRenderer.m_Color`（RGBA、計4本のfloatカーブ）に変更。これなら位置には一切影響せず、しかも「状態ごとに色を変える」という仮素材仕様をそのまま兼ねられた（当時は状態ごとに`Idle`=青（無変更）/`Move`=暗めの青/`Jump`=明るめの青/`Dash`=黄/`Attack`=赤/`Dead`=ほぼ黒、に着色していた）。
+- **本番素材インポートの準備として色カーブを全削除（2026-09-21）**: 本番のイラスト素材を入れる作業に入るにあたり、上記の`SpriteRenderer.m_Color`ダミーカーブを6Clipすべてから削除（`remove_animation_curve`、アセット自体（`PlayerArrow.png`）は削除していない）。**Animation Event（Dash/Attackの発動タイミング系イベント）はそのまま残してある**。カーブを全て削除しても`AnimationClip.length`とイベントの時刻は保持されることを確認済み（Unity側がカーブと独立して長さを保持する）ので、キーフレームが1つも無い状態でも`dashClip.length`/`attackClip.length`に依存する既存のクールタイム計算（§2-4）や`hasExitTime`の遷移は壊れていない。現状、各Clipは実質「長さとAnimation Eventだけを持つ空の器」になっている。今後、本番のスプライトアニメーション用カーブ（Sprite差し替えなど）をここに追加していく想定。
 
 - **状態**: `Idle` / `Move` / `Dash` / `Jump` / `Attack` / `Dead` の6つ（`Assets/Animations/Player.controller`、Base Layer 1層のみ）。
   - `Idle`⇔`Move`: `Moving`（Bool）パラメータで自動的に行き来する（`MainActionController.Update()`が毎フレーム`_player.MoveInput`から設定）。
@@ -133,9 +127,11 @@ Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.Ge
   - `Player_Dash.anim`：末尾（t=0.8秒）に`"DashEnd"`のみ。
   - `Player_Attack.anim`：`"AttackHitboxOn"`（t=0.15秒）/`"AttackHitboxOff"`（t=0.35秒）/`"AttackEnd"`（末尾、t=0.5秒）の3つ（2026-09-21、前隙・後隙の追加に伴い2つ増えた）。
 - **`AnimationEventRelay.cs`（新規、汎用コンポーネント）**: Animator と同じ GameObject に置く。`RaiseEvent(string eventName)`だけを持ち、それを`event Action<string> OnAnimationEvent`として中継するだけ。「何が起きたら何をするか」は一切関知しないので、将来敵キャラのアニメーションにも同じ部品をそのまま使い回せる（敵はコンボの仕組みを持たないので、反応ロジックはキャラクターごとに別に書く前提）。`MainActionController`が`"DashEnd"`/`"AttackEnd"`を購読し、`EndBusy()`を呼ぶ。
-- **死亡アニメーション**: `PlayerHealth.OnDied`を`MainActionController`が購読し、`Dead`トリガーを発火するだけ（`HandlePlayerDied()`）。落下死の場合はカメラ外で見えないことが多いが、それで問題ない（仕様として許容）。
-- **安全策（`WatchdogEffectEnd`）**: Animation Eventが何らかの理由（Clip/Animatorの設定漏れなど）で発火しなかった場合に永久に発動不可のまま固まらないよう、`Update()`で「経過時間が Clip の長さ＋0.5秒を超えたら強制的に`EndBusy`」という保険を追加（通常はここに来る前にAnimation Event側で片付く）。
-- Playで、Dash/Attack/Jumpそれぞれについて「発動→Animator側の状態遷移→効果終了（Animation Event or 着地）→`IsReady`復帰→Animatorが`Idle`に戻る」の一連の流れと、Attack中にDashへコンボした場合に攻撃判定が強制的に閉じること、ダッシュ後半の後方入力で即座に全効果が終了することを確認済み。上記のTransform curveバグ修正後、実際に`PlayerController.FixedUpdate`を複数回呼んで座標が正しく進むこと、状態ごとに`SpriteRenderer.color`が意図した色になることも確認済み。
+- **死亡アニメーション**: `PlayerHealth.OnDied`を`MainActionController`が購読し、`Dead`トリガーを発火するだけ（`HandlePlayerDied()`）。落下死の場合はカメラ外で見えないことが多いが、それで問題ない（仕様として許容）。**失敗パネルの表示は`MainActionController`ではなく`StageManager`側がAnimation Event（`"ShowFailPanel"`、`Player_Dead.anim`）経由で行う**（2026-09-21、詳細は§9-3「失敗条件」参照）。`Animator.updateMode=UnscaledTime`にしてあるので、死亡確定と同時に`Time.timeScale=0`にしても死亡アニメーションだけは止まらずに再生される。
+- **安全策（`WatchdogEffectEnd`）**: Animation Eventが何らかの理由（Clip/Animatorの設定漏れなど）で発火しなかった場合に永久に発動不可のまま固まらないよう、`Update()`で「経過時間が Clip の長さ＋0.5秒を超えたら強制的に`EndBusy`」という保険を追加（通常はここに来る前にAnimation Event側で片付く）。**Dead状態にはこの保険は適用していない**（そもそも`_busy`と無関係で、失敗確定後は`MainActionController`ごと無効化されるため）。
+- **本番のスプライトアニメーション素材、6Clipすべてに導入済み（2026-09-21）**: `Idle`(1フレーム)/`Move`(3フレーム)/`Jump`(1フレーム)/`Dash`(2フレーム)/`Attack`(8フレーム)/`Dead`(1フレーム、今後追加予定)。`m_Sprite`を差し替える`PPtrCurve`として実装されており、`get_animation_clip`の`bindings`一覧には出てこない（floatカーブのみを列挙するツールのため）ので、内容を確認する際は`.anim`ファイルの生YAML（`m_PPtrCurves`）を直接読む必要がある。**Unityのアニメーションウィンドウでクリップの長さを広げると、既存のAnimation Eventの時刻も自動的に動くことがある**（実際にAttack/Dashの各イベントの時刻がスプライト導入後にずれていた）。実装時に置いていた仮の時刻（前隙0.15秒/後隙0.35秒など）は本番素材の尺に合わせて必要ならユーザー側で調整が必要（コード側はイベント名だけを見ているので時刻はいつでも自由に動かしてよい）。
+  - **ハマったポイント**: 空のAnimationClip（カーブが1つも無い状態）は`AnimationClip.length`が信頼できない（`AnimationUtility.SetAnimationClipSettings`で`stopTime`を明示的に設定しても反映されないことがある）。仮素材として「見た目に影響しないダミーカーブ＋Animation Event」を使う場合は、カーブを完全にゼロにしないこと。本番のスプライトカーブが入っていれば、それ自体が長さを正しく決定する。
+- Playで、Dash/Attack/Jumpそれぞれについて「発動→Animator側の状態遷移→効果終了（Animation Event or 着地）→`IsReady`復帰→Animatorが`Idle`に戻る」の一連の流れと、Attack中にDashへコンボした場合に攻撃判定が強制的に閉じること、ダッシュ後半の後方入力で即座に全効果が終了することを確認済み。上記のTransform curveバグ修正後、実際に`PlayerController.FixedUpdate`を複数回呼んで座標が正しく進むこと、状態ごとに`SpriteRenderer.color`が意図した色になることも確認済み。死亡時のフリーズ→死亡アニメーション（UnscaledTime）→Animation Eventでのパネル表示、致死ダメージでノックバックが発生しないことも確認済み。
 
 ---
 
@@ -377,6 +373,8 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
   - 失敗画面: `Retry` / `Stage Select`。
 - **クリア条件**: `Goal`（ステージ右端のトリガー）にプレイヤー本体が触れる。ただし `Enemy` で `MaxHealth >= 2`（＝ボス）が生存中は無効。
 - **失敗条件**: `PlayerHealth.OnDied`（体力 0、1 回だけ発火）または `StageManager` の `player.y < killY`（既定 -12）。
+  - **体力0の場合だけ死亡アニメーションを挟む（2026-09-21）**: 落下死・クリアは今まで通り即座にパネルを表示する。体力0の場合は`StageManager.HandlePlayerHpDied()`（`Fail()`とは別メソッド）が呼ばれ、**即座に**`_ended=true`＋`FreezeGameplay()`＋`Time.timeScale=0`にするが、**パネルはまだ出さない**。Playerの`Animator`だけは`updateMode=UnscaledTime`（2026-09-21変更、既定のNormalから変更）にしてあるので、`Time.timeScale=0`でも死亡アニメーション（`Dead`状態）は止まらずに再生され続ける（他の全オブジェクトは`Time.deltaTime`ベースなので今まで通り完全停止）。死亡アニメーションのClip側に仕込んだAnimation Event（`AnimationEventRelay`経由、`"ShowFailPanel"`）が発火した瞬間に`StageManager.HandlePlayerAnimationEvent()`が`failPanel`を表示する。§2-7も参照。
+  - **致死ダメージにはノックバック無し（2026-09-21）**: `Enemy.TryTouchPlayer`で`health.TakeDamage()`後、`health.Health <= 0`（＝やられた瞬間）ならその場でreturnし、`ApplyKnockback`を呼ばない。それ以外のダメージ（体力が残る場合）は今まで通りノックバックする。
 - **キーボード操作（`MenuNavigation`, 2026-09-06 / 2D 化 2026-09-08）**: メニュー系 UI をキーボードでも操作可能。
   - 付いている場所: `Title/Canvas`、`StageSelect/Canvas`、各ステージの `StageFlow/ResultCanvas/ClearPanel` と `FailPanel`（パネルに付けてあるので、そのパネルが表示された瞬間だけ働く）。対象ボタンは子から階層順で自動収集。実行時生成ボタンは `AddButton()` で追加（`DevProgressResetButton` が使用）。
   - **カーソル移動は画面位置ベースの 2D**（`ButtonCenter` = `transform.position`、ScreenSpaceOverlay なので画面ピクセル）:
@@ -491,7 +489,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | `AnimationEventRelay` | Player | Animation Event を C# イベントに中継する汎用コンポーネント（敵キャラにも使い回せる想定、§2-7） |
 | `AttackHitbox` | Player/AttackHitbox | 前方の一時的な攻撃判定（トリガー）。`Enemy`にヒットすればダメージ、`Bullet`にヒットすれば`DestroyByAttack()`で即消滅（2026-09-13）。`Rigidbody2D`付き（2026-09-19追加。プレイヤー静止中でも`OnTrigger`が確実に発火するようにするため。§2-3参照） |
 | `PlayerDebugBars` | Player/DebugBars | 頭上のデバッグゲージ 2 本。`Awake` で `!DeveloperSettings.Active` なら GameObject ごと非アクティブ（開発者用） |
-| `Enemy` | Enemy1, Enemy2, Enemy3, Enemy_Boss, Stage4のEnemy1_Boss | 体力・接触ダメージ + ノックバック・ダッシュ中すり抜け。`clearStageOnDeath`（既定false、2026-09-13追加）trueなら`Die()`時に`StageManager.Clear()`を呼ぶ（Goal無しステージのボス用）。`OnDamaged`イベント（2026-09-16追加、`TakeDamage`で体力が減るたびに発火）を`Enemy3AI`が購読し、追尾弾発射中に被弾したら即座にクールタイムへ移行する処理に使用 |
+| `Enemy` | Enemy1, Enemy2, Enemy3, Enemy_Boss, Stage4のEnemy1_Boss | 体力・接触ダメージ + ノックバック・ダッシュ中すり抜け。ただし**致死ダメージ（やられる瞬間）はノックバック無し**（2026-09-21、`health.Health <= 0`ならreturn）。`clearStageOnDeath`（既定false、2026-09-13追加）trueなら`Die()`時に`StageManager.Clear()`を呼ぶ（Goal無しステージのボス用）。`OnDamaged`イベント（2026-09-16追加、`TakeDamage`で体力が減るたびに発火）を`Enemy3AI`が購読し、追尾弾発射中に被弾したら即座にクールタイムへ移行する処理に使用 |
 | `EnemyPatrol` | Enemy1, Enemy_Boss, Stage4のEnemy1_Boss | 左右往復（transform 直接移動）。**2026-09-14**: `DialoguePlayer.IsPlaying`中は移動しない |
 | `EnemyShooter` | Enemy2（2026-09-13追加） | 一定間隔で`Bullet`を発射。発射の瞬間だけプレイヤーへホーミングするオプション付き。**2026-09-14**: `SpriteRenderer.isVisible`が false（画面外）のときは発射しない、`DialoguePlayer.IsPlaying`中はタイマーごと停止（行動しない）、ホーミング無効時はプレイヤーがいる左右方向へ発射（以前は常に右固定になっていたバグを修正） |
 | `Bullet` | Enemy2/Enemy3の弾（2026-09-13追加） | 発射時に設定した方向へ直進する弾。`transform.position`直接移動、当たり判定は**トリガー**（2026-09-17に非トリガーから変更）。`Rigidbody2D`（Body Type = Kinematic）付き（トリガー判定の成立に必要。地面側にも`Rigidbody2D`があるが弾側にも付けておくことで確実にする）。プレイヤー接触ダメージ・ダッシュ中すり抜け・地面接触/攻撃で消滅・`maxLifetime`で自動消滅。**2026-09-16**: `Configure`に`homingTurnSpeedDegPerSec`（既定0）を追加、0より大きいと`Update()`毎に`RotateTowards`でプレイヤー方向へ継続的に旋回する追尾弾になる（Enemy3の③用、Enemy2は使わず従来通り）。**2026-09-17**: 追尾弾（`homingTurnSpeed > 0`）は`maxLifetime`による自動消滅の対象から除外。**2026-09-18**: 敵キャラに触れた場合、発射直後の`selfHitGraceTime`（既定0.2秒、発射元自身との重なり対策）を過ぎていれば`enemyDamage`（既定2）を与えて消滅する（それまでは常にすり抜けだった。追尾弾をラスボスへ誘導してヒットさせる攻略に対応）。
@@ -517,7 +515,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | `DevProgressResetButton` | StageSelect/Canvas | 【開発者用】BackButton の少し上に「Reset story & clear」ボタンを実行時生成し `MenuNavigation.AddButton` で登録。`GameFlow.ResetStageProgress()` ＋ 両トグルの `ResetAll()`。表示は `DeveloperSettings.Active` |
 | `FreshBuildGuard` | (static, `RuntimeInitializeOnLoadMethod`) | ビルド版のみ。`Policy`（OnEveryBuild / OnTokenChange / Disabled）に応じて起動時に `GameFlow.ResetProgress()`。エディタ内は無効 |
 | `FreshBuildGuardBuildCheck` | (`Assets/Scripts/Editor/`, `IPreprocessBuildWithReport`) | `Policy = OnEveryBuild` のまま非開発ビルドを作ろうとしたら確認ダイアログでビルドを止める |
-| `StageManager` | 各ステージ/StageFlow | クリア/失敗判定・結果画面表示・結果ボタン処理・落下死判定（killY）・初回入場時の開始会話（`TryPlayIntro`, `Time.timeScale=0`）・ステージ開始時 / 会話終了時に `InputLock.LockFor(inputLockDuration=0.25)`（2026-09-12 に 0.5→0.25 へ半減） |
+| `StageManager` | 各ステージ/StageFlow | クリア/失敗判定・結果画面表示・結果ボタン処理・落下死判定（killY）・初回入場時の開始会話（`TryPlayIntro`, `Time.timeScale=0`）・ステージ開始時 / 会話終了時に `InputLock.LockFor(inputLockDuration=0.25)`（2026-09-12 に 0.5→0.25 へ半減）。体力0での失敗は`Fail()`とは別経路（`HandlePlayerHpDied`→死亡アニメーション→Animation Eventで`HandlePlayerAnimationEvent`がパネル表示、2026-09-21、§9-3） |
 | `Goal` | 各ステージ/Goal | 右端トリガー。ボス全滅後にプレイヤーが触れると `StageManager.Clear()` |
 | `MenuNavigation` | Title/StageSelect の Canvas, 各ステージの ClearPanel/FailPanel | メニュー UI のキーボード操作。位置ベース 2D 移動（W/S=上下・最近傍＋端ループ、A/D=同じ行内＋端ループ）、Space/Enter で決定、選択枠の自動生成。マウスホバーは移動時のみ反映。`OnEnable` で `InputLock.LockFor(inputLockDuration)`（全画面共通 0.5s、2026-09-12 に結果パネルの 1.0s を統一）。カーソル移動・マウスホバーは `InputLock.NavigationAllowed`（フェード中だけ false）を見る、決定（`HandleSubmit()`/`GraphicRaycaster`）は `InputLock.InputAllowed`（フェード中 or 猶予中は false）を見る——猶予中でもカーソル移動は効き、実際に成立したら `InputLock.Unlock()` で決定の猶予も即解除する（2026-09-12、§16-1）。`AddButton()` / `SetInitialFocus()` |
 | `InputLock` | (static クラス) | 入力ロック。`InputAllowed` = `!SceneTransition.Transitioning && Time.unscaledTime >= 解除時刻`。`LockFor(秒)` で一定時間 false に（一番遅い解除時刻を採用）。`MenuNavigation`/`DialoguePlayer`/`StageManager`/`SceneTransition` が LockFor、`MenuNavigation`/`DialoguePlayer`/`MainActionController`/`PlayerController` が参照 |

@@ -9,6 +9,13 @@ using UnityEngine.UI;
 /// 失敗   = 体力0（PlayerHealth.OnDied）または落下（y &lt; killY）。
 /// 結果画面表示中は Time.timeScale = 0 で停止し、プレイヤーの操作スクリプトを無効化する。
 /// 「もう一度」はシーンの再読み込みなので、アクションの並びなども含めて完全に初期化される。
+///
+/// ── 体力0での失敗だけ、死亡アニメーションを挟む（2026-09-21） ──
+/// 落下死・クリアは今まで通り即座にパネルを表示する。体力0の場合だけ、
+/// 「即座にゲーム内を全停止（Time.timeScale=0）→ プレイヤーの死亡アニメーション（UnscaledTime で再生され続ける）
+/// → アニメーション側の Animation Event（AnimationEventRelay 経由、"ShowFailPanel"）でパネルを表示」という流れになる。
+/// Time.timeScale=0 にしても Player の Animator は AnimatorUpdateMode.UnscaledTime のため止まらずに進み続ける
+/// （他の全オブジェクトは今まで通り Time.deltaTime ベースなので止まる）。
 /// </summary>
 public class StageManager : MonoBehaviour
 {
@@ -28,6 +35,7 @@ public class StageManager : MonoBehaviour
     [SerializeField] private float inputLockDuration = 0.25f;
 
     private PlayerHealth _playerHealth;
+    private AnimationEventRelay _playerAnimEvents;
     private Transform _playerTf;
     private bool _ended;
     private bool _introPlaying;
@@ -46,7 +54,9 @@ public class StageManager : MonoBehaviour
         {
             _playerTf = p.transform;
             _playerHealth = p.GetComponent<PlayerHealth>();
-            if (_playerHealth != null) _playerHealth.OnDied += Fail;
+            if (_playerHealth != null) _playerHealth.OnDied += HandlePlayerHpDied;
+            _playerAnimEvents = p.GetComponent<AnimationEventRelay>();
+            if (_playerAnimEvents != null) _playerAnimEvents.OnAnimationEvent += HandlePlayerAnimationEvent;
         }
         if (nextButton != null) nextButton.gameObject.SetActive(GameFlow.HasNextStage);
 
@@ -57,7 +67,8 @@ public class StageManager : MonoBehaviour
 
     private void OnDestroy()
     {
-        if (_playerHealth != null) _playerHealth.OnDied -= Fail;
+        if (_playerHealth != null) _playerHealth.OnDied -= HandlePlayerHpDied;
+        if (_playerAnimEvents != null) _playerAnimEvents.OnAnimationEvent -= HandlePlayerAnimationEvent;
     }
 
     private void Update()
@@ -105,6 +116,7 @@ public class StageManager : MonoBehaviour
         Time.timeScale = 0f;
     }
 
+    /// <summary>落下死（今まで通り、即座に失敗パネルを表示）。</summary>
     public void Fail()
     {
         if (_ended) return;
@@ -112,6 +124,23 @@ public class StageManager : MonoBehaviour
         FreezeGameplay();
         if (failPanel != null) failPanel.SetActive(true);
         Time.timeScale = 0f;
+    }
+
+    /// <summary>体力0での失敗（PlayerHealth.OnDied）。パネルはまだ出さず、ゲーム内を即座に全停止して
+    /// プレイヤーの死亡アニメーションだけ再生させる。パネルは死亡アニメーション側の Animation Event
+    /// （HandlePlayerAnimationEvent の "ShowFailPanel"）で表示される。</summary>
+    private void HandlePlayerHpDied()
+    {
+        if (_ended) return;
+        _ended = true;
+        FreezeGameplay();
+        Time.timeScale = 0f;
+    }
+
+    private void HandlePlayerAnimationEvent(string eventName)
+    {
+        if (eventName != "ShowFailPanel") return;
+        if (failPanel != null) failPanel.SetActive(true);
     }
 
     private void FreezeGameplay()
