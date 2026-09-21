@@ -72,9 +72,10 @@ Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.Ge
     - 後方入力: **急ブレーキ**（`dashBrakeDecel` = 160 u/s²）＋ **無敵・アニメーション・コンボ受付・クールタイムのすべてを即座に終了**（`_dashInvBroken` ラッチ。一度解除したらこのダッシュ中は戻らない。Animation Event を待たずに`EndBusy(Dash)`を直接呼ぶ）。ただし物理的な減速自体は`dashBrakeDecel`でのブレーキのまま（急停止ではない）。
   - `IsDashing` が true の間、`Enemy` 側がプレイヤーとの物理衝突を `Physics2D.IgnoreCollision` で無視（すり抜け）。
   - `OverridesMovement` が true の間、`PlayerController` は速度・向きを書かない（ダッシュが制御）。
-- **攻撃 (`DoAttack` + `AttackHitbox`)**: 前方に子オブジェクトの当たり判定を有効化。継続時間は `attackClip`（Animator の Attack クリップ）の長さそのもの（既定 0.5 秒、§2-7参照）。触れた敵に `attackDamage`（1）。同じ敵を多重ヒットしない（`HashSet<Enemy>`、有効化時にクリア）。攻撃判定はトリガー。前方距離は `AttackHitbox` の `Transform.localPosition.x` の絶対値をそのまま使う方式（2026-09-13〜）。`Configure()` は毎回その絶対値を向き（`facingSign`）に応じて符号だけ反転させる。これにより、インスペクターで Transform の X を直接編集すればそのまま前後距離の調整として反映される。
-  - **2026-09-21**: `DoAttack`はコルーチンではなくなった。ヒットボックスを閉じるのは`WaitForSeconds`ではなく、Attack クリップ末尾のAnimation Event（§2-7）。
-  - もし攻撃の効果中に別のアクションへコンボした場合、Animation Event が発火しなくなる（Animator が上書きされて Attack クリップの再生が中断するため）ので、`Execute()`側で強制的にヒットボックスを閉じる保険が入っている。
+- **攻撃 (`DoAttack` + `AttackHitbox`)**: 前方に子オブジェクトの当たり判定を、**攻撃アニメーション中の一部区間だけ**有効化（前隙・後隙があるため、発動と同時にはもう有効化しない）。触れた敵に `attackDamage`（1）。同じ敵を多重ヒットしない（`HashSet<Enemy>`、有効化時にクリア）。攻撃判定はトリガー。前方距離は `AttackHitbox` の `Transform.localPosition.x` の絶対値をそのまま使う方式（2026-09-13〜）。`Configure()` は毎回その絶対値を向き（`facingSign`）に応じて符号だけ反転させる。これにより、インスペクターで Transform の X を直接編集すればそのまま前後距離の調整として反映される。
+  - **2026-09-21**: `DoAttack`はコルーチンではなくなった。全てAnimation Eventベース（§2-7）で、`WaitForSeconds`は使わない。
+  - **前隙・後隙（2026-09-21追加）**: Attack クリップ（既定0.5秒）の中に3つの Animation Event。`"AttackHitboxOn"`（既定 t=0.15秒）で`attackHitbox.Configure()`＋`SetActive(true)`、`"AttackHitboxOff"`（既定 t=0.35秒）で`SetActive(false)`、`"AttackEnd"`（Clip末尾、t=0.5秒）で busy（クールタイム兼コンボ受付）を終了。つまり最初の0.15秒（前隙）と最後の0.15秒（後隙）は攻撃判定が出ておらず、中間の0.2秒だけ判定が有効。前隙・後隙の長さを変えたい場合はAnimation Eventの時刻を、攻撃判定発生中の長さを変えたい場合はOn/Offの間隔を調整すればよい。
+  - もし攻撃の効果中に別のアクションへコンボした場合、Animation Event が発火しなくなる（Animator が上書きされて Attack クリップの再生が中断するため）ので、`Execute()`側で強制的にヒットボックスを閉じる保険が入っている（`EndBusy(Attack)`側にも同様の保険がある）。
   - **バグ修正（2026-09-19、ラスボスに攻撃が当たらないことがある）**: 追尾弾がしばらく生成されて画面に映っている状況でラスボスを攻撃すると、ダメージが入らず、かつ追尾弾も消滅しない不具合があった。原因は `AttackHitbox` にも `Enemy3`（ラスボス）にも `Rigidbody2D` が付いておらず、双方とも実質 Static 扱いだったこと。**プレイヤーが移動しながら攻撃すると、`AttackHitbox` はプレイヤーの `Rigidbody2D`（Dynamic）の子として動いている状態になるため `OnTrigger` 系が正常に発火するが、プレイヤーが静止した状態で攻撃を発動すると `AttackHitbox` も静止した状態になり、たとえラスボスの当たり判定と重なっていても `OnTrigger` が発火しないことがある**（ユーザーが実機検証で特定）。**対処として `AttackHitbox` のプレハブに `Rigidbody2D` を追加**。これにより本不具合は解消。
 
 ### 2-4. クールタイム＝コンボ受付時間（2026-09-21、仕様変更）
@@ -128,7 +129,9 @@ Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.Ge
   - `Dash`→`Idle`: 2経路。① Exit Time（clip終端、duration 0）で自然に戻る。② `DashBreak`トリガー（後方入力での即時終了用、duration 0.05秒）。
   - `Attack`→`Idle`: Exit Time（clip終端、duration 0）のみ。
   - `Jump`→`Idle`: `Landed`トリガーのみ（着地検出時に`MainActionController`が発火。滞空時間が不定なため Exit Time は使えない）。
-- **Animation Event**: `Player_Dash.anim`・`Player_Attack.anim`それぞれの末尾（0.8秒/0.5秒）に、`AnimationEventRelay.RaiseEvent(string)`を呼ぶイベントを設定（`stringParameter`は`"DashEnd"`/`"AttackEnd"`）。`AnimationUtility.SetAnimationEvents`で設定（Unity Editor MCPに専用ツールが無いため`eval`のRoslyn経由）。
+- **Animation Event**: いずれも`AnimationEventRelay.RaiseEvent(string)`を呼ぶイベントとして設定（`AnimationUtility.SetAnimationEvents`、Unity Editor MCPに専用ツールが無いため`eval`のRoslyn経由）。
+  - `Player_Dash.anim`：末尾（t=0.8秒）に`"DashEnd"`のみ。
+  - `Player_Attack.anim`：`"AttackHitboxOn"`（t=0.15秒）/`"AttackHitboxOff"`（t=0.35秒）/`"AttackEnd"`（末尾、t=0.5秒）の3つ（2026-09-21、前隙・後隙の追加に伴い2つ増えた）。
 - **`AnimationEventRelay.cs`（新規、汎用コンポーネント）**: Animator と同じ GameObject に置く。`RaiseEvent(string eventName)`だけを持ち、それを`event Action<string> OnAnimationEvent`として中継するだけ。「何が起きたら何をするか」は一切関知しないので、将来敵キャラのアニメーションにも同じ部品をそのまま使い回せる（敵はコンボの仕組みを持たないので、反応ロジックはキャラクターごとに別に書く前提）。`MainActionController`が`"DashEnd"`/`"AttackEnd"`を購読し、`EndBusy()`を呼ぶ。
 - **死亡アニメーション**: `PlayerHealth.OnDied`を`MainActionController`が購読し、`Dead`トリガーを発火するだけ（`HandlePlayerDied()`）。落下死の場合はカメラ外で見えないことが多いが、それで問題ない（仕様として許容）。
 - **安全策（`WatchdogEffectEnd`）**: Animation Eventが何らかの理由（Clip/Animatorの設定漏れなど）で発火しなかった場合に永久に発動不可のまま固まらないよう、`Update()`で「経過時間が Clip の長さ＋0.5秒を超えたら強制的に`EndBusy`」という保険を追加（通常はここに来る前にAnimation Event側で片付く）。

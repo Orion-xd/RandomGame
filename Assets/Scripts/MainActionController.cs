@@ -26,6 +26,9 @@ using UnityEngine.InputSystem;
 /// Idle / Move / Dash / Jump / Attack / Dead の6状態。Dash と Attack だけ、Clip 末尾の Animation Event
 /// （AnimationEventRelay.RaiseEvent("DashEnd" / "AttackEnd")）で効果終了を通知する。Jump は着地で
 /// 終了（Animation Event は使わない）。Move は水平入力の有無で Idle と自動的に行き来する。
+/// Attack はさらに前隙・攻撃判定発生中・後隙の3区間に分かれており、"AttackHitboxOn"/"AttackHitboxOff"
+/// という2つの追加 Animation Event で攻撃判定（AttackHitbox）の有効/無効だけを個別に切り替える
+/// （2026-09-21）。"AttackEnd" は busy の終了だけを意味し、攻撃判定はそれより前に閉じている想定。
 /// 2つのアクションが同時に効果を持つ場合（例：ジャンプ+攻撃）でも、見た目のアニメーションは
 /// 後から発動した方が単純に上書きする（レイヤー分けなどは行わない。当面のプレースホルダー仕様）。
 ///
@@ -480,25 +483,31 @@ public class MainActionController : MonoBehaviour
         // _dashInvTimeLeft / _dashInvBroken はそのまま → 無敵は通常のダッシュ効果時間ぶん継続
     }
 
+    /// <summary>攻撃判定そのものは有効化しない（前隙があるため）。Animation Event の
+    /// "AttackHitboxOn" が発火した瞬間に初めて有効化される（HandleAnimationEvent 参照）。</summary>
     private void DoAttack()
     {
-        if (attackHitbox != null)
-        {
-            attackHitbox.Configure(_player.FacingSign, attackDamage);
-            attackHitbox.gameObject.SetActive(true);
-        }
-
         _busy = BusyAction.Attack;
         _busyStartTime = Time.time;
         if (animator != null) animator.SetTrigger("Attack");
     }
 
-    /// <summary>Dash/Attack の Animation Event（Clip 末尾）から呼ばれる。</summary>
+    /// <summary>Dash/Attack の Animation Event から呼ばれる。
+    /// Attack は前隙・攻撃判定発生中・後隙の3区間に分かれており、"AttackHitboxOn"/"AttackHitboxOff" で
+    /// 攻撃判定の有効/無効を、"AttackEnd"（Clip 末尾）で busy（クールタイム兼コンボ受付）の終了を通知する。</summary>
     private void HandleAnimationEvent(string eventName)
     {
         switch (eventName)
         {
             case "DashEnd": EndBusy(BusyAction.Dash); break;
+            case "AttackHitboxOn":
+                if (_busy != BusyAction.Attack || attackHitbox == null) return;
+                attackHitbox.Configure(_player.FacingSign, attackDamage);
+                attackHitbox.gameObject.SetActive(true);
+                break;
+            case "AttackHitboxOff":
+                if (attackHitbox != null) attackHitbox.gameObject.SetActive(false);
+                break;
             case "AttackEnd": EndBusy(BusyAction.Attack); break;
         }
     }
