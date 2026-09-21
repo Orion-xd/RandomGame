@@ -1,36 +1,37 @@
-using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 /// <summary>
 /// メインアクション（ジャンプ / ダッシュ / 攻撃）の発動を司る。
 /// スペース / エンター / テンキー Enter / 左クリックでキュー先頭のアクションを1つ消費して実行し、
-/// クールタイム経過まで次を受け付けない（会話送りやメニュー決定と操作系を統一するため複数キーを許可）。
+/// そのアクションの効果が終わるまで次を受け付けない（会話送りやメニュー決定と操作系を統一するため複数キーを許可）。
 ///
-/// ── クールタイム ──
-///  - ダッシュ / 攻撃：技ごとの固定秒数（dashCooldown / attackCooldown）。
-///  - ジャンプ：時間ではなく「着地するまで」。着地すれば滞空時間に関係なくクールタイム終了。
-///    ただし異常に長く滞空した場合の保険として、地面を離れてから jumpAirCooldownCap 秒で強制解除。
+/// ── クールタイム＝コンボ受付時間（2026-09-21、仕様変更）──
+/// 「クールタイム」と「コンボ受付時間」は同じもの（＝そのアクションの効果が続いている間）になった。
+/// つまり単発で終わらせてもコンボにしても、次に動けるようになるタイミングは一致する。
+///  - ダッシュ / 攻撃：それぞれの AnimationClip（dashClip / attackClip）の長さぶん。
+///    Clip の末尾に仕込んだ Animation Event（AnimationEventRelay 経由）が発火した瞬間に終了する。
+///    効果時間を変えたい場合は AnimationClip の長さを変えればよい（インスペクターの数値ではない）。
+///    ダッシュのみ例外的に、後半で後方入力があると Animation Event を待たずにその場で終了する（後述）。
+///  - ジャンプ：今まで通り「着地するまで」。滞空時間に上限は設けない（着地することだけが終了条件）。
+/// 内部的には「今どのアクションで busy か（_busy）」で一元管理する（Jump/Dash/Attack/None）。
 ///
 /// ── コンボ（連続発動） ──
-/// 1つ目の発動から comboGraceTime 秒（組み合わせによらず一定）以内にもう一度発動すると
-/// 「2つ目」として受け付ける（最大2連続）。この猶予はクールタイムとは独立したパラメータ。
-///  - コンボにジャンプを含まない場合：2つ目のアクションのクールタイムだけ見ればよい
-///    （1つ目のクールタイムは必ず先に明けるため）。
-///  - コンボにジャンプを含む場合：着地した瞬間にクールタイム終了（上限 jumpAirCooldownCap 秒）。
-///    もう片方（ダッシュ / 攻撃）のクールタイムは考慮しない。
-/// 2つのアクションの効果は単純に「両方その場で発動」するだけ（ジャンプ＋攻撃＝ジャンプしながら
-/// 攻撃判定、ジャンプ＋ダッシュ＝上昇中にダッシュへ移行、など）。唯一の特例はダッシュ→ジャンプで、
-/// 空中でもジャンプの発動を許可し（接地チェック免除）、ダッシュ移動を中断してから跳ぶ。
-/// このとき無敵はダッシュの通常効果時間ぶん継続する（下記 _dashInvTimeLeft）。
+/// 1つ目のアクションが busy の間（＝上記の効果が続いている間）にもう一度発動すると「2つ目」として
+/// 受け付ける（最大2連続）。2つ目を発動したら、その時点でコンボ受付は打ち切り（3つ目は無い）。
+/// `StageSet.disableCombos` が true のステージ（ステージ1など）ではコンボの「受付」だけを無効化する。
+/// busy の長さ自体（＝そのステージでの実質的なクールタイム）は他ステージと変わらない。
 ///
-/// `StageSet.disableCombos` が true のステージ（ステージ1など）ではコンボを完全に無効化する。
-/// 1回発動したら comboGraceTime は無意味で、そのアクションのクールタイムが明けるまで次は出せない。
+/// ── アニメーション ──
+/// Idle / Move / Dash / Jump / Attack / Dead の6状態。Dash と Attack だけ、Clip 末尾の Animation Event
+/// （AnimationEventRelay.RaiseEvent("DashEnd" / "AttackEnd")）で効果終了を通知する。Jump は着地で
+/// 終了（Animation Event は使わない）。Move は水平入力の有無で Idle と自動的に行き来する。
+/// 2つのアクションが同時に効果を持つ場合（例：ジャンプ+攻撃）でも、見た目のアニメーションは
+/// 後から発動した方が単純に上書きする（レイヤー分けなどは行わない。当面のプレースホルダー仕様）。
 ///
 /// ── 先行入力（バッファ） ──
-/// クールタイム終了の inputBufferTime 秒前（既定 0.1 秒＝約6フレーム）から、発動入力（スペース / エンター /
-/// テンキー Enter / 左クリック）を「先行入力」として記憶する。入力を離していても、クールタイムが明けた瞬間に次のアクションを発動する。
-/// これにより「クールタイム明けにすぐ次を出す」操作がやりやすくなる。
+/// 効果終了の inputBufferTime 秒前（既定 0.1 秒＝約6フレーム）から、発動入力（スペース / エンター /
+/// テンキー Enter / 左クリック）を「先行入力」として記憶する。入力を離していても、発動可能になった瞬間に次のアクションを発動する。
 ///  - ダッシュ / 攻撃：時間ベースなので「残り <= inputBufferTime」で受付。
 ///  - ジャンプ：時間ではなく着地で明けるため、PlayerController.TryPredictLandingTime（足元からの
 ///    簡易落下予測）で「着地まで <= inputBufferTime 秒」のときだけ受付。予測できなければ受け付けない。
@@ -41,20 +42,18 @@ using UnityEngine.InputSystem;
 [RequireComponent(typeof(MainActionQueue))]
 public class MainActionController : MonoBehaviour
 {
+    private enum BusyAction { None, Dash, Jump, Attack }
+
     [Header("ジャンプ")]
     [Tooltip("ジャンプ時に与える上向きの初速")]
     [SerializeField] private float jumpForce = 12f;
-    [Tooltip("ジャンプのクールタイムは『着地するまで』。滞空が異常に長い場合に備えた上限（秒）。" +
-             "地面を離れてからこの秒数で強制的にクールタイムを解除する")]
-    [SerializeField] private float jumpAirCooldownCap = 3f;
 
     [Header("ダッシュ")]
     [Tooltip("ダッシュの最高速度（発動時にこの速度になる）")]
     [SerializeField] private float dashSpeed = 18f;
-    [Tooltip("ダッシュ継続時間。この間は落下しない")]
-    [SerializeField] private float dashDuration = 0.5f;
     [Range(0f, 1f)]
-    [Tooltip("継続時間のうち『前半（完全ロック区間）』が占める割合。前半は最高速度固定・入力無視・完全無敵")]
+    [Tooltip("継続時間のうち『前半（完全ロック区間）』が占める割合。前半は最高速度固定・入力無視・完全無敵。" +
+             "残り（後半）は後方入力で即座に解除できる")]
     [SerializeField] private float dashLockFraction = 0.5f;
     [Tooltip("後半に前方入力があるときの減速の強さ (units/秒^2)。ゆるめ")]
     [SerializeField] private float dashForwardDecel = 40f;
@@ -64,35 +63,38 @@ public class MainActionController : MonoBehaviour
     [Header("攻撃")]
     [Tooltip("前方に出す攻撃判定（子オブジェクト）。通常は非アクティブ")]
     [SerializeField] private AttackHitbox attackHitbox;
-    [Tooltip("攻撃判定が出ている時間")]
-    [SerializeField] private float attackDuration = 0.4f;
     [Tooltip("攻撃1ヒットのダメージ")]
     [SerializeField] private int attackDamage = 1;
 
-    [Header("クールタイム / コンボ")]
-    [Tooltip("ダッシュのクールタイム（秒）")]
-    [SerializeField] private float dashCooldown = 2f;
-    [Tooltip("攻撃のクールタイム（秒）")]
-    [SerializeField] private float attackCooldown = 2f;
-    [Tooltip("1つ目のアクション発動後、次をコンボとして受け付ける猶予（秒）。組み合わせによらず一定。クールタイムとは別物")]
-    [SerializeField] private float comboGraceTime = 0.8f;
-    [Tooltip("クールタイム終了のこの秒数前から、スペースキー押下を『先行入力』として記憶する（約6フレーム=0.1秒）。" +
-             "キーを離していても、クールタイムが明けた瞬間に次のアクションが発動する。0 で無効")]
+    [Header("アニメーション")]
+    [Tooltip("未設定なら自分自身（同じGameObject）から自動取得")]
+    [SerializeField] private Animator animator;
+    [Tooltip("Dash/Attack の Animation Event 受信用。未設定なら自分自身から自動取得")]
+    [SerializeField] private AnimationEventRelay animEvents;
+    [Tooltip("ダッシュの効果時間はこの Clip の長さそのもの。変えたい場合は Clip の長さを変える")]
+    [SerializeField] private AnimationClip dashClip;
+    [Tooltip("攻撃の効果時間（＝攻撃判定が出ている時間）はこの Clip の長さそのもの")]
+    [SerializeField] private AnimationClip attackClip;
+
+    [Header("先行入力")]
+    [Tooltip("効果終了のこの秒数前から、スペースキー押下を『先行入力』として記憶する（約6フレーム=0.1秒）。" +
+             "キーを離していても、発動可能になった瞬間に次のアクションが発動する。0 で無効")]
     [SerializeField] private float inputBufferTime = 0.1f;
 
     private Rigidbody2D _rb;
     private PlayerController _player;
     private MainActionQueue _queue;
-    private float _nextReadyTime;
-    private float _lastCooldownDuration;   // デバッグゲージ用：直近に設定した時間ベースのクールタイム長
+
+    // 今どのアクションで busy か（＝クールタイム兼コンボ受付時間の進行中）。None なら発動可能。
+    private BusyAction _busy;
+    private float _busyStartTime;
 
     // コンボ（連続発動）状態
     private int _comboStep;                    // 0 = コンボ中でない / 1 = 1つ目発動済み・2つ目待ち
     private MainActionType _comboFirstAction;   // コンボの1つ目に何を使ったか
-    private float _comboDeadline;               // この時刻までに2つ目を出せばコンボ扱い
     private bool _combosEnabled = true;         // ステージ設定で無効化されると false（ステージ1など）
 
-    // 先行入力（クールタイム終了直前に押しておくと、明けた瞬間に発動）
+    // 先行入力（効果終了直前に押しておくと、明けた瞬間に発動）
     private bool _bufferedInput;
     private float _bufferedInputExpiry;         // これを過ぎたら記憶を破棄（保険）
     private float _bufferZoneFraction;          // デバッグゲージ用：CD ゲージ内で先行入力できる区間の割合
@@ -106,12 +108,12 @@ public class MainActionController : MonoBehaviour
     private float _dashCurSpeed;   // 現在のダッシュ速度（大きさ）
     private bool _dashInvBroken;   // 後半に後方入力で無敵を解除したか（ラッチ：一度解除したらこのダッシュ中は戻らない）
 
-    // ジャンプのクールタイム（時間ではなく「着地」で明ける）
-    private bool _jumpCdActive;
-    private bool _jumpCdLeftGround;      // 発動後、実際に地面を離れたか
-    private float _jumpCdActivateTime;
-    private float _jumpCdLeftGroundTime;
+    // ジャンプ：着地するまで busy。滞空時間に上限は無い。
+    private bool _jumpLeftGround;      // 発動後、実際に地面を離れたか
     private const float JumpLiftoffGrace = 0.25f; // これだけ経っても接地したままなら「浮かなかった＝着地済み」とみなす
+
+    private float DashDuration => dashClip != null ? dashClip.length : 0.8f;
+    private float AttackDuration => attackClip != null ? attackClip.length : 0.5f;
 
     /// <summary>この間はダメージを受けない（ダッシュ中）。</summary>
     public bool IsInvincible { get; private set; }
@@ -122,62 +124,55 @@ public class MainActionController : MonoBehaviour
     /// <summary>ダッシュ中か（Enemy が接触をすり抜けさせるかどうかの判定に使う）。</summary>
     public bool IsDashing { get; private set; }
 
-    /// <summary>ジャンプ由来のクールタイム中か（着地するまで明けない＝経過割合を安定して計算できない）。
+    /// <summary>ジャンプ由来の busy 中か（着地するまで明けない＝経過割合を安定して計算できない）。
     /// アクションバーUIが、ジャンプの次アクション表示を通常のグラデーションではなく「着地まで一律で暗い」扱いにするために使う。</summary>
-    public bool IsJumpCooldownActive => _jumpCdActive;
+    public bool IsJumpCooldownActive => _busy == BusyAction.Jump;
 
-    /// <summary>次のアクションを発動できるか（時間ベースのクールタイム外、かつジャンプのクールタイム中でない）。</summary>
-    public bool IsReady => Time.time >= _nextReadyTime && !_jumpCdActive;
+    /// <summary>次のアクションを発動できるか（busy でない）。</summary>
+    public bool IsReady => _busy == BusyAction.None;
 
-    /// <summary>いま先行入力の受付区間内か（CD 終了 inputBufferTime 秒前〜／ジャンプは着地 inputBufferTime 秒前〜）。</summary>
+    /// <summary>いま先行入力の受付区間内か。</summary>
     public bool InInputBufferZone { get; private set; }
 
     /// <summary>デバッグ表示用：CD ゲージ内で先行入力できる区間の割合（ゲージの空側の端から測った 0..1）。</summary>
     public float InputBufferZoneFraction01 => _bufferZoneFraction;
 
-    /// <summary>デバッグ表示用：コンボ受付ゲージ（1 = 発動直後, 0 = 猶予切れ）。</summary>
-    public float ComboGraceFraction01
-    {
-        get
-        {
-            if (_comboStep != 1 || comboGraceTime <= 0f) return 0f;
-            return Mathf.Clamp01((_comboDeadline - Time.time) / comboGraceTime);
-        }
-    }
+    /// <summary>デバッグ表示用：コンボ受付ゲージ（1 = 発動直後, 0 = 受付終了）。busy = クールタイムと同じ値を使う。</summary>
+    public float ComboGraceFraction01 => _comboStep == 1 ? CooldownFraction01 : 0f;
 
     /// <summary>デバッグ表示用：クールタイム残りゲージ（1 = 発動直後, 0 = 明けた）。
-    /// ジャンプ由来のクールタイムは「着地するまで」で時間が不定なので、上限（jumpAirCooldownCap）を基準に減らす。</summary>
+    /// ジャンプは「着地するまで」で時間が不定なので、busy の間は常に 1 のまま（着地した瞬間に 0）。</summary>
     public float CooldownFraction01
     {
         get
         {
-            if (_jumpCdActive)
+            switch (_busy)
             {
-                if (!_jumpCdLeftGround || jumpAirCooldownCap <= 0f) return 1f;
-                return Mathf.Clamp01(1f - (Time.time - _jumpCdLeftGroundTime) / jumpAirCooldownCap);
+                case BusyAction.Jump: return 1f;
+                case BusyAction.Dash: return DashDuration <= 0f ? 0f : Mathf.Clamp01(1f - (Time.time - _busyStartTime) / DashDuration);
+                case BusyAction.Attack: return AttackDuration <= 0f ? 0f : Mathf.Clamp01(1f - (Time.time - _busyStartTime) / AttackDuration);
+                default: return 0f;
             }
-            if (_lastCooldownDuration <= 0f) return 0f;
-            return Mathf.Clamp01((_nextReadyTime - Time.time) / _lastCooldownDuration);
         }
     }
 
     /// <summary>デバッグ表示用：コンボ受付時間の残り秒数（受付中でなければ0）。</summary>
-    public float ComboGraceRemainingSeconds
-        => _comboStep == 1 ? Mathf.Max(0f, _comboDeadline - Time.time) : 0f;
+    public float ComboGraceRemainingSeconds => _comboStep == 1 ? CooldownRemainingSeconds : 0f;
 
     /// <summary>デバッグ表示用：クールタイムの残り秒数。
-    /// ジャンプ由来のクールタイムは「着地するまで」で本来の残り時間が不定なので、
-    /// jumpAirCooldownCap を基準にした目安の秒数を返す（実際の着地の方が早いことが多い）。</summary>
+    /// ジャンプは「着地するまで」で残り時間そのものが不明なため、負の値（-1）を番兵として返す
+    /// （呼び出し側は正の値だけを「残り秒数」として表示すること）。</summary>
     public float CooldownRemainingSeconds
     {
         get
         {
-            if (_jumpCdActive)
+            switch (_busy)
             {
-                if (!_jumpCdLeftGround || jumpAirCooldownCap <= 0f) return jumpAirCooldownCap;
-                return Mathf.Max(0f, jumpAirCooldownCap - (Time.time - _jumpCdLeftGroundTime));
+                case BusyAction.Jump: return -1f;
+                case BusyAction.Dash: return Mathf.Max(0f, DashDuration - (Time.time - _busyStartTime));
+                case BusyAction.Attack: return Mathf.Max(0f, AttackDuration - (Time.time - _busyStartTime));
+                default: return 0f;
             }
-            return Mathf.Max(0f, _nextReadyTime - Time.time);
         }
     }
 
@@ -188,6 +183,13 @@ public class MainActionController : MonoBehaviour
         _queue = GetComponent<MainActionQueue>();
         if (attackHitbox != null) attackHitbox.gameObject.SetActive(false);
 
+        if (animator == null) animator = GetComponent<Animator>();
+        if (animEvents == null) animEvents = GetComponent<AnimationEventRelay>();
+        if (animEvents != null) animEvents.OnAnimationEvent += HandleAnimationEvent;
+
+        var health = GetComponent<PlayerHealth>();
+        if (health != null) health.OnDied += HandlePlayerDied;
+
         // ステージ設定でコンボを無効化する（ステージ1など）。
         _combosEnabled = !(GameFlow.Stages != null
             && GameFlow.Stages.DisableCombosAt(GameFlow.ActiveStageIndex));
@@ -195,6 +197,12 @@ public class MainActionController : MonoBehaviour
 
     private void Update()
     {
+        // 見た目のアニメーション（Idle⇔Move）と、Animation Event が万一発火しなかった場合の保険は
+        // 会話中/InputLock 中でも常に評価する。
+        if (animator != null && _player != null)
+            animator.SetBool("Moving", Mathf.Abs(_player.MoveInput) > 0.01f);
+        WatchdogEffectEnd();
+
         // 会話中・画面切り替え直後（InputLock）はメインアクションの入力を受け付けない。
         if (DialoguePlayer.IsPlaying || !InputLock.InputAllowed) return;
 
@@ -232,6 +240,15 @@ public class MainActionController : MonoBehaviour
         }
     }
 
+    /// <summary>安全策：Animation Event が何らかの理由（Clip/Animator の設定漏れなど）で発火しなかった場合に、
+    /// 永久に発動不可のまま固まらないようにする保険。通常はここに来る前に Animation Event 側で片付く。</summary>
+    private void WatchdogEffectEnd()
+    {
+        const float grace = 0.5f;
+        if (_busy == BusyAction.Dash && Time.time - _busyStartTime > DashDuration + grace) EndBusy(BusyAction.Dash);
+        if (_busy == BusyAction.Attack && Time.time - _busyStartTime > AttackDuration + grace) EndBusy(BusyAction.Attack);
+    }
+
     /// <summary>先行入力の受付区間（InInputBufferZone）と、その CD ゲージ上での割合を更新する。</summary>
     private void UpdateInputBufferState()
     {
@@ -239,23 +256,21 @@ public class MainActionController : MonoBehaviour
         _bufferZoneFraction = 0f;
         if (inputBufferTime <= 0f) return;
 
-        if (_jumpCdActive)
+        if (_busy == BusyAction.Jump)
         {
             // ジャンプ：時間ではなく「着地」で明けるので、着地予測が使えるときだけ受付。
-            // ゲージ上の区間は上限（jumpAirCooldownCap）基準の目安表示にとどめる。
-            if (jumpAirCooldownCap > 0f)
-                _bufferZoneFraction = Mathf.Clamp01(inputBufferTime / jumpAirCooldownCap);
+            // 残り時間そのものが不明なため、ゲージ上の区間表示（_bufferZoneFraction）は出さない。
             if (_player != null && _player.TryPredictLandingTime(out float tLand))
                 InInputBufferZone = tLand <= inputBufferTime;
             return;
         }
 
-        // ダッシュ / 攻撃：時間ベースの CD 終了 inputBufferTime 秒前から受付。
-        if (_lastCooldownDuration > 0f && Time.time < _nextReadyTime)
-        {
-            _bufferZoneFraction = Mathf.Clamp01(inputBufferTime / _lastCooldownDuration);
-            InInputBufferZone = (_nextReadyTime - Time.time) <= inputBufferTime;
-        }
+        float total = _busy == BusyAction.Dash ? DashDuration : _busy == BusyAction.Attack ? AttackDuration : 0f;
+        if (total <= 0f) return;
+
+        float remaining = Mathf.Max(0f, total - (Time.time - _busyStartTime));
+        _bufferZoneFraction = Mathf.Clamp01(inputBufferTime / total);
+        InInputBufferZone = remaining <= inputBufferTime;
     }
 
     private void FixedUpdate()
@@ -270,15 +285,16 @@ public class MainActionController : MonoBehaviour
             if (_dashInvTimeLeft < 0f) _dashInvTimeLeft = 0f;
         }
 
-        // ── ジャンプのクールタイム（着地するまで／滞空上限まで） ──
-        UpdateJumpCooldown();
+        // ── ジャンプの busy（着地するまで） ──
+        UpdateJumpBusy();
 
         // ── ダッシュの移動処理 ──
         // FixedUpdate は物理積分の「前」に走るので、ここで設定した速度がそのまま反映される。
         if (_dashTimeLeft > 0f)
         {
-            float elapsed = dashDuration - _dashTimeLeft;
-            bool lockedPhase = elapsed < dashDuration * dashLockFraction;
+            float duration = DashDuration;
+            float elapsed = duration - _dashTimeLeft;
+            bool lockedPhase = elapsed < duration * dashLockFraction;
 
             if (lockedPhase)
             {
@@ -293,17 +309,20 @@ public class MainActionController : MonoBehaviour
 
                 if (inputDir == _dashDir)
                 {
-                    // 前方入力：そのまま進みつつ徐々に減速（ゆるめ）
+                    // 前方入力：そのまま進みつつ徐々に減速（ゆるめ）。効果は解除されない。
                     _dashCurSpeed = Mathf.MoveTowards(_dashCurSpeed, 0f, dashForwardDecel * dt);
                 }
                 else if (inputDir == -_dashDir)
                 {
-                    // 後方入力：急ブレーキ ＋ 無敵解除（ラッチ）。
-                    // ※ 無敵が切れるのはこのケースだけ。コンボでジャンプに移行しても切れない。
+                    // 後方入力：急ブレーキ ＋ 無敵・アニメーション・コンボ受付・クールタイムを即座に終了。
                     _dashCurSpeed = Mathf.MoveTowards(_dashCurSpeed, 0f, dashBrakeDecel * dt);
-                    _dashInvBroken = true;
+                    if (!_dashInvBroken)
+                    {
+                        _dashInvBroken = true;
+                        EndBusy(BusyAction.Dash);
+                    }
                 }
-                // 入力なし：_dashCurSpeed 据え置き（速度キープ）
+                // 入力なし：_dashCurSpeed 据え置き（速度キープ）。効果は解除されない。
             }
 
             // 落下しないよう Y は 0 に固定。進行方向は発動時の向きのまま。
@@ -317,45 +336,38 @@ public class MainActionController : MonoBehaviour
         IsInvincible = _dashInvTimeLeft > 0f && !_dashInvBroken;
     }
 
-    /// <summary>ジャンプのクールタイム進行。時間ではなく「着地」で明ける（滞空しすぎたら上限で強制解除）。</summary>
-    private void UpdateJumpCooldown()
+    /// <summary>ジャンプの busy 進行。時間ではなく「着地」で明ける（滞空時間に上限は無い）。</summary>
+    private void UpdateJumpBusy()
     {
-        if (!_jumpCdActive) return;
+        if (_busy != BusyAction.Jump) return;
+        if (_player == null) return;
 
-        if (!_jumpCdLeftGround)
+        if (!_jumpLeftGround)
         {
-            if (_player != null && !_player.IsGrounded)
+            if (!_player.IsGrounded)
             {
-                _jumpCdLeftGround = true;
-                _jumpCdLeftGroundTime = Time.time;
+                _jumpLeftGround = true;
+                return;
             }
-            else if (Time.time - _jumpCdActivateTime >= JumpLiftoffGrace)
-            {
-                _jumpCdActive = false; // 実際には浮かなかった＝着地済みとみなす
-            }
+            if (Time.time - _busyStartTime >= JumpLiftoffGrace)
+                EndBusy(BusyAction.Jump); // 実際には浮かなかった＝着地済みとみなす
             return;
         }
 
-        if (_player != null && _player.IsGrounded)
-            _jumpCdActive = false;                                        // 着地でクールタイム終了
-        else if (Time.time - _jumpCdLeftGroundTime >= jumpAirCooldownCap)
-            _jumpCdActive = false;                                        // 滞空しすぎ → 上限で強制解除
+        if (_player.IsGrounded) EndBusy(BusyAction.Jump);
     }
 
-    /// <summary>クールタイム外、またはコンボの2つ目として有効な間なら、キュー先頭を消費してアクションを実行する。
+    /// <summary>busy でない、またはコンボの2つ目として有効な間なら、キュー先頭を消費してアクションを実行する。
     /// 実際に発動できたら true、できなかったら false を返す（先行入力の記憶判定に使う）。</summary>
     public bool TryTrigger()
     {
-        // コンボ猶予を過ぎていたらコンボ状態をリセット（念のため）。
-        if (_comboStep == 1 && Time.time > _comboDeadline) _comboStep = 0;
-
-        // 1つ目の発動から comboGraceTime 秒以内なら、2つ目としての発動を許可する（クールタイムとは独立）。
-        // ただしステージでコンボが無効化されている場合は、常に「クールタイム待ち」のみ。
-        bool comboContinuation = _combosEnabled && _comboStep == 1 && Time.time <= _comboDeadline;
+        // busy の間（＝1つ目発動済み）なら、2つ目としての発動を許可する。
+        // ただしステージでコンボが無効化されている場合は、常に「busy が明けるのを待つ」のみ。
+        bool comboContinuation = _combosEnabled && _comboStep == 1 && _busy != BusyAction.None;
 
         if (!IsReady && !comboContinuation) return false;
 
-        // 空中ではジャンプ「そのものが発動できない」（消費もクールタイムも発生しない）。
+        // 空中ではジャンプ「そのものが発動できない」（消費もしない）。
         //  - 接地中に加え、コヨーテタイム中（地面を離れて coyoteJumpGrace 秒以内。PlayerController.InCoyoteTime）もジャンプ可。
         //  - さらに例外として、直前（コンボの1つ目）がダッシュだった場合は完全に空中でもジャンプ可
         //    （ダッシュで飛び出した先からジャンプできるようにするための特例）。
@@ -367,66 +379,27 @@ public class MainActionController : MonoBehaviour
         MainActionType action = _queue.Consume();
         Execute(action);
 
-        bool jumpInvolved = action == MainActionType.Jump
-                            || (comboContinuation && _comboFirstAction == MainActionType.Jump);
-
-        if (jumpInvolved)
-        {
-            // ジャンプを含む場合は「着地するまで（上限あり）」がクールタイム。
-            // 相方（ダッシュ / 攻撃）の時間ベースのクールタイムは無視する。
-            StartJumpCooldown();
-            _nextReadyTime = Time.time; // 時間ゲートは張らない（_jumpCdActive で待たせる）
-            _lastCooldownDuration = 0f;
-        }
-        else
-        {
-            // 時間ベースのクールタイム。コンボの場合も、2つ目のクールタイムで上書きするだけでよい
-            // （1つ目のクールタイムは必ず先に明けるため）。
-            _lastCooldownDuration = CooldownFor(action);
-            _nextReadyTime = Time.time + _lastCooldownDuration;
-        }
-
         if (!_combosEnabled || comboContinuation)
         {
             // コンボ無効ステージ、または 2つ目まで使ったので打ち止め（最大2連続）。
-            // どちらもこの後は純粋にクールタイム待ちになる。
             _comboStep = 0;
         }
         else
         {
             _comboStep = 1;
             _comboFirstAction = action;
-            _comboDeadline = Time.time + comboGraceTime;
         }
 
         return true;
     }
 
-    private float CooldownFor(MainActionType a)
-    {
-        switch (a)
-        {
-            case MainActionType.Dash: return dashCooldown;
-            case MainActionType.Attack: return attackCooldown;
-            default: return 0f; // Jump は着地ベースなので別処理（ここには来ない想定）
-        }
-    }
-
-    private void StartJumpCooldown()
-    {
-        _jumpCdActive = true;
-        _jumpCdActivateTime = Time.time;
-
-        bool grounded = _player != null && _player.IsGrounded;
-        _jumpCdLeftGround = !grounded;
-        _jumpCdLeftGroundTime = grounded
-            ? Time.time
-            : (_player != null ? _player.LastGroundedTime : Time.time); // 既に空中なら、実際に地面を離れた時刻を基準にする
-    }
-
     /// <summary>単発アクションを実行する。</summary>
     public void Execute(MainActionType action)
     {
+        // 前のアクションがまだ効果中に別のアクションへコンボした場合、開いたままのリソースを強制的に閉じる
+        // （攻撃判定は Animation Event 待ちで閉じるはずが、コンボで Animator が上書きされると発火しなくなるため）。
+        if (_busy == BusyAction.Attack && attackHitbox != null) attackHitbox.gameObject.SetActive(false);
+
         switch (action)
         {
             case MainActionType.Jump:
@@ -436,7 +409,7 @@ public class MainActionController : MonoBehaviour
                 StartDash();
                 break;
             case MainActionType.Attack:
-                StartCoroutine(DoAttack());
+                DoAttack();
                 break;
         }
     }
@@ -453,13 +426,18 @@ public class MainActionController : MonoBehaviour
         Vector2 v = _rb.linearVelocity;
         v.y = jumpForce;
         _rb.linearVelocity = v;
+
+        _busy = BusyAction.Jump;
+        _busyStartTime = Time.time;
+        _jumpLeftGround = false;
+        if (animator != null) animator.SetTrigger("Jump");
     }
 
     private void StartDash()
     {
         _dashDir = _player.FacingSign;   // 向いている方向へ前進
-        _dashTimeLeft = dashDuration;
-        _dashInvTimeLeft = dashDuration; // 無敵タイマー（移動を中断しても残りを走らせる）
+        _dashTimeLeft = DashDuration;
+        _dashInvTimeLeft = DashDuration; // 無敵タイマー（移動を中断しても残りを走らせる）
         _dashCurSpeed = dashSpeed;       // 発動時に最高速度
         _dashInvBroken = false;
 
@@ -472,9 +450,15 @@ public class MainActionController : MonoBehaviour
         IsDashing = true;
 
         _rb.linearVelocity = new Vector2(_dashDir * dashSpeed, 0f);
+
+        _busy = BusyAction.Dash;
+        _busyStartTime = Time.time;
+        if (animator != null) animator.SetTrigger("Dash");
     }
 
-    /// <summary>ダッシュを完全に終了する（効果時間切れ / 無効化時）。無敵も解除する。</summary>
+    /// <summary>ダッシュの物理的な移動を完全に終了する（効果時間切れ / 無効化時）。無敵も解除する。
+    /// busy/コンボ/アニメーションの終了は Animation Event（または後方入力での即時終了）が別途担当するので、
+    /// ここでは触らない（保険として WatchdogEffectEnd はある）。</summary>
     private void EndDash()
     {
         _dashTimeLeft = 0f;
@@ -496,6 +480,56 @@ public class MainActionController : MonoBehaviour
         // _dashInvTimeLeft / _dashInvBroken はそのまま → 無敵は通常のダッシュ効果時間ぶん継続
     }
 
+    private void DoAttack()
+    {
+        if (attackHitbox != null)
+        {
+            attackHitbox.Configure(_player.FacingSign, attackDamage);
+            attackHitbox.gameObject.SetActive(true);
+        }
+
+        _busy = BusyAction.Attack;
+        _busyStartTime = Time.time;
+        if (animator != null) animator.SetTrigger("Attack");
+    }
+
+    /// <summary>Dash/Attack の Animation Event（Clip 末尾）から呼ばれる。</summary>
+    private void HandleAnimationEvent(string eventName)
+    {
+        switch (eventName)
+        {
+            case "DashEnd": EndBusy(BusyAction.Dash); break;
+            case "AttackEnd": EndBusy(BusyAction.Attack); break;
+        }
+    }
+
+    /// <summary>busy（＝クールタイム兼コンボ受付時間）を終了する。呼び出し元は必ず対象を指定し、
+    /// 現在の busy と一致しないとき（既にコンボで上書きされた後など）は何もしない。</summary>
+    private void EndBusy(BusyAction reason)
+    {
+        if (_busy != reason) return;
+        _busy = BusyAction.None;
+        if (_comboStep == 1) _comboStep = 0;
+
+        switch (reason)
+        {
+            case BusyAction.Attack:
+                if (attackHitbox != null) attackHitbox.gameObject.SetActive(false);
+                break;
+            case BusyAction.Dash:
+                if (animator != null) animator.SetTrigger("DashBreak");
+                break;
+            case BusyAction.Jump:
+                if (animator != null) animator.SetTrigger("Landed");
+                break;
+        }
+    }
+
+    private void HandlePlayerDied()
+    {
+        if (animator != null) animator.SetTrigger("Dead");
+    }
+
     private void OnDisable()
     {
         // 無効化時に重力が切れたまま／無敵のままにならないように
@@ -503,15 +537,6 @@ public class MainActionController : MonoBehaviour
         _bufferedInput = false;
         InInputBufferZone = false;
         _bufferZoneFraction = 0f;
-    }
-
-    private IEnumerator DoAttack()
-    {
-        if (attackHitbox == null) yield break;
-
-        attackHitbox.Configure(_player.FacingSign, attackDamage);
-        attackHitbox.gameObject.SetActive(true);
-        yield return new WaitForSeconds(attackDuration);
-        attackHitbox.gameObject.SetActive(false);
+        if (animEvents != null) animEvents.OnAnimationEvent -= HandleAnimationEvent;
     }
 }

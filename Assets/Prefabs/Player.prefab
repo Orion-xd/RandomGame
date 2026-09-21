@@ -718,6 +718,8 @@ GameObject:
   - component: {fileID: 3935582452086558697}
   - component: {fileID: 5153456096451803614}
   - component: {fileID: 2534162132011301507}
+  - component: {fileID: 1977925573387622073}
+  - component: {fileID: 4297534177937422453}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -906,7 +908,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MainActionQueue
   slotCount: 4
-  stageSeed: 12345
+  stageSeed: 33333
   lottery: 000000000100000002000000
 --- !u!114 &5153456096451803614
 MonoBehaviour:
@@ -921,18 +923,16 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MainActionController
   jumpForce: 12
-  jumpAirCooldownCap: 3
   dashSpeed: 18
-  dashDuration: 0.5
   dashLockFraction: 0.5
   dashForwardDecel: 40
   dashBrakeDecel: 160
   attackHitbox: {fileID: 9214507723811584833}
-  attackDuration: 0.4
   attackDamage: 1
-  dashCooldown: 2
-  attackCooldown: 2
-  comboGraceTime: 0.8
+  animator: {fileID: 1977925573387622073}
+  animEvents: {fileID: 4297534177937422453}
+  dashClip: {fileID: 7400000, guid: fe7fa0bef986c0d48be24663faf2da62, type: 2}
+  attackClip: {fileID: 7400000, guid: d4869872bef3c10429ee1d1221ba380b, type: 2}
   inputBufferTime: 0.1
 --- !u!114 &2534162132011301507
 MonoBehaviour:
@@ -948,6 +948,40 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth
   maxHealth: 3
   invulnTime: 0.8
+--- !u!95 &1977925573387622073
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4790301732876973286}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: 0c0e87182d33cc047a29a89929d9664b, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
+--- !u!114 &4297534177937422453
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4790301732876973286}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6317b849b4cb3f84ca5420f2d68b2218, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AnimationEventRelay
 --- !u!1 &5254278839378532884
 GameObject:
   m_ObjectHideFlags: 0

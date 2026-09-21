@@ -55,7 +55,7 @@ Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.Ge
 - **クールタイム/コンボ受付の可視化（2026-09-19追加）**: 各スロットに背景 Image（常に「暗い」色）と、その上に重ねた `Fill` という子 Image（常に「明るい＝デフォルト」色、`Image.type=Filled` / `fillMethod=Vertical` / `fillOrigin=Bottom`）を持つ。`fillAmount`（0〜1）を毎フレーム変えることで、長方形の**下からどれだけ明るいか**を表現する。「明るい」＝今までのデフォルト色そのもの、「暗い」＝それを`dimAmount`（`[Range(0,1)]`、既定0.6）ぶん黒に寄せた色（`Color.Lerp(color, Color.black, dimAmount)`）。`dimAmount`を大きくするほど暗い部分が黒に近づきコントラストが強くなり、小さくするほど元の色に近づいてコントラストが弱くなる。
   - 状況によって明るさが変わるのは**Slot0（次に発動するアクション）だけ**。**Slot1以降は状況によらず常に`fillAmount=1`（全体明るい）**（2026-09-19、実装直後にユーザーがプレイして「他の3枠は常に明るいままの方がよい」と判断し、コンボ受付中/クールタイム中でのSlot1以降の暗転を撤廃）。
   - Slot0：通常時は`fillAmount=1`。**コンボ受付中**（`MainActionController.ComboGraceFraction01 > 0`）は受付時間の**残り割合**をそのまま`fillAmount`に（時間経過とともに下から暗くなっていく）。**クールタイム中**（コンボ待ちではなく発動不可）はクールタイムの**経過割合**を`fillAmount`に（時間経過とともに下から明るくなっていく）。**ジャンプ由来のクールタイム**（`MainActionController.IsJumpCooldownActive`）は着地時刻が不定で経過割合を安定して出せないため、着地するまで常に`fillAmount=0`（全体暗いまま、グラデーションなし）で扱う。
-  - コンボ受付時間終了後にそのままクールタイムへ移行した場合、「クールタイム開始時点で既にある程度経過しているように見える」現象は仕様通り（`_nextReadyTime`がアクション発動と同時に1回だけ設定され、コンボ受付時間とクールタイムが同じ`Time.time`基準で並行して進むため、別途引き算のロジックは不要）。
+  - **2026-09-21の仕様変更（§2-4参照）以降**：コンボ受付時間とクールタイムはそもそも同じもの（`_busy`）になったため、上記の「移行時に経過済みに見える」という配慮自体が不要になった。
   - 先行入力（`InInputBufferZone`/`InputBufferZoneFraction01`、既存の頭上デバッグゲージ`PlayerDebugBars`が使用）は、このアクションバーUIには反映しない（ユーザー確認済み、対象外のまま）。
   - `ActionBarUI`は`MainActionQueue.OnChanged`に加えて毎フレーム`Update()`でも再計算するように変更（割合は毎フレーム変わるため）。`controller`（`MainActionController`）フィールドを新規追加、`queue`と同様Tag=Playerから自動解決。
   - **バグ修正（2026-09-19）**: 実装直後、`dimAmount`をどんな値にしても見た目が変化しない不具合があった。原因は`Fill`のImageに`Source Image`（Sprite）が未設定だったこと。Unityの`Image`は**Spriteが無いと`type=Filled`/`fillAmount`の設定を無視して常に単純な塗りつぶし四角形として描画する**仕様のため、スクリプト側の計算は正しくても見た目には反映されなかった。`Assets/Art/WhiteSquare.png`（既存の未使用アセット、`spriteImportMode`を`Multiple`→`Single`に変更）を`Fill`のSource Imageに割り当てて解決。Playで、クールタイム中（経過70%）・コンボ受付中（残り20%）とも`fillAmount`が正しい値になり、見た目にも明暗の境目が出ることをスクリーンショットで確認済み。
@@ -64,50 +64,75 @@ Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.Ge
 ### 2-3. 各アクションの挙動（`MainActionController`）
 
 - **ジャンプ (`DoJump`)**: `rb.linearVelocity.y = jumpForce`（既定 12）。
-- **ダッシュ (`StartDash` + `FixedUpdate`)**: 発動時に向いている方向へ `dashSpeed`（既定 18）で即最高速度。継続 `dashDuration`（既定 0.5 秒）。
+- **ダッシュ (`StartDash` + `FixedUpdate`)**: 発動時に向いている方向へ `dashSpeed`（既定 18）で即最高速度。継続時間は `dashClip`（Animator の Dash クリップ）の長さそのもの（既定 0.8 秒、§2-7参照）。
   - ダッシュ中は `gravityScale = 0`、Y 速度 0 固定 → **落下しない**（落とし穴・敵をまたげる）。
-  - **前半**（`dashLockFraction` = 0.5 → 最初の半分）: 最高速度固定、**移動入力を完全に無視**、完全無敵。
-  - **後半**: 速度はキープ。入力があれば反映。
-    - 前方入力: そのまま進みつつ緩やかに減速（`dashForwardDecel` = 40 u/s²）。
-    - 後方入力: **急ブレーキ**（`dashBrakeDecel` = 160 u/s²）＋**無敵解除**（`_dashInvBroken` ラッチ。一度解除したらこのダッシュ中は戻らない）。
+  - **前半**（`dashLockFraction` = 0.5 → クリップ長の最初の半分、既定0.4秒）: 最高速度固定、**移動入力を完全に無視**、完全無敵。**この間は効果を解除できない**。
+  - **後半**（既定0.4秒）: 速度はキープ。入力があれば反映。
+    - 前方入力・入力なし: そのまま進みつつ緩やかに減速（`dashForwardDecel` = 40 u/s²、または速度キープ）。**効果は解除されない**（Animation Event で自然に終わるまで継続）。
+    - 後方入力: **急ブレーキ**（`dashBrakeDecel` = 160 u/s²）＋ **無敵・アニメーション・コンボ受付・クールタイムのすべてを即座に終了**（`_dashInvBroken` ラッチ。一度解除したらこのダッシュ中は戻らない。Animation Event を待たずに`EndBusy(Dash)`を直接呼ぶ）。ただし物理的な減速自体は`dashBrakeDecel`でのブレーキのまま（急停止ではない）。
   - `IsDashing` が true の間、`Enemy` 側がプレイヤーとの物理衝突を `Physics2D.IgnoreCollision` で無視（すり抜け）。
   - `OverridesMovement` が true の間、`PlayerController` は速度・向きを書かない（ダッシュが制御）。
-- **攻撃 (`DoAttack` コルーチン + `AttackHitbox`)**: 前方に子オブジェクトの当たり判定を `attackDuration`（**0.4 秒**、2026-09-11 に 0.2→0.4 変更、全ステージ共通）だけ有効化。触れた敵に `attackDamage`（1）。同じ敵を多重ヒットしない（`HashSet<Enemy>`、有効化時にクリア）。攻撃判定はトリガー。前方距離は**専用の `forwardOffset` フィールドを廃止**し（2026-09-13）、`AttackHitbox` の `Transform.localPosition.x` の絶対値をそのまま使う方式に変更。`Configure()` は毎回その絶対値を向き（`facingSign`）に応じて符号だけ反転させる。これにより、インスペクターで Transform の X を直接編集すればそのまま前後距離の調整として反映される（Y座標・Scaleは元々スクリプトで一切触られないので常に直接編集可能）。
-  - **バグ修正（2026-09-19、ラスボスに攻撃が当たらないことがある）**: 追尾弾がしばらく生成されて画面に映っている状況でラスボスを攻撃すると、ダメージが入らず、かつ追尾弾も消滅しない不具合があった。原因は `AttackHitbox` にも `Enemy3`（ラスボス）にも `Rigidbody2D` が付いておらず、双方とも実質 Static 扱いだったこと。**プレイヤーが移動しながら攻撃すると、`AttackHitbox` はプレイヤーの `Rigidbody2D`（Dynamic）の子として動いている状態になるため `OnTrigger` 系が正常に発火するが、プレイヤーが静止した状態で攻撃を発動すると `AttackHitbox` も静止した状態になり、たとえラスボスの当たり判定と重なっていても `OnTrigger` が発火しないことがある**（ユーザーが実機検証で特定）。追尾弾の存在・経過時間・画面内かどうかはいずれも本質的には無関係で、「それらの条件が満たされているときはボスが動かず、プレイヤーも静止して攻撃するケースが多かった」という間接的な相関に過ぎなかった。**対処として `AttackHitbox` のプレハブに `Rigidbody2D` を追加**（プレイヤー自身が静止していても `AttackHitbox` 自体が常に有効な物理ボディを持つようにする）。これにより本不具合は解消。
+- **攻撃 (`DoAttack` + `AttackHitbox`)**: 前方に子オブジェクトの当たり判定を有効化。継続時間は `attackClip`（Animator の Attack クリップ）の長さそのもの（既定 0.5 秒、§2-7参照）。触れた敵に `attackDamage`（1）。同じ敵を多重ヒットしない（`HashSet<Enemy>`、有効化時にクリア）。攻撃判定はトリガー。前方距離は `AttackHitbox` の `Transform.localPosition.x` の絶対値をそのまま使う方式（2026-09-13〜）。`Configure()` は毎回その絶対値を向き（`facingSign`）に応じて符号だけ反転させる。これにより、インスペクターで Transform の X を直接編集すればそのまま前後距離の調整として反映される。
+  - **2026-09-21**: `DoAttack`はコルーチンではなくなった。ヒットボックスを閉じるのは`WaitForSeconds`ではなく、Attack クリップ末尾のAnimation Event（§2-7）。
+  - もし攻撃の効果中に別のアクションへコンボした場合、Animation Event が発火しなくなる（Animator が上書きされて Attack クリップの再生が中断するため）ので、`Execute()`側で強制的にヒットボックスを閉じる保険が入っている。
+  - **バグ修正（2026-09-19、ラスボスに攻撃が当たらないことがある）**: 追尾弾がしばらく生成されて画面に映っている状況でラスボスを攻撃すると、ダメージが入らず、かつ追尾弾も消滅しない不具合があった。原因は `AttackHitbox` にも `Enemy3`（ラスボス）にも `Rigidbody2D` が付いておらず、双方とも実質 Static 扱いだったこと。**プレイヤーが移動しながら攻撃すると、`AttackHitbox` はプレイヤーの `Rigidbody2D`（Dynamic）の子として動いている状態になるため `OnTrigger` 系が正常に発火するが、プレイヤーが静止した状態で攻撃を発動すると `AttackHitbox` も静止した状態になり、たとえラスボスの当たり判定と重なっていても `OnTrigger` が発火しないことがある**（ユーザーが実機検証で特定）。**対処として `AttackHitbox` のプレハブに `Rigidbody2D` を追加**。これにより本不具合は解消。
 
-### 2-4. クールタイム
+### 2-4. クールタイム＝コンボ受付時間（2026-09-21、仕様変更）
 
-- **ダッシュ**: `dashCooldown` = 2 秒（固定）。
-- **攻撃**: `attackCooldown` = 2 秒（固定）。
-- **ジャンプ**: 時間ではなく **「着地するまで」**。着地すれば滞空時間に関係なくクールタイム終了。
-  - 保険として、地面を離れてから `jumpAirCooldownCap`（3 秒）で強制解除。
-  - 実装: `_jumpCdActive` フラグ + `UpdateJumpCooldown()`。発動後にまず「実際に地面を離れたか」（`_jumpCdLeftGround`）を確認 → その後 `IsGrounded` が再び true になった瞬間に解除。発動しても `JumpLiftoffGrace`（0.25 秒 const）以内に浮かなければ「着地済み」とみなして解除。
-- `IsReady => Time.time >= _nextReadyTime && !_jumpCdActive`。
+**「クールタイム」と「コンボ受付時間」は同じもの**になった。単発で終わらせてもコンボにしても、次に動けるようになるタイミングは一致する（＝一貫性のある操作方法にするため、というのが変更理由）。内部的には `MainActionController._busy`（`None`/`Dash`/`Jump`/`Attack`の enum）で一元管理する。`_busy != None` の間は次のアクションを発動できない（＝クールタイム中）が、`_comboStep == 1`（1つ目発動済み・2つ目未発動）でもあれば、その間に発動した入力は「2つ目」として受け付けられる（＝コンボ受付中）。**`IsReady => _busy == None`**。
+
+- **ダッシュ / 攻撃**: それぞれの AnimationClip（`dashClip` / `attackClip`）の長さぶん。Clip の末尾に仕込んだ Animation Event が発火した瞬間に `_busy` が `None` に戻る（§2-7）。**効果時間を変えたい場合は AnimationClip の長さを変える**（インスペクターの数値ではない）。ダッシュのみ、後半の後方入力で Animation Event を待たずに即座に終了する（§2-3）。
+- **ジャンプ**: 今まで通り「着地するまで」。**滞空時間に上限は無い**（2026-09-21、以前あった `jumpAirCooldownCap`＝3秒の保険は撤廃。着地することだけが終了条件）。実装は `UpdateJumpBusy()`：発動後にまず「実際に地面を離れたか」（`_jumpLeftGround`）を確認 → その後 `IsGrounded` が再び true になった瞬間に `_busy = None`。発動しても `JumpLiftoffGrace`（0.25 秒 const、これは維持）以内に浮かなければ「着地済み」とみなして解除。
+- **コンボが無効なステージ（Stage1など）での扱い**: 無効化されるのは「その間に次のアクションをコンボとして発動できるか」だけ。**busy の長さ自体（＝実質的なクールタイム）は他ステージと変わらない**。つまり、コンボ有効なステージなら攻撃のクールタイム兼コンボ受付時間（既定0.5秒）の間に次のアクションをコンボとして発動することも、あえて何もせずクールタイムとして消費することもできるが、コンボ無効ステージでは同じ0.5秒が単純に「何もできないクールタイム」として扱われる。
+- **旧仕様との違い**: 以前は `dashCooldown`/`attackCooldown`（固定2秒）というクールタイム専用の値と、`comboGraceTime`（固定0.8秒、クールタイムとは独立）という別々の値があったが、**両方とも廃止**。この変更に伴い、ダッシュ・攻撃の実質的なクールタイムは大幅に短縮された（2秒 → 0.8秒/0.5秒）。ゲームバランスが変わることは意図している。
 
 ### 2-5. コンボ（連続発動）
 
-- **ステージごとに無効化できる（2026-09-09）**: `StageSet.stages[i].disableCombos` が true、または `allowedActions` が実質1種類のステージでは、`MainActionController._combosEnabled = false` になる（`Awake` で `GameFlow.ActiveStageIndex` から判定）。無効時は `comboContinuation` が常に false ＝ **1 回発動したら、そのアクションのクールタイムが明けるまで次は出せない**（猶予は完全に無意味）。**現在 Stage1 が該当**（Dash のみ）。
-- **受付猶予**: `comboGraceTime` = 0.8 秒。1 つ目の発動からこの秒数以内にもう一度発動すると「2 つ目」として受け付ける。**クールタイムとは完全に独立したパラメータ**。組み合わせによらず一定。
-- **最大 2 連続**。2 つ目を使うと `_comboStep` が 0 に戻り、以降は通常のクールタイム待ち（3 連目の早押しはブロック）。
+- **ステージごとに無効化できる（2026-09-09）**: `StageSet.stages[i].disableCombos` が true、または `allowedActions` が実質1種類のステージでは、`MainActionController._combosEnabled = false` になる（`Awake` で `GameFlow.ActiveStageIndex` から判定）。無効時は `comboContinuation` が常に false ＝ **1 回発動したら、その busy が明けるまで次は出せない**。**現在 Stage1 が該当**（Dash のみ）。
+- **受付猶予 ＝ busy の間ずっと**（§2-4参照。以前あった`comboGraceTime`という独立パラメータは廃止）。
+- **最大 2 連続**。2 つ目を発動すると、その時点で `_comboStep` が 0 に戻り、コンボ受付は打ち切り（3 連目は無い）。
 - **効果の合成**: 特別な合成処理はなく「2 つのアクションを続けて発動するだけ」。
   - ジャンプ + 攻撃 → ジャンプの上昇中に攻撃判定が出る。
   - ジャンプ + ダッシュ → ジャンプ直後、ダッシュが Y 速度を 0 にして水平ダッシュへ移行。
   - ダッシュ + ジャンプ → 後述の特例。
-- **コンボ後のクールタイム**
-  - ジャンプを**含まない**組み合わせ → 2 つ目のアクションのクールタイムだけ見ればよい（1 つ目のクールタイムは必ず先に明けるため）。実装は `_nextReadyTime` を 2 つ目のもので上書きするだけ。
-  - ジャンプを**含む**組み合わせ（Dash→Jump / Jump→Dash / Jump→Attack など）→ **着地するまで**がクールタイム（上限 3 秒）。もう片方（ダッシュ / 攻撃）の時間ベースのクールタイムは無視。実装は `jumpInvolved` 判定で `StartJumpCooldown()` を呼び `_nextReadyTime = Time.time`。
+- **コンボ後のクールタイム**: 2つ目に発動したアクションが `_busy` を上書きする（＝2つ目のアクション自身の busy 時間がそのままクールタイムになる）。1つ目の残り時間や種類は一切考慮しない。ダッシュの無敵（`_dashInvTimeLeft`）だけは例外で、Dash→Jump コンボで `_busy` がジャンプに切り替わった後も、無敵はダッシュの通常効果時間ぶん独立して継続する（既存仕様のまま変更なし）。
 
 ### 2-6. 先行入力（バッファ）
 
-- **`inputBufferTime` = 0.1 秒（約6フレーム。0 で無効）**。クールタイム終了のこの秒数前から、発動入力（スペース / エンター / テンキー Enter / 左クリック）を「先行入力」として記憶する。
-- **入力を離していても**、クールタイムが明けた瞬間（`IsReady`）に次のアクションが自動発動する。「クールタイム明けにすぐ次を出す」操作をやりやすくするため。
+- **`inputBufferTime` = 0.1 秒（約6フレーム。0 で無効）**。busy 終了のこの秒数前から、発動入力（スペース / エンター / テンキー Enter / 左クリック）を「先行入力」として記憶する。
+- **入力を離していても**、発動可能になった瞬間（`IsReady`）に次のアクションが自動発動する。
 - 実装（`MainActionController`）:
-  - `Update()` で発動入力押下時、まず `TryTrigger()`（`void`→`bool` に変更、発動できたか返す）。**出せなかった & `InInputBufferZone`** なら `_bufferedInput = true`（`_bufferedInputExpiry = Time.time + 0.4`＝`BufferedInputMaxLife` で失効させる保険つき）。
+  - `Update()` で発動入力押下時、まず `TryTrigger()`（発動できたか `bool` を返す）。**出せなかった & `InInputBufferZone`** なら `_bufferedInput = true`（`_bufferedInputExpiry = Time.time + 0.4`＝`BufferedInputMaxLife` で失効させる保険つき）。
   - 毎フレーム、`_bufferedInput` かつ `IsReady` になったら消費して `TryTrigger()`。ライブ入力で発動できたときは残っていた記憶を破棄。`OnDisable` でもクリア。
-- **受付区間（`InInputBufferZone`）と CD ゲージ上の割合（`InputBufferZoneFraction01`、空側の端から測った 0..1）を公開** → `PlayerDebugBars` が色付き表示に使う（§8）。
-  - **ダッシュ / 攻撃**（時間ベース）: 残り `<= inputBufferTime` で受付。割合 = `inputBufferTime / _lastCooldownDuration`（例: CD 2 秒なら 0.05）。
-  - **ジャンプ**（着地ベースで時間が不定）: `PlayerController.TryPredictLandingTime()` で「着地まで `<= inputBufferTime` 秒」と予測できたときだけ受付。予測不可（上昇中・真下に地面なし）なら受け付けない。ゲージ割合は `inputBufferTime / jumpAirCooldownCap`（≈0.033）の**目安表示**にとどめる（ゲージ自体は上限基準で減るので厳密には対応しない）。
-- **`PlayerController.TryPredictLandingTime(out float seconds)`**: 足元中央から真下へレイ 1 本 → 距離 `d` と `vy`・重力（`_baseGravityScale * Physics2D.gravity.y`）から `d = v0·t + ½g·t²` の正の根で着地秒数を出す簡易予測。呼ぶのは「ジャンプ CD 中かつ非上昇」のときだけなので負荷は無視できる。台の端などは誤差あり。
+- **受付区間（`InInputBufferZone`）と CD ゲージ上の割合（`InputBufferZoneFraction01`）を公開** → `PlayerDebugBars` が色付き表示に使う（§8）。
+  - **ダッシュ / 攻撃**: 残り `<= inputBufferTime` で受付。割合 = `inputBufferTime / (dashClip または attackClip の長さ)`。
+  - **ジャンプ**（着地ベースで時間が不定）: `PlayerController.TryPredictLandingTime()` で「着地まで `<= inputBufferTime` 秒」と予測できたときだけ受付。予測不可（上昇中・真下に地面なし）なら受け付けない。**滞空時間の上限が無くなったため、ゲージ上の区間表示（`_bufferZoneFraction`）は出さない**（2026-09-21、以前は`jumpAirCooldownCap`基準の目安表示だったが、その基準自体が無くなった）。
+- **`PlayerController.TryPredictLandingTime(out float seconds)`**: 足元中央から真下へレイ 1 本 → 距離 `d` と `vy`・重力（`_baseGravityScale * Physics2D.gravity.y`）から `d = v0·t + ½g·t²` の正の根で着地秒数を出す簡易予測。呼ぶのは「ジャンプ busy 中かつ非上昇」のときだけなので負荷は無視できる。台の端などは誤差あり。
+
+### 2-7. アニメーション（`Animator` + `AnimationEventRelay`、2026-09-21追加）
+
+プレイヤーの見た目のイラスト素材は準備済みだが、まだUnityエディターにはインポートしていない（担当イラストレーターがAI学習利用を懸念しており、プログラミング側を一通り終えてからインポートする方針のため）。そのため、実際のイラストが入るまでの仮素材として、既存の`PlayerArrow`スプライト（`SpriteRenderer.color`で青に着色されているだけの矢印）を**状態ごとに色だけ変える**方式にした。実際のイラストが入ったら、各Clipの中身（スプライト差し替えなど）を作り直すだけで、スクリプト側は変更不要な想定。
+
+- **バグ修正（2026-09-21、初回実装直後）**: 仮のAnimationClipとして最初`Transform.m_LocalPosition.x`に同じ値の2キーフレームを打った「見た目に一切変化のないダミーカーブ」を使っていたところ、**プレイヤーが一切移動できなくなる**不具合が発生した（見た目の左右反転は機能するが、位置が変わらない）。原因は、Animator が Player 自身の GameObject に付いており、Playerの`Transform.m_LocalPosition`を**毎フレーム、どの状態でも常に同じ値へ強制的に書き戻していた**ため（アニメーションが物理演算による位置変更を毎フレーム上書きしてしまっていた）。対処として、ダミーカーブを`Transform`ではなく`SpriteRenderer.m_Color`（RGBA、計4本のfloatカーブ）に変更。これなら位置には一切影響せず、しかも「状態ごとに色を変える」という下記の仮素材仕様をそのまま兼ねられる。
+- **状態ごとの色（`SpriteRenderer.color`、2026-09-21）**: いずれも既存のIdle色 `(0.25, 0.55, 0.95)` を基準に、`Color.Lerp`で暗く/明るくしたもの、またはアクションバーUIの配色を流用。
+  - `Idle`: `(0.25, 0.55, 0.95, 1)` — 今まで通りの青（無変更）
+  - `Move`: `(0.15, 0.33, 0.57, 1)` — 暗めの青（Idle色を黒に40%寄せた値）
+  - `Jump`: `(0.30, 0.70, 1.0, 1)` — 明るめの青（`ActionBarUI.jumpColor`と同じ値を流用）
+  - `Dash`: `(1.0, 0.85, 0.25, 1)` — 黄（`ActionBarUI.dashColor`と同じ値を流用）
+  - `Attack`: `(1.0, 0.40, 0.40, 1)` — 赤（`ActionBarUI.attackColor`と同じ値を流用）
+  - `Dead`: `(0.05, 0.05, 0.05, 1)` — ほぼ黒
+
+- **状態**: `Idle` / `Move` / `Dash` / `Jump` / `Attack` / `Dead` の6つ（`Assets/Animations/Player.controller`、Base Layer 1層のみ）。
+  - `Idle`⇔`Move`: `Moving`（Bool）パラメータで自動的に行き来する（`MainActionController.Update()`が毎フレーム`_player.MoveInput`から設定）。
+  - `AnyState`→`Dash`/`Jump`/`Attack`/`Dead`: 各同名の Trigger パラメータで**即座に割り込む**（コンボで2つのアクションが同時に効果を持つ場合でも、見た目のアニメーションは後から発動した方が単純に上書きする。レイヤー分けなどは行っていない、当面のプレースホルダー仕様。実際のイラストが入る際に見直す可能性あり）。
+  - `Dash`→`Idle`: 2経路。① Exit Time（clip終端、duration 0）で自然に戻る。② `DashBreak`トリガー（後方入力での即時終了用、duration 0.05秒）。
+  - `Attack`→`Idle`: Exit Time（clip終端、duration 0）のみ。
+  - `Jump`→`Idle`: `Landed`トリガーのみ（着地検出時に`MainActionController`が発火。滞空時間が不定なため Exit Time は使えない）。
+- **Animation Event**: `Player_Dash.anim`・`Player_Attack.anim`それぞれの末尾（0.8秒/0.5秒）に、`AnimationEventRelay.RaiseEvent(string)`を呼ぶイベントを設定（`stringParameter`は`"DashEnd"`/`"AttackEnd"`）。`AnimationUtility.SetAnimationEvents`で設定（Unity Editor MCPに専用ツールが無いため`eval`のRoslyn経由）。
+- **`AnimationEventRelay.cs`（新規、汎用コンポーネント）**: Animator と同じ GameObject に置く。`RaiseEvent(string eventName)`だけを持ち、それを`event Action<string> OnAnimationEvent`として中継するだけ。「何が起きたら何をするか」は一切関知しないので、将来敵キャラのアニメーションにも同じ部品をそのまま使い回せる（敵はコンボの仕組みを持たないので、反応ロジックはキャラクターごとに別に書く前提）。`MainActionController`が`"DashEnd"`/`"AttackEnd"`を購読し、`EndBusy()`を呼ぶ。
+- **死亡アニメーション**: `PlayerHealth.OnDied`を`MainActionController`が購読し、`Dead`トリガーを発火するだけ（`HandlePlayerDied()`）。落下死の場合はカメラ外で見えないことが多いが、それで問題ない（仕様として許容）。
+- **安全策（`WatchdogEffectEnd`）**: Animation Eventが何らかの理由（Clip/Animatorの設定漏れなど）で発火しなかった場合に永久に発動不可のまま固まらないよう、`Update()`で「経過時間が Clip の長さ＋0.5秒を超えたら強制的に`EndBusy`」という保険を追加（通常はここに来る前にAnimation Event側で片付く）。
+- Playで、Dash/Attack/Jumpそれぞれについて「発動→Animator側の状態遷移→効果終了（Animation Event or 着地）→`IsReady`復帰→Animatorが`Idle`に戻る」の一連の流れと、Attack中にDashへコンボした場合に攻撃判定が強制的に閉じること、ダッシュ後半の後方入力で即座に全効果が終了することを確認済み。上記のTransform curveバグ修正後、実際に`PlayerController.FixedUpdate`を複数回呼んで座標が正しく進むこと、状態ごとに`SpriteRenderer.color`が意図した色になることも確認済み。
 
 ---
 
@@ -129,15 +154,15 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 
 ### 3-2. ダッシュ → ジャンプでも無敵は途切れない
 
-- 無敵は `_dashInvTimeLeft` という**専用タイマー**で管理（発動時に `dashDuration` ぶんセット。ダッシュの移動処理とは独立して毎 `FixedUpdate` 減少）。
+- 無敵は `_dashInvTimeLeft` という**専用タイマー**で管理（発動時に `dashClip.length` ぶんセット。ダッシュの移動処理とは独立して毎 `FixedUpdate` 減少）。
 - `IsInvincible = _dashInvTimeLeft > 0 && !_dashInvBroken`。
 - ダッシュ → ジャンプのコンボでジャンプに移っても（`InterruptDashMovement` は `_dashInvTimeLeft` に触れない）、無敵は**通常のダッシュ効果時間ぶん継続**。その間の左右入力は移動に反映されるが無敵は切れない。
 - **無敵が早期に切れる唯一の条件**: 「ダッシュ効果時間の後半に、後方への左右入力をした」とき（`_dashInvBroken` ラッチ）。
 - 効果時間が満了すれば必ず無敵解除。
 
-### 3-3. コンボ受付猶予 = クールタイムとは別物
+### 3-3. コンボ受付猶予 = クールタイム（2026-09-21、旧仕様から反転）
 
-過去に「受付猶予 = クールタイム」で実装していたが破棄。現在は `comboGraceTime`（0.8 秒）という独立パラメータ。
+以前は「受付猶予とクールタイムは別物」（`comboGraceTime` という独立パラメータ）だったが、2026-09-21 の仕様変更で**両者は同じもの**になった。単発で終わらせてもコンボにしても次に動けるタイミングが一致するように、という意図的な変更。詳細は §2-4。
 
 ### 3-4. 落下しない猶予 と コヨーテタイム は別々の窓（2 つの独立パラメータ）
 
@@ -280,11 +305,11 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 プレイヤー頭上にワールド空間のゲージ 2 本（左端固定で伸縮）+ 数値ラベル。
 **開発者用**（2026-09-08）: `Awake` で `!DeveloperSettings.Active` なら `DebugBars` GameObject ごと `SetActive(false)`。＝ エディタ内で `developerMode` が true のときだけ表示。ビルドでは常に非表示（`CooldownBufferZone` も生成されない）。
 
-- **COMBO バー（シアン）**: バー本体（`SetFill`）の伸縮は `MainActionController.ComboGraceFraction01`（0..1の割合）で駆動。1 つ目のアクション発動後 `comboGraceTime`（0.8 秒）かけて減少。残っている間はコンボの追加入力を受け付ける。
+- **COMBO バー（シアン）**: バー本体（`SetFill`）の伸縮は `MainActionController.ComboGraceFraction01`（0..1の割合）で駆動。**2026-09-21**：`_comboStep==1`の間、`CooldownFraction01`と同じ値を返すだけになった（コンボ受付時間＝クールタイムなので、§2-4参照）。
 - **CD バー（オレンジ）**: バー本体の伸縮は `MainActionController.CooldownFraction01`（0..1の割合）。「これが残っている」かつ「COMBO バーが空」= アクション実行不可。
-  - ダッシュ / 攻撃 → `(_nextReadyTime - Time.time) / _lastCooldownDuration`。
-  - ジャンプ → 着地ベースで時間が不定なので `jumpAirCooldownCap`（3 秒）を基準に減少。接地中は満タン、離陸後は 3 秒に向けて減り、着地で 0。
-- **ラベルの数字（2026-09-20変更）**: 以前は上記の割合（0.00〜1.00）をそのまま表示していたが、**秒数表示に変更**。新設の `MainActionController.ComboGraceRemainingSeconds`（受付中でなければ0）/ `CooldownRemainingSeconds`（ジャンプ由来のクールタイムは `jumpAirCooldownCap` を基準にした目安の秒数）を使う。バー本体の伸縮（割合ベース）はそのまま変更していない。
+  - ダッシュ / 攻撃 → 発動からの経過時間 / （`dashClip`または`attackClip`の長さ）。
+  - ジャンプ → 着地ベースで時間が不定なため、busy の間は常に`1`（満タン）のまま。着地した瞬間に`0`。**2026-09-21**：以前あった`jumpAirCooldownCap`基準の近似減少は、滞空上限の撤廃に伴い廃止。
+- **ラベルの数字（2026-09-20変更）**: 割合（0.00〜1.00）ではなく秒数表示。`MainActionController.ComboGraceRemainingSeconds`（受付中でなければ0）/ `CooldownRemainingSeconds`を使う。**ジャンプ中は残り秒数そのものが不明なため、`CooldownRemainingSeconds`は負の値（-1）を番兵として返し、ラベルは`"--"`と表示する**（2026-09-21、`jumpAirCooldownCap`廃止に伴う変更）。バー本体の伸縮（割合ベース）は数字表示と別ロジック。
 - **先行入力ゾーン**（CD バーの空側の端に重ねた色付き区間）: 幅 = `MainActionController.InputBufferZoneFraction01`（最小 `minBufferZoneWidthFrac` = 4%）。`cooldownFill` の SpriteRenderer を複製したスプライトを**実行時に自動生成**（`CooldownBufferZone`、sortingOrder = fill+1。シーン編集不要）。
   - 受付前は半透明シアン（`bufferZoneIdleColor`）、**実際に受付中（`InInputBufferZone`）は明るい緑**（`bufferZoneActiveColor`）。CD ラベルに `BUF` を付す。
   - CD バーの先端がこの色付き区間に入っている ≒ 先行入力できる、という見た目。ジャンプは §2-6 のとおり区間位置は目安（受付判定は着地予測）。
@@ -421,8 +446,9 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 Main Camera            [Camera, CameraFollow]  ortho size 6 @ (0,-0.5,-10)
 Global Light 2D
 Player（Prefab インスタンス） @ (-10,-1.5)  [SpriteRenderer(PlayerArrow), BoxCollider2D, Rigidbody2D(grav 3, PlayerNoFriction),
-                                      PlayerController, MainActionQueue, MainActionController, PlayerHealth]
-  AttackHitbox         [SpriteRenderer, BoxCollider2D(trigger), AttackHitbox]  通常は非アクティブ
+                                      PlayerController, MainActionQueue, MainActionController, PlayerHealth,
+                                      Animator(Player.controller), AnimationEventRelay]  ※Animator/AnimationEventRelayは2026-09-21追加、§2-7参照
+  AttackHitbox         [SpriteRenderer, BoxCollider2D(trigger), Rigidbody2D, AttackHitbox]  通常は非アクティブ
   DebugBars            [PlayerDebugBars]
     ComboBar / CooldownBar  各 BG(SpriteRenderer) + Fill(SpriteRenderer) + Label(TextMesh)
 Enemy1（Prefab インスタンス, 旧名 Enemy_A） @ (-4,-1.5)  [SpriteRenderer, BoxCollider2D, Enemy(HP1), EnemyPatrol]
@@ -455,9 +481,11 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 |---|---|---|
 | `MainActionType` | (enum) | Jump / Dash / Attack |
 | `MainActionQueue` | Player | アクションの並び（決定的・連続禁止）。`Peek` / `Consume` / `OnChanged`。`StageSet.allowedActions` があれば `lottery` を上書き |
-| `MainActionController` | Player | メインアクションの発動・クールタイム・コンボ・先行入力・ダッシュ処理・無敵。発動入力はスペース / エンター / テンキー Enter / 左クリック（2026-09-12、会話送り・メニュー決定と統一）。会話中／画面切り替え直後は入力停止。`StageSet.disableCombos` のステージでは `_combosEnabled=false`（コンボ無効） |
+| `MainActionController` | Player | メインアクションの発動・クールタイム兼コンボ受付（`_busy`、§2-4）・先行入力・ダッシュ処理・無敵・アニメーション連携（§2-7）。発動入力はスペース / エンター / テンキー Enter / 左クリック（2026-09-12、会話送り・メニュー決定と統一）。会話中／画面切り替え直後は入力停止。`StageSet.disableCombos` のステージでは `_combosEnabled=false`（コンボ「受付」のみ無効、busyの長さ自体は変わらない） |
 | `PlayerController` | Player | 左右移動・向き・接地判定・コヨーテ/落下猶予・ノックバック受け・着地時間予測（`TryPredictLandingTime`）。会話中／画面切り替え直後（`InputLock`）は入力停止（§16-2） |
-| `PlayerHealth` | Player | 体力・被弾・無敵時間。`TakeDamage -> bool`、`OnHealthChanged` |
+| `PlayerHealth` | Player | 体力・被弾・無敵時間。`TakeDamage -> bool`、`OnHealthChanged`（死亡時に発火、`MainActionController`が購読して`Dead`アニメーションへ） |
+| `Animator` | Player | `Assets/Animations/Player.controller`（Idle/Move/Dash/Jump/Attack/Deadの6状態、§2-7） |
+| `AnimationEventRelay` | Player | Animation Event を C# イベントに中継する汎用コンポーネント（敵キャラにも使い回せる想定、§2-7） |
 | `AttackHitbox` | Player/AttackHitbox | 前方の一時的な攻撃判定（トリガー）。`Enemy`にヒットすればダメージ、`Bullet`にヒットすれば`DestroyByAttack()`で即消滅（2026-09-13）。`Rigidbody2D`付き（2026-09-19追加。プレイヤー静止中でも`OnTrigger`が確実に発火するようにするため。§2-3参照） |
 | `PlayerDebugBars` | Player/DebugBars | 頭上のデバッグゲージ 2 本。`Awake` で `!DeveloperSettings.Active` なら GameObject ごと非アクティブ（開発者用） |
 | `Enemy` | Enemy1, Enemy2, Enemy3, Enemy_Boss, Stage4のEnemy1_Boss | 体力・接触ダメージ + ノックバック・ダッシュ中すり抜け。`clearStageOnDeath`（既定false、2026-09-13追加）trueなら`Die()`時に`StageManager.Clear()`を呼ぶ（Goal無しステージのボス用）。`OnDamaged`イベント（2026-09-16追加、`TakeDamage`で体力が減るたびに発火）を`Enemy3AI`が購読し、追尾弾発射中に被弾したら即座にクールタイムへ移行する処理に使用 |
@@ -501,16 +529,15 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 |---|---|---|---|
 | 移動 | moveSpeed | 6 | PlayerController |
 | ジャンプ | jumpForce | 12 | MainActionController |
-| ジャンプ | jumpAirCooldownCap（滞空クールタイム上限） | 3 秒 | MainActionController |
+| ジャンプ | 滞空時間の上限 | **無し**（2026-09-21、旧`jumpAirCooldownCap`=3秒は撤廃。着地のみが終了条件） | MainActionController |
 | ジャンプ | JumpLiftoffGrace（離陸猶予, const） | 0.25 秒 | MainActionController |
-| ダッシュ | dashSpeed / dashDuration | 18 / 0.5 秒 | MainActionController |
-| ダッシュ | dashLockFraction（前半ロック割合） | 0.5 | MainActionController |
+| ダッシュ | dashSpeed / ダッシュの効果時間（＝クールタイム兼コンボ受付時間） | 18 / **`dashClip`の長さ、既定0.8秒**（2026-09-21、旧`dashDuration`=0.5秒は廃止） | MainActionController |
+| ダッシュ | dashLockFraction（前半ロック割合） | 0.5（＝0.8秒中、前半0.4秒がロック区間） | MainActionController |
 | ダッシュ | dashForwardDecel / dashBrakeDecel | 40 / 160 u/s² | MainActionController |
-| ダッシュ | dashCooldown | 2 秒 | MainActionController |
-| 攻撃 | attackDuration / attackDamage | **0.4 秒**（2026-09-11 変更） / 1 | MainActionController |
-| 攻撃 | attackCooldown | 2 秒 | MainActionController |
+| 攻撃 | 攻撃の効果時間（＝攻撃判定が出ている時間、クールタイム兼コンボ受付時間） / attackDamage | **`attackClip`の長さ、既定0.5秒**（2026-09-21、旧`attackDuration`=0.4秒・`attackCooldown`=2秒は廃止） / 1 | MainActionController |
 | 攻撃 | 判定の前方オフセット | Transform.localPosition.x の絶対値（既定 0.9、専用フィールドは廃止 2026-09-13） | AttackHitbox |
-| コンボ | comboGraceTime（受付猶予） | 0.8 秒 | MainActionController |
+| コンボ | 受付猶予 | **＝クールタイムと同じ（busyの間ずっと）**（2026-09-21、旧`comboGraceTime`=0.8秒という独立パラメータは廃止） | MainActionController |
+| アニメーション | dashClip / attackClip | Assets/Animations/Player_Dash.anim（0.8秒） / Player_Attack.anim（0.5秒） | MainActionController |
 | 先行入力 | inputBufferTime（CD 明け前の受付） | 0.1 秒（≒6フレーム） | MainActionController |
 | 先行入力 | BufferedInputMaxLife（記憶の失効, const） | 0.4 秒 | MainActionController |
 | 先行入力 | bufferZoneIdle/ActiveColor・minBufferZoneWidthFrac | シアン/緑・0.04 | PlayerDebugBars |

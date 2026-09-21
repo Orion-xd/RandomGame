@@ -84,9 +84,14 @@ public class PlayerDebugBars : MonoBehaviour
 
         UpdateBufferZone();
 
-        if (comboLabel != null) comboLabel.text = "COMBO " + controller.ComboGraceRemainingSeconds.ToString("0.00");
+        float comboSeconds = controller.ComboGraceRemainingSeconds;
+        float cdSeconds = controller.CooldownRemainingSeconds;
+        // ジャンプ中は残り秒数が不明なため、CooldownRemainingSeconds が負の値（番兵）を返す。
+        // その場合は数値ではなく "--" を表示する。
+        if (comboLabel != null)
+            comboLabel.text = "COMBO " + (comboSeconds < 0f ? "--" : comboSeconds.ToString("0.00"));
         if (cooldownLabel != null)
-            cooldownLabel.text = "CD " + controller.CooldownRemainingSeconds.ToString("0.00") + (controller.InInputBufferZone ? "  BUF" : "");
+            cooldownLabel.text = "CD " + (cdSeconds < 0f ? "--" : cdSeconds.ToString("0.00")) + (controller.InInputBufferZone ? "  BUF" : "");
     }
 
     private void UpdateBufferZone()
