@@ -16,9 +16,23 @@ using UnityEngine;
 /// 抽選対象は `StageSet.allowedActions`（そのステージに設定があれば）で上書きされる。
 /// ステージ1のように抽選対象が1種類（Dash のみ）の場合、「連続禁止」は自動的に無効化される
 /// （振り直しループが `lottery.Length > 1` 条件でスキップされるため、無限ループにならない）。
+///
+/// ── チュートリアルによる動的解放（2026-09-22追加） ──
+/// ステージ1では、アイテムを拾うたびに `UnlockAction()` が呼ばれ、抽選対象へアクションが追加されていく。
+/// `unlockMode` で挙動を切り替えられる：
+///  - Cumulative（既定）: 追加式。解放したアクションはそれ以降ずっと対象に残る。
+///    既に表示済みの手（`_slots`）はその場では変わらず、消費されて新しく抽選されるときから反映される。
+///  - Exclusive: 置き換え式。常に直近に解放した1種類だけが対象になる。**こちらは既に表示済みの手も
+///    含めて即座に全スロットを新しいアクション1色へ振り直す**（アイテムを拾った瞬間に切り替わったことが
+///    見た目にもすぐ分かるようにするため。Cumulativeと違いこちらは「次から」ではなく「今すぐ」反映）。
+///    なお、その瞬間まさに発動中（busy）のアクション自体には一切影響しない：`Consume()` された時点で
+///    そのアクションは `_slots` から既に外れて `MainActionController._busy` 側の管理下に移っているため
+///    （§`UnlockAction` 参照）。
 /// </summary>
 public class MainActionQueue : MonoBehaviour
 {
+    public enum UnlockMode { Cumulative, Exclusive }
+
     [Tooltip("先読み表示する手数")]
     [SerializeField] private int slotCount = 4;
 
@@ -34,6 +48,10 @@ public class MainActionQueue : MonoBehaviour
         MainActionType.Dash,
         MainActionType.Attack,
     };
+
+    [Header("チュートリアル用：アクションの動的解放")]
+    [Tooltip("UnlockAction() が呼ばれたときの挙動。Cumulative=追加式（既定）、Exclusive=置き換え式")]
+    [SerializeField] private UnlockMode unlockMode = UnlockMode.Cumulative;
 
     private readonly List<MainActionType> _slots = new List<MainActionType>();
     private System.Random _rng;
@@ -71,6 +89,32 @@ public class MainActionQueue : MonoBehaviour
     {
         if (index < 0 || index >= _slots.Count) return null;
         return _slots[index];
+    }
+
+    /// <summary>指定したアクションが現在抽選対象に含まれているか（チュートリアルのヒント表示のゲートに使う）。</summary>
+    public bool IsUnlocked(MainActionType action)
+        => lottery != null && Array.IndexOf(lottery, action) >= 0;
+
+    /// <summary>チュートリアル用：アイテム取得などから呼ばれ、指定したアクションを抽選対象に加える。
+    /// unlockMode = Exclusive のときは、それ1種類だけに置き換え、既に表示済みのスロットも含めて
+    /// 即座に振り直す（今まさに発動中のアクション自体には影響しない。`Consume()` 済みなので `_slots`
+    /// には既に含まれておらず、`MainActionController._busy` 側が独立して管理している）。</summary>
+    public void UnlockAction(MainActionType action)
+    {
+        if (unlockMode == UnlockMode.Exclusive)
+        {
+            lottery = new[] { action };
+            _lastRolled = null;
+            for (int i = 0; i < _slots.Count; i++) _slots[i] = Roll();
+            OnChanged?.Invoke();
+        }
+        else if (!IsUnlocked(action))
+        {
+            var next = new MainActionType[(lottery?.Length ?? 0) + 1];
+            lottery?.CopyTo(next, 0);
+            next[next.Length - 1] = action;
+            lottery = next;
+        }
     }
 
     /// <summary>先頭を1つ消費して返す。全体を繰り上げ、末尾に新規抽選を追加する。</summary>

@@ -942,6 +942,7 @@ MonoBehaviour:
   slotCount: 4
   stageSeed: 33333
   lottery: 000000000100000002000000
+  unlockMode: 1
 --- !u!114 &5153456096451803614
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -955,7 +956,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MainActionController
   jumpForce: 12
-  dashSpeed: 18
+  dashSpeed: 12
   dashLockFraction: 0.5
   dashForwardDecel: 40
   dashBrakeDecel: 160

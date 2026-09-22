@@ -22,7 +22,7 @@ MonoBehaviour:
   - displayName: Stage 2
     sceneName: Stage2
     intro: {fileID: 11400000, guid: 2aae5261df96d8f4b85e08ca06fc5037, type: 2}
-    allowedActions: 0100000002000000
+    allowedActions: 000000000100000002000000
     disableCombos: 0
   - displayName: Stage 3
     sceneName: Stage3

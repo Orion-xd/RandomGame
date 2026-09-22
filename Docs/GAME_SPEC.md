@@ -271,7 +271,7 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
     - **Stage2, Stage4, Stage5**: x セル [-19,27) を連続で塗り、落とし穴なし。`pathCount = 1`。
   - `PlayerController.IsGrounded` は `CompositeCollider2D` を `Physics2D.OverlapBox` で検出できる（Play で確認済み: Stage1 は左地面/穴/右地面、Stage2〜5 は連続、天面 y=-2）。
   - **タイルパレット（`Assets/Tilemaps/Palettes/GroundPalette.prefab`, 2026-09-11）**: `Window > 2D > Tile Palette` で開いて手作業編集するための Unity 標準パレット。`GroundTile` と高台の 6 タイル（下記）を収録済み。使い方: シーンを開く → Tile Palette ウィンドウで `GroundPalette` を選択 → Active Tilemap がそのシーンの対象 Tilemap（`Grid/Ground` または `Grid/HighGround`）になっていることを確認 → Paint/Erase/Box Fill 等でシーンビュー上を直接編集 → Ctrl+S で保存。当たり判定は Play 開始時に `TilemapColliderBootstrap` が自動で作り直すので、手で塗っても特別な後処理は不要。
-- **一方通行の高台＝HighGround（Tilemap 版, 2026-09-11）**: `Grid` の子 `HighGround`（`Ground` と同じ Grid・同じ 1×1 セル。現在 Stage3 に1基、Stage4 に2基。Stage1 の旧 GameObject 版は削除済み、Stage2/5 はもともと無し）。**「高台」の英訳が"high ground"であるため、2026-09-16にGameObject・アセット名を`Platform`系から`HighGround`系へ統一した**（経緯は §9-1 Stage4 参照）。
+- **一方通行の高台＝HighGround（Tilemap 版, 2026-09-11）**: `Grid` の子 `HighGround`（`Ground` と同じ Grid・同じ 1×1 セル。現在 Stage1 に1基（2026-09-22追加、ジャンプチュートリアル用、§9-3参照）、Stage3 に1基、Stage4 に2基。Stage1 の旧 GameObject 版（チュートリアル化以前の別物）は削除済み、Stage2/5 はもともと無し）。**「高台」の英訳が"high ground"であるため、2026-09-16にGameObject・アセット名を`Platform`系から`HighGround`系へ統一した**（経緯は §9-1 Stage4 参照）。
   - **見た目**: 天面（乗れる面）3 種＋柱（乗れない・当たり判定も無い）3 種、計 6 枚のタイルで構成。実際の並びは天面 左/中央/右 の 3 マス＋その真下に柱 左/中央/右 の 3 マスの計 3×2 マス。柱は地面の天面（y=-2）にちょうど接し、「地面から生えた柱の上に台がある」見た目になる。左右は端用、中央は繰り返し用の想定（今は仮素材のため天面 3 種・柱 3 種はそれぞれほぼ同じ見た目で左右にわずかな縁のアクセントがある程度だが、本番素材に差し替えれば区別できるようになる設計）。
     - タイル: `Assets/Art/Tiles/HighGroundTopLeft` / `HighGroundTopCenter` / `HighGroundTopRight`（`colliderType = Grid`）、`HighGroundPillarLeft` / `HighGroundPillarCenter` / `HighGroundPillarRight`（`colliderType = None`）。元画像は `Assets/Art/HighGroundTop*.png` / `HighGroundPillar*.png`（90×90, PPU90 の仮素材。天面はオパーク、柱は半透明のグレー＝当たり判定が無いことを視覚的に示す仮の意匠）。
   - **当たり判定**: `HighGround` の `TilemapCollider2D`(`compositeOperation=Merge`) + `CompositeCollider2D` は `colliderType=None` の柱タイルからは形状を作らないため、**天面タイルだけが合成された 1 つの当たり判定**になる（柱部分は完全にすり抜け＝当たり判定自体が存在しない。天面部分は実体の当たり判定）。
@@ -353,15 +353,22 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
   - チェック = そのステージがクリア済み（`GameFlow.SetStageCleared`）。クリア済みステージは自動でチェック済み。開発者が自由に付け外しでき、変更で即 `RefreshLocks()`。
   - 「Stage1 と 3 だけチェック」のような非現実的状態も許容（整合はとらない。トグルは `IsStageCleared` を素直に反映、ボタン解放は `IsStageUnlocked` ルール由来なので、その場合 Stage3 は「チェック済みだがロック」になる）。
   - **表示条件は `DeveloperSettings.Active`** ＝「エディタ内 かつ `Assets/Resources/DeveloperSettings.asset` の `developerMode == true`」（2026-09-08：ScriptableObject 化。インスペクターでその 1 アセットの bool を切り替えるだけ、再コンパイル不要）。エディタ外ビルドでは値に関係なく常に無効（`Active` が `#if UNITY_EDITOR` ガード）。開発者用3コンポーネント（`DevStageClearToggles` / `DevStorySeenToggles` / `DevProgressResetButton`）はこの1スイッチだけに従う。プレイヤーがクリア状況を書き換える経路はここだけ。
-- **ビルド版の初回起動リセット（`FreshBuildGuard`, 2026-09-07）**: エディタ**外**のビルドで、起動時（`RuntimeInitializeOnLoadMethod` / `BeforeSceneLoad`）にスタンプ文字列を `PlayerPrefs` キー `RandomGame.BuildStamp` と照合し、違えば `GameFlow.ResetProgress()` ＋記録し直す。**エディタ内は無効**（`#if UNITY_EDITOR`）。unityroom（WebGL）想定＝PlayerPrefs はブラウザの IndexedDB にページ URL 単位で保存。
-  - スタンプの作り方は `FreshBuildGuard.Policy`（コード内 `const`）で切り替える:
-    - `OnEveryBuild`（**現在の設定**・開発用）: スタンプ = `"build:" + Application.buildGUID`（buildGUID は毎ビルド自動採番）→ **ビルドし直すたびに全プレイヤーの進行が消える**。開発中の PlayerPrefs 残りがビルドに紛れ込む事故を防ぐのが目的。
-    - `OnTokenChange`（リリース用）: スタンプ = `"token:" + ResetToken`（コード内 `const` 文字列）→ **バージョン更新・ビルドし直しでは消えない**。`ResetToken` を書き換えたときだけ次回起動で1回リセット。
-    - `Disabled`: 自動リセットなし。
-  - **事故防止**: `Policy = OnEveryBuild` のまま **Development Build 以外**をビルドしようとすると、`FreshBuildGuardBuildCheck`（`IPreprocessBuildWithReport`, `Assets/Scripts/Editor/`）が確認ダイアログを出してビルドを止める（バッチモードでは `BuildFailedException`）。「毎ビルド全消し」仕様を忘れたまま配布するのを防ぐ。リリース時は `Policy` を `OnTokenChange` / `Disabled` に変える。
+- **ビルド版の初回起動リセット（`FreshBuildGuard`, 2026-09-07、2026-09-22に`Debug.isDebugBuild`直結方式へ再設計）**: エディタ**外**のビルドで、起動時（`RuntimeInitializeOnLoadMethod` / `BeforeSceneLoad`）に**Development Buildのときだけ**スタンプ文字列を `PlayerPrefs` キー `RandomGame.BuildStamp` と照合し、違えば `GameFlow.ResetProgress()` ＋記録し直す。**エディタ内は無効**（`#if UNITY_EDITOR`）。unityroom（WebGL）想定＝PlayerPrefs はブラウザの IndexedDB にページ URL 単位で保存。
+  - **設計方針（2026-09-22）**: 以前は`FreshBuildGuard.Policy`という独立した`const`（`OnEveryBuild`/`OnTokenChange`/`Disabled`の3択→一度`AlwaysReset`/`NeverReset`の2択へ簡素化）を手動でリリース前に切り替える方式だったが、**「切り替え忘れたまま配布すると既存プレイヤーの進行状況ごと全消去してしまう」事故が構造的に起こり得た**（確認ダイアログはあったが、それでも押し進めればビルドできてしまい「絶対に消えない」保証にはならなかった）。これを無くすため、**切り替える定数自体を廃止し、`Debug.isDebugBuild`（Unity標準のランタイムプロパティ、Development Buildなら`true`）に直結**させた:
+    - Development Build（`Debug.isDebugBuild == true`）: スタンプ＝`"build:" + Application.buildGUID`（buildGUIDは毎ビルド自動採番）と前回のスタンプを比較し、違えばリセット。ビルドし直すたびに毎回リセットされる（開発用）。
+    - それ以外の通常ビルド（`Debug.isDebugBuild == false`）: **一切リセットしない**。配布して上書きアップデートしても、既にプレイ済みのプレイヤーの進行状況は絶対に消えない（切り替える人間の判断が介在しないため、消し忘れという事故が原理的に起こらない）。
+  - **ビルド前の確認ダイアログ（`FreshBuildGuardBuildCheck.cs`）は2026-09-22に削除済み**: 通常ビルドが無条件で安全になったため、リリース前の確認自体が不要になった。
+  - **エディタのPlayとの混入について**: エディタPlay中のPlayerPrefsは、実際のビルド版とは物理的に別のストレージ（Windowsならレジストリキーが別、WebGLならそもそもブラウザ側の別ストレージ）に保存されるため、この機構の有無に関係なく構造的に混ざりようがない。
 - **ボタンの `onClick` はすべて永続 UnityEvent リスナー**（Inspector に表示される。`UnityEventTools.AddPersistentListener` で設定済み）。結果画面の各ボタンも同様に `StageManager` の `OnNextStage`/`OnRetry`/`OnStageSelect` を指す。EventSystem は `InputSystemUIInputModule` + `Assets/InputSystem_Actions.inputactions`。
-- **Stage1（2026-09-13、敵配置を変更）**: 地面は x セル [-19,7) ＋ [10,30)（落とし穴 x≈7〜10 あり）。敵は **`Enemy1` を2体のみ**（@x≈-4, @x≈15。旧`Enemy_Boss`(HP5)は Enemy1(HP1) に置き換え済み）。Goal（@x28）は HP2以上の敵（ボス扱い）が生存しているとゴール不可（`Goal.AnyBossAlive()`）という既存仕様があるため、**Stage1に一撃で倒せないボスを置いてはいけない**（Stage1は`allowedActions`が`Dash`のみで攻撃自体ができないため、以前の`Enemy_Boss`配置だとゴール不可能なバグになっていた。今回の置き換えで解消）。
-- **Stage2（2026-09-13、Stage1と同一構成化）**: 地面・敵配置ともに Stage1 と完全に同じ（x セル [-19,7)＋[10,30)、`Enemy1`を@x≈-4,@x≈15の2体、Goal@x28）。詳細なレベルデザインは別プランナーが今後担当する前提の暫定構成。`stageSeed`は22222のまま。
+- **Stage1（2026-09-22、チュートリアルステージ化）**: 地面は x セル [-19,7) ＋ [10,30)（落とし穴 x≈7〜10 あり、変更なし）。**開始時に使えるアクションは Dash のみ**（`allowedActions`は変更なしで従来どおり）で、道中でアイテムを拾うたびにアクションが1つずつ解放されていき、同時にそのアクションの使い方を教えるヒントが画面上部に表示される、スプラトゥーン系チュートリアル形式の構成に作り替えた。詳細な仕組みは §9-3「チュートリアルシステム」参照。レイアウト（x座標）:
+  - `Enemy1`（@x≈-4、`EnemyPatrol`を無効化して静止）に子`ProximityZone`（`TutorialHint(DashPastEnemy)`、近接判定用Collider 6×3）＝「ダッシュで敵をかわす」
+  - 落とし穴（x≈7〜9）に `PitMarker`（見た目は`SpriteRenderer`の色アルファ0でユーザーが非表示化、近接判定用の`BoxCollider2D`＋`TutorialHint(DashOverPit)`を付与、@x8）→ 対岸に `PitLandingZone`（到達判定用Collider、@x10.5）＝「ダッシュで落とし穴を飛び越える」
+  - `AttackUnlockItem`（@x12、`ActionUnlockPickup(Attack)`）→ `Enemy1_B`（@x≈15、`EnemyPatrol`を無効化して静止）に子`ProximityZone`（`TutorialHint(AttackEnemy)`）＝「攻撃で敵をやっつける」
+  - `JumpUnlockItem`（@x19、`ActionUnlockPickup(Jump)`）→ 新規 `Grid/HighGround`（x セル 22-24、天面行 y=-1・柱行 y=-2、Stage3と同じ構造）付近に `HighGroundZone`（近接判定用Collider 7×4、`TutorialHint(JumpHighGround)`、`highGroundCollider`=`HighGround`の`CompositeCollider2D`、`groundLayer`="Ground"）＝「ジャンプで高台または段差を飛び越える」
+  - `Goal`（@x28、変更なし）
+  - Goal（@x28）は HP2以上の敵（ボス扱い）が生存しているとゴール不可（`Goal.AnyBossAlive()`）という既存仕様があるため、**Stage1に一撃で倒せないボスを置いてはいけない**（従来からの制限、変更なし）。
+  - **意図的に強制していない点**: 複数アクションが解放された後は、ダッシュで攻撃チュートリアルの敵を素通りするなど、後の項目を別のアクションで“スキップ”すること自体は物理的に可能（ヒントが未達成のまま残るだけで、ステージ進行は妨げない）。強制ゲートが必要になった場合は今後の課題。
+- **Stage2（2026-09-13、Stage1と同一構成化。2026-09-22、使用可能アクションのみ更新）**: 地面・敵配置は Stage1 と同じ（x セル [-19,7)＋[10,30)、`Enemy1`を@x≈-4,@x≈15の2体、Goal@x28、Stage1のチュートリアル用オブジェクトは追加していない）。詳細なレベルデザインは別プランナーが今後担当する前提の暫定構成。`stageSeed`は22222のまま。**`allowedActions`を`Dash`+`Attack`の2種類から`Jump`+`Dash`+`Attack`の全3種類に変更**（Stage1のチュートリアルでアクションを段階解放する仕様に合わせ、ステージ2以降は最初から全アクション・コンボ有効という構成に統一するため。`disableCombos`は元々false、`stageSeed`も変更なし）。**ステージ2でコンボの練習をさせる軽めのチュートリアルは今回のスコープ外**（要望はあったが、別途レベルデザインが必要なため未着手）。
 - **Stage3（2026-09-11、地形・敵配置を Stage1 と同一化 → 高台を Tilemap 版へ置き換え → 2026-09-13、敵をEnemy1+Enemy2に変更）**: 地面 Tilemap は Stage1 と同じ x セル [-19,7) ＋ [10,30)（落とし穴あり）。高台は **Tilemap 版の `Grid/HighGround`**（x セル 2,3,4・天面行 y=-1、直下に柱行 y=-2）（詳細は §7「一方通行の高台」）。敵は `Enemy1`（HP1 @x≈-4）と `Enemy2`（据え置き砲台 @x≈15、旧`Enemy_Boss`から置き換え）。`Goal`（@x25）・`stageSeed`（33333）は変更なし。
 - **Stage4（2026-09-13、縦スクロールステージとして再構築）**: **Goal オブジェクトは無い**。地面 Tilemap（`Grid/Ground`）を、下部の床（xセル-5〜5, yセル-8〜-4）＋そこから上へ2ユニット間隔で交互に積んだ1マス厚の足場6段（surface y=0,2,4,6,8,10。タイル行はそれぞれの1つ下）に作り直した（プレイヤーの最大ジャンプ高さ ≈2.45 なので2ユニット間隔なら届く）。`Player`初期位置は`(0,-1.5,0)`に変更（横方向はカメラが追従しないため、床の中央に合わせた）。`Main Camera`は`CameraFollow.followHorizontal=false / followVertical=true`（x=0固定・y追従）、初期位置`(0,-1.5,-10)`。敵は`Enemy1`(@-3,2.5)・`Enemy2`(@-3,6.5)・**ボス`Enemy1_Boss`**(@0,10.5、一番上の足場)を配置。ボスは`Enemy1`プレハブのインスタンスに、シーン側オーバーライドで`Enemy.maxHealth=3`・`Enemy.clearStageOnDeath=true`を設定したもの（`EnemyPatrol`はそのまま残しているので足場の幅ぴったりで往復する）。**まだ地形・敵配置ともに「縦スクロールが正しく動くかを試すための簡易版」であり、正式なレベルデザインではない。** ボスを倒すと`Enemy.Die()`から`StageManager.Clear()`が直接呼ばれてクリアになる（Goalに触れた場合と同じ扱い）。
   - **2026-09-14、高台（一方通行）を1セット追加**: ユーザーが自分でジャンプ力調整のために高台を試そうとしたが、`Grid/Ground`（`OneWayPlatform`が付いていない普通の地面Tilemap）に直接タイルを描いてしまい機能しなかった（天面が下から通り抜けられない＝一方通行ではなくただの全方向ブロックになっていた）ため、Stage3と同じ構造の`Grid/HighGround`（Tilemap + TilemapRenderer(order -9) + Rigidbody2D(Static) + TilemapCollider2D(Merge) + CompositeCollider2D(Polygons) + TilemapColliderBootstrap + OneWayPlatform、layer=Ground）を新規作成し、タイルをそちらへ移設して修正。位置は天面 x=2,3,4 / y=-2（左右で正しく左/中央/右のアセットを使うよう修正）、柱 x=2,3,4 / y=-3。**一方通行の高台を機能させるには、タイルの colliderType 設定だけでなく、必ず`OneWayPlatform`付きの専用Tilemap GameObjectに置く必要がある**（既存の`Grid/Ground`に描いても一方通行にはならない）。
@@ -372,7 +379,7 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
     - **命名の整理（2026-09-16）**: 「高台」の英訳が"high ground"であることから、`Platform`という名前を使っていたGameObject・アセット群をすべて`HighGround`系の名前へ統一（`Grid/Platform`→`Grid/HighGround`、`PlatformTop*`/`PlatformPillar*`タイル→`HighGroundTop*`/`HighGroundPillar*`、プレハブ→`HighGroundTilemap.prefab`）。スクリプト名`OneWayPlatform.cs`自体は当たり判定の挙動を表す技術的な名前として変更していない（GameObject名とコンポーネント名が一致しなくなる点は他プランナーへの説明で明記が必要）。
     - **高台を追加する際の運用（2026-09-16、ユーザー方針）**: `HighGroundTilemap.prefab`は「毎回使うもの」ではなく、**新しく独立した高台を1つ増やす最初の1回だけ**使う（あるいは開発側が用意する）もの。一度その専用Tilemapがシーンに存在すれば、以後はTile Paletteで`Ground`と全く同じ感覚で直接ペイント/消去して高さ・形を調整してよい（詳細な使い方ガイドは別途、他プランナー向けに整理）。
 - **Stage5（2026-09-16、ラスボス戦として最小構成）**: 地面はそれまでの連続Tilemapのまま変更なし。**Goalオブジェクトは削除済み**（Stage4と同じくボス撃破でクリア）。`Enemy3`（ラスボス、詳細は§6-3）を地面中央付近 `(4, -1.5)` に配置。`Player`(@x-10)はそのまま。まだ「地面があってプレイヤーとラスボスがいるだけ」の最小構成で、正式なレベルデザインではない。
-- **使用可能アクション（`StageSet.stages[i].allowedActions`, 2026-09-09）**: Stage1 = `Dash` のみ（`disableCombos` も実質 on）／ Stage2 = `Dash`+`Attack` ／ Stage3〜5 = `Jump`+`Dash`+`Attack`。`StageSet.asset` で編集。
+- **使用可能アクション（`StageSet.stages[i].allowedActions`, 2026-09-09）**: Stage1 = `Dash` のみ（開始時の初期値。`disableCombos` も明示的に on）／ Stage2〜5 = `Jump`+`Dash`+`Attack` 全3種類（2026-09-22、Stage2を2種類→3種類に修正）。`StageSet.asset` で編集。**Stage1はこの初期値に加えて、プレイ中にアイテムを拾うたびに`MainActionQueue.UnlockAction()`で動的に追加されていく**（詳細は §9-3「チュートリアルシステム」）。
 - **結果画面**は各ステージシーン内の `StageFlow/ResultCanvas`（`ClearPanel` / `FailPanel`、`sortingOrder 100`、通常は非アクティブ）。`StageManager` が表示と遷移を管理。
   - 表示中は `Time.timeScale = 0`、`PlayerController` / `MainActionController` を無効化。
   - **「もう一度」= シーンの再読み込み**なので、アクションの並びも含めて完全初期化される（＝リトライで同じ並びになる仕様を自動で満たす）。
@@ -473,14 +480,82 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
                                       TilemapCollider2D(compositeOperation Merge), CompositeCollider2D(Polygons),
                                       TilemapColliderBootstrap]
                                       天面 y=-2。Stage1 は落とし穴あり（pathCount 2）
-  HighGround           （Stage1には無い。Stage3に1基、Stage4に2基。高台=high ground。2026-09-16に`Platform`から改名）layer=Ground  [Tilemap, TilemapRenderer(order -9), Rigidbody2D(Static),
+  HighGround           （2026-09-22追加、ジャンプチュートリアル用。高台=high ground。2026-09-16に`Platform`から改名）layer=Ground  [Tilemap, TilemapRenderer(order -9), Rigidbody2D(Static),
                                       TilemapCollider2D(compositeOperation Merge), CompositeCollider2D(Polygons),
                                       TilemapColliderBootstrap, OneWayPlatform]
-                                      天面セル x=2,3,4 / y=-1（colliderType Grid）、柱セル同 x / y=-2（colliderType None）
+                                      天面セル x=22,23,24 / y=-1（colliderType Grid）、柱セル同 x / y=-2（colliderType None）
 ```
 （Stage1 に以前あった GameObject 版 `OneWayPlatform` は 2026-09-11 に削除済み。§7 参照）
 
 生成アセット（`Assets/Art/`）: `WhiteSquare.png`（32px, PPU32）、`PlayerArrow.png`（左右非対称の矢印）、`Circle.png`（体力アイコン）、`PlayerNoFriction.physicsMaterial2D`（摩擦 0）、`GroundTile.png`（90×90, PPU 90 の仮地面タイル。本番絵で上書き予定）、`Tiles/GroundTile.asset`（`Tile`, colliderType Grid）。
+
+### 9-3. チュートリアルシステム（Stage1、2026-09-22）
+
+ストーリー表示（`DialoguePlayer`）とは完全に別系統。「Stage1では最初Dashしか使えず、道中のアイテムでアクションを1つずつ解放しながら、その場でスプラトゥーン系チュートリアル形式の操作説明を見せる」仕様。**毎回プレイのたびに表示される**（ストーリーの既読スキップと違い、`GameFlow`側に既読フラグは持たない）。
+
+- **`MainActionQueue`の動的解放（`UnlockAction()` / `IsUnlocked()` / `unlockMode`）**: `Awake()`で決まる初期抽選対象（`StageSet.allowedActions`、Stage1は`Dash`のみ）に対し、`UnlockAction(action)`が呼ばれるたびにアクションを追加していく。`unlockMode`は2種類（インスペクターで切替可、既定`Cumulative`）:
+  - `Cumulative`（既定）: 追加式。一度解放したアクションはステージ内でずっと抽選対象に残る。
+  - `Exclusive`: 置き換え式。常に直近に解放した1種類だけが対象になる（ユーザーが将来検討中と明言した「同時に2種類以上解放されない」仕様向けの切替口。現時点ではまだ使っていない）。**Cumulativeと違い、こちらはアイテムを拾った瞬間に既に表示済みのスロット（`_slots`）も含めて即座に新しいアクション1色へ振り直す**（2026-09-22追加。「次から」ではなく「今すぐ」切り替わったことが見た目にもすぐ分かるようにするため）。なお、その瞬間まさに発動中（busy）のアクション自体には一切影響しない（`Consume()`された時点で`_slots`からは既に外れ`MainActionController._busy`側が独立して管理しているため）。Play検証済み：ダッシュ発動中（`IsDashing=true`）に別アクションを`Exclusive`で解放しても、ダッシュ自体は中断されず、キューだけが即座に切り替わることを確認。
+  - `Cumulative`の場合、既に表示済みの手（`_slots`）はその場では変わらず、消費されて新しく抽選されるときから反映される（Exclusiveの即時振り直しとは異なる点に注意）。
+  - `IsUnlocked(action)`は、あるアクションが現在抽選対象に含まれているかを返す（後述の`gateOnActionUnlock`用）。
+- **`ActionUnlockPickup`（Player/未使用アイテム用）**: `Collider2D`（トリガー化を`Awake`で強制）+ インスペクターで選ぶ`MainActionType action`。プレイヤー本体のコライダーが触れた瞬間（拾う操作は不要）に`MainActionQueue.UnlockAction(action)`を呼んで自身を`Destroy`する。
+- **`TutorialHintUI`（`HUD_Canvas`プレハブに追加）**: 画面上部の帯（背景`Image`半透明黒＋中央`Text`）。`RectTransform`は`anchorMin=(0.08,1)`/`anchorMax=(0.92,1)`/`pivot=(0.5,1)`/`anchoredPosition=(0,-340)`/`sizeDelta=(0,70)`（`DialoguePlayer`の会話ボックス「上部」レイアウトとの一貫性のため、横幅・開始高さを揃えつつ、既存の`ActionBar`/`HealthPanel`と重ならない位置まで下げてある）。シーン直置きの`Text`なので`Awake()`で明示的に`Resources.Load<Font>("Fonts/NotoSansJP-Regular")`をセットしている。表示/非表示は`GameObject.SetActive()`ではなく`CanvasGroup.alpha`で行う（`SetActive`だと非表示中は`FindAnyObjectByType<TutorialHintUI>()`で見つけられなくなり、他スクリプトの`Awake`実行順次第で参照解決に失敗する不具合が実際に起きたため、2026-09-22に修正）。`RequestShow(requester, text, distance)` / `RequestHide(requester)`のリクエスト方式：複数の`TutorialHint`が同時に表示を要求した場合は`distance`が一番小さい（プレイヤーに一番近い）ものだけを表示する。`HUD_Canvas`が共有プレハブのため、Stage2〜5にも同じUIが存在するが、対象となる`TutorialHint`が無いので常に非表示のまま実質無害。
+
+- **チュートリアル判定方式の全面刷新（2026-09-22）**: 当初は「対象が一度でも画面に映ったら表示開始、達成するまで表示し続ける」（カメラ`isVisible`ベース）だったが、ユーザーが実際に試遊した結果「対象に近づいている間だけ表示、離れたら消える」方式の方が扱いやすいと判断し、以下へ全面的に作り直した。**共通の理念**: そのアクションで攻略すべき対象（敵・地形）に近づいていて、かつそのヒントのカテゴリをまだ習得していなければ表示する。
+
+  - **`TutorialHintCategory`（enum）**: `DashPastEnemy` / `DashOverPit` / `JumpHighGround` / `ClimbLedge` / `AttackEnemy` / `JumpOverPit`（2026-09-22追加）の6種類。**新しい値は必ず enum の末尾に追加すること**（`category`フィールドは`enumValueIndex`＝宣言順インデックスでシリアライズされるため、途中に挿入すると既存のシーン/プレハブの割り当てが全部ずれて壊れる。実際に一度この間違いをして直した）。
+  - **`TutorialProgress`（新規、ステージに1つ配置するマネージャー）**: `IsLearned(category)` / `MarkLearned(category)`。**達成状況はオブジェクト単位ではなくカテゴリ単位でグローバルに管理**する（例: 複数の敵に`DashPastEnemy`を割り当てていても、そのうちどれか1体ででも成功すれば、以後は全ての`DashPastEnemy`ヒントが二度と表示されない）。
+  - **`TutorialHint`（新規、統合コンポーネント。1オブジェクトにつき必ず1種類のカテゴリだけを設定する）**: `[RequireComponent(Collider2D)]`。共通の流れ（`Update()`毎）: ①`CheckSuccess()`でカテゴリごとの達成条件を判定→達成していれば`TutorialProgress.MarkLearned()`。②未達成なら、自分のColliderがプレイヤーと`IsTouching()`（近接判定）かつ、そのカテゴリに必要なアクションが`MainActionQueue.IsUnlocked()`済みなら`TutorialHintUI.RequestShow()`、そうでなければ`RequestHide()`。カテゴリごとの達成条件・必要アクション:
+    - `DashPastEnemy`（必要アクション: Dash）: `targetEnemy`（未設定なら`GetComponentInParent<Enemy>()`で自動解決＝敵の子オブジェクトとして配置する想定）に対し、プレイヤーのx座標が`targetEnemy.transform.position.x + passThroughMargin`を超えたら達成。
+    - `DashOverPit` / `JumpOverPit` / `ClimbLedge`（必要アクション: Dash / Jump / Jump）: `landingZone`（対岸／段差の上に置く別のCollider2D）とプレイヤーが`IsTouching()`になったら達成。`DashOverPit`と`JumpOverPit`は必要アクションが違うだけで判定ロジックは完全に同一（同じ落とし穴に、ダッシュ用とジャンプ用それぞれの`TutorialHint`インスタンスを両方置いてよい。1オブジェクト=1カテゴリなので、対岸の`landingZone`は同じコライダーを2つのインスタンスで共有して構わない）。
+    - `JumpHighGround`（必要アクション: Jump）: プレイヤーの足元（`Collider2D.bounds.min.y`）から`groundLayer`のみを対象に下向きレイキャストし、`highGroundCollider`（高台の`CompositeCollider2D`）に当たったら達成……ではなく、**2026-09-22に条件を追加**: `hit.collider == highGroundCollider` かつ `hit.distance <= landedDistanceThreshold`（既定0.1）かつ `Rigidbody2D.linearVelocity.y <= 0`（上昇中でない）の3つが揃ったときだけ達成。単に「レイキャストが当たったか」だけだと、一方通行の高台を**下からすり抜けている最中**（`IgnoreCollision`は物理応答だけを止めるものでレイキャスト自体には影響しないため、真下からのレイキャストは普通に高台へ命中してしまう）に誤って「乗れた」と判定してしまう問題があったため。`raycastDistance`（1.5m）以内で当たっていても、着地とみなす距離閾値は別に`landedDistanceThreshold`で絞る。**`groundLayer`を指定しないとレイキャストがプレイヤー自身のColliderに当たってしまい判定できない不具合があった**ため必須（`PlayerController.IsGrounded`と同じ考え方）。
+    - `AttackEnemy`（必要アクション: Attack）: `targetEnemy.OnDamaged`イベントを購読し、`Health <= 0`になった瞬間に達成。**`Update()`でのポーリング（`targetEnemy == null`監視）ではなくイベント購読にしている理由**: `TutorialHint`は敵の子オブジェクトとして配置するため、敵が`Destroy`された瞬間に自分自身も同時に破棄される。ポーリング方式だと判定するチャンスが無いまま消えてしまうため、`Destroy`より前に発火する`OnDamaged`イベントで判定する必要がある。
+  - **ダッシュ中かどうかは判定条件に含めない（2026-09-22、意図的）**: `DashPastEnemy`/`DashOverPit`の達成判定は`MainActionController.IsDashing`を見ない。Jumpが既に解放済みならジャンプだけでも同じ判定（x座標超え／対岸コライダー接触）を満たせてしまう可能性があるが、ユーザーが「仕様書のまま（入れなくてよい）」と明示的に選択したため。
+  - **1オブジェクト=1ヒントの制約**: 同じ敵/地形に複数のカテゴリを同時に割り当てることは想定しない（`TutorialHint`はカテゴリのenumを1つだけ持つ設計そのものがこれを強制する）。複数の異なる対象（例: 別々の敵）にそれぞれ異なるヒントが割り当てられていて、それらに同時に近づいてしまった場合は、`TutorialHintUI`が判定用コライダー同士の距離が近い方を優先して表示する。**ただし、そもそものレベルデザインとして、そういう状況が起きないよう対象同士の間隔を空けておくことが望ましい**。
+  - **段差（ClimbLedge）について**: 「高台」（`Grid/HighGround`、一方通行の`OneWayPlatform`）とは別カテゴリとして用意してあるが、**Stage1には現時点で配置していない**（今回のスコープはあくまで判定方式の刷新であり、新規コンテンツの追加は含まない）。将来置く場合は、普通の地面（`Ground`）を階段状に配置するだけでよく（一方通行にする必要は無い）、`landingZone`（段差の上に置く到達判定用Collider）を使う点は`DashOverPit`と同じ。
+  - **既知の割り切り**: 複数アクションが解放された後、後の項目を別の手段で“スキップ”すること自体は防いでいない（例: ダッシュが使える状態のまま攻撃チュートリアルの敵を素通りできる）。ヒントが未達成のまま残るだけでステージ進行は妨げない。強制したい場合は今後の課題。
+
+- **`StageManager`の`softRetryOnFall`（既定false＝今まで通り）**: 落とし穴などで`killY`を下回った場合、通常は今まで通り`Fail()`（即失敗パネル→リトライ）。`softRetryOnFall`をtrue＋`softRetryPoint`を設定すると、失敗にせず`softRetryPoint`の位置へ瞬間移動させる（`transform.position`と`Rigidbody2D.position`の両方をセットし、速度も0にする）だけの「優しい」扱いに切り替えられる。**Stage1では現状オフのまま**（将来ステージ1だけ優しくする可能性に備えてインスペクターから切り替えられるようにしておきたい、というユーザーの布石。使う場合は`softRetryPoint`用のTransformをステージに置いて割り当てる必要がある）。
+
+  ### 9-3-1. チュートリアルの使い方ガイド（他プランナー向け、2026-09-22、プレハブ化に伴い全面更新）
+
+  **全体の仕組み**: 「アイテムに触れる→アクション解放」と「対象に近づく→ヒント表示→達成条件を満たす→そのカテゴリのヒントが二度と出なくなる」がそれぞれ独立したオブジェクトになっており、**コードは一切触らずInspectorだけで調整できる**。関連オブジェクトは全て`Assets/Prefabs/Tutorial/`フォルダにプレハブ化済み（ユーザー作業）なので、新しく置くときは基本的にこのフォルダからシーンへドラッグ＆ドロップするだけでよい。
+
+  #### `Assets/Prefabs/Tutorial/` の中身
+
+  | プレハブ | 用途 |
+  |---|---|
+  | `UnlockItem_Dash` / `UnlockItem_Attack` / `UnlockItem_Jump` | アクション解放アイテム（`ActionUnlockPickup`）。`Action`が対応するアクションに設定済み |
+  | `HintZone_Enemy_Dash` | 敵をダッシュですり抜けるヒント（`TutorialHint(DashPastEnemy)`）。**敵の子オブジェクトとして配置する** |
+  | `HintZone_Enemy_Attack` | 敵を攻撃で倒すヒント（`TutorialHint(AttackEnemy)`）。**敵の子オブジェクトとして配置する** |
+  | `HintZone_Pit_Dash` | 落とし穴をダッシュで飛び越えるヒント（`TutorialHint(DashOverPit)`） |
+  | `HintZone_Pit_Jump` | 落とし穴をジャンプで飛び越えるヒント（`TutorialHint(JumpOverPit)`、2026-09-22追加） |
+  | `HintZone_Ledge_Jump` | 段差をジャンプで乗り越えるヒント（`TutorialHint(ClimbLedge)`） |
+  | `HintZone_HighGround_Jump` | 高台にジャンプで乗るヒント（`TutorialHint(JumpHighGround)`） |
+  | `ClearZone_Pit` / `ClearZone_Ledge` | 到達判定専用の空コライダー（スクリプト無し）。落とし穴の対岸・段差の上に置いて`Landing Zone`へ割り当てる |
+  | `TutorialProgress` | 習得状況の管理役。**ステージに1つだけ**配置する |
+
+  #### 配置手順（カテゴリ別）
+
+  - **アクション解放アイテム**: `UnlockItem_*`をそのまま置くだけ。`Action`は既に設定済みなので触る必要はない。
+  - **`DashPastEnemy` / `AttackEnemy`（敵系）**: `HintZone_Enemy_Dash`/`HintZone_Enemy_Attack`を**対象の敵の子オブジェクト**としてドラッグする（`Target Enemy`は空のままでよい、親の`Enemy`を自動で拾う）。近接判定用コライダーのサイズは敵を覆うように調整する。
+  - **`DashOverPit` / `JumpOverPit`（落とし穴系）**: `HintZone_Pit_Dash`/`HintZone_Pit_Jump`を落とし穴の近くに置き、`ClearZone_Pit`を対岸に置いて、前者の`Landing Zone`へ後者のコライダーをドラッグして割り当てる。同じ落とし穴にダッシュ用・ジャンプ用の両方を置いてもよく、その場合`ClearZone_Pit`（対岸のコライダー）は共有して構わない。
+  - **`ClimbLedge`（段差系）**: `HintZone_Ledge_Jump`を段差の近くに置き、`ClearZone_Ledge`を段差の**上面だけ**を覆うように置いて、`Landing Zone`へ割り当てる。
+  - **`JumpHighGround`（高台系）**: `HintZone_HighGround_Jump`を高台の近くに置き、`High Ground Collider`にその高台Tilemapの`CompositeCollider2D`を割り当てる（`Ground Layer`は既に"Ground"に設定済み）。
+
+  #### 注意点（実際に起きた間違い）
+
+  - **プレハブを複製して新しいヒントを作るときは、`Category`ドロップダウンを複製元のまま残さず、必ず目的のカテゴリへ変更すること。** 変え忘れると、複製元と同じカテゴリ扱いのまま残ってしまい、複製元の方が既に習得済みだと新しい方のヒントも最初から二度と表示されなくなる（実際に起きた：`HighGroundZone`を複製して段差用オブジェクトを作った際、`Category`が`JumpHighGround`のまま`ClimbLedge`に変更されていなかった）。
+  - **`Landing Zone`（`DashOverPit`/`JumpOverPit`/`ClimbLedge`用）や`High Ground Collider`（`JumpHighGround`用）は、必ず「そこにいるときだけ」触れる小さく専用のコライダーにすること。** 地面全体（`Grid/Ground`の`CompositeCollider2D`など）のような、プレイヤーがほぼ常に触れているコライダーを割り当てると、近づいてすらいないうちに（達成判定は近接判定と無関係に毎フレーム実行されるため）ほぼ即座に「達成済み」になってしまい、ヒントが最初から一切表示されない・原因が分かりにくい不具合になる（実際に`Landing Zone`へ`Ground`を割り当てて起きた）。`ClearZone_Pit`/`ClearZone_Ledge`のような専用の小さいコライダーだけを使うこと。
+  - **`Landing Zone`/`High Ground Collider`/`Target Enemy`はプレハブ本体には保存できない**（シーン固有のオブジェクトを参照するため）。プレハブを置いたあと、そのインスタンスごとに個別に割り当てる必要がある（プレハブのインスタンスオーバーライドとして残るのが正常な状態）。
+
+  **累積/排他モード**: `Player`の`MainActionQueue`の`Unlock Mode`（`Cumulative`/`Exclusive`）で切り替え。
+
+  **よくある操作**:
+  - 順番を変えたい → 各オブジェクトをX座標に沿って並べ替えるだけ（コード変更不要）。
+  - 文言を変えたい → 対象の`Hint Text`を書き換えるだけ。
+  - 近づいたと判定される範囲を調整したい → `TutorialHint`が付いているオブジェクトの近接判定用`Collider2D`のサイズを変更。
+  - 他ステージにも同じ仕組みを入れたい → `TutorialProgress`をステージに1つ配置し、`Assets/Prefabs/Tutorial/`から必要なプレハブを配置するだけ。ヒント表示用の`TutorialHintUI`は共有プレハブ（`HUD_Canvas`）に既にあるので追加作業不要。
 
 ---
 
@@ -505,6 +580,11 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
   - **敵キャラへのヒット（2026-09-18追加）**: 追尾弾をラスボスへ誘導してヒットさせられるように、`HandleTrigger`で敵キャラ（`Enemy`）に触れた場合の扱いを変更。以前は敵キャラには一切反応せず常にすり抜けていたが、**発射から`selfHitGraceTime`（既定0.2秒）が経過していれば、`enemyDamage`（既定2、インスペクターで調整可）のダメージを与えて弾自身も消滅する**ようにした。猶予時間は、弾が発射元の敵自身の位置（＝重なった状態）で生成されるため、発射直後に発射元自身へ即座にヒットしてしまうのを防ぐためのもの（`_age`という経過時間カウンタで管理）。猶予時間内は今まで通り完全に無視する。Playで、猶予時間内は無反応・経過後はダメージが入って消滅することを確認済み。
 | `Enemy3AI` | Enemy3（2026-09-16追加） | ①離脱移動→②放射弾/③追尾弾を抽選→クールタイム→①…の状態機械。`DialoguePlayer.IsPlaying`中・画面外での発射禁止はEnemy1/2と同じルール。**2026-09-18**: 一番最初の行動選択だけ`firstActionDelay`秒`FirstActionWait`状態で待ってから発射（難易度緩和） |
 | `EnemyHealthBar` | Enemy_Boss/HealthBar, Enemy3/HealthBar | ボスの体力ゲージ + 数値 |
+| `ActionUnlockPickup` | Stage1の`AttackUnlockItem`/`JumpUnlockItem`（2026-09-22追加） | 触れるとメインアクションを1つ解放するアイテム。`MainActionQueue.UnlockAction()`を呼んで自身を`Destroy`（§9-3） |
+| `TutorialHintUI` | HUD_Canvas/TutorialHint（2026-09-22追加） | 画面上部のチュートリアルヒント表示。`RequestShow(requester,text,distance)`/`RequestHide`のリクエスト方式、距離最小のものを優先表示（§9-3） |
+| `TutorialHintCategory` | （enum、2026-09-22追加） | `DashPastEnemy`/`DashOverPit`/`JumpHighGround`/`ClimbLedge`/`AttackEnemy`/`JumpOverPit`（新規値は必ず末尾に追加） |
+| `TutorialProgress` | Stage1の`TutorialProgress`（2026-09-22追加） | カテゴリ単位でヒント習得済みかどうかを管理するマネージャー。`IsLearned`/`MarkLearned`（§9-3） |
+| `TutorialHint` | Stage1の各`ProximityZone`/`PitMarker`/`HighGroundZone`（2026-09-22、全面刷新） | 1オブジェクト=1カテゴリのチュートリアル判定。近接（Collider `IsTouching`）で表示/非表示、カテゴリごとの達成条件で`TutorialProgress`へ通知（§9-3） |
 | `OneWayPlatform` | Stage3/`Grid/HighGround`（Tilemap の CompositeCollider2D） | 一方通行 + 重なり率での着地判定。単体 Collider2D でも Tilemap の CompositeCollider2D でも動く（`Awake` が CompositeCollider2D を優先） |
 | `TilemapColliderBootstrap` | 各ステージ `Grid/Ground` | `Awake` でタイルを貼り直し、`TilemapCollider2D`/`CompositeCollider2D` の形状を再生成させる（eval 生成 Tilemap が Play 開始時に当たり判定を持たない問題の対策）。§7 |
 | `CameraFollow` | Main Camera | 追従。`target`（Player の Transform）は未設定なら Tag=Player から自動取得（2026-09-12）。`followHorizontal`/`followVertical`（各既定true/false、2026-09-13追加）で横縦を個別にオン/オフでき、オフの方向は開始位置で固定（Stage4のみ縦追従に設定） |
@@ -521,9 +601,8 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | `DevStageClearToggles` | StageSelect/Canvas | 【開発者用】各ステージボタンにクリア状況チェックボックス＋"clear" ラベルを実行時生成。`public ResetAll()`。表示は `DeveloperSettings.Active` |
 | `DevStorySeenToggles` | StageSelect/Canvas ＋ Title/Canvas | 【開発者用】会話の既読トグル＋"story" ラベルを実行時生成。StageSelect＝各ステージの開始会話、Title＝プロローグ。`public ResetAll()`（StageSelect 側のみ実効）。表示は `DeveloperSettings.Active` |
 | `DevProgressResetButton` | StageSelect/Canvas | 【開発者用】BackButton の少し上に「Reset story & clear」ボタンを実行時生成し `MenuNavigation.AddButton` で登録。`GameFlow.ResetStageProgress()` ＋ 両トグルの `ResetAll()`。表示は `DeveloperSettings.Active` |
-| `FreshBuildGuard` | (static, `RuntimeInitializeOnLoadMethod`) | ビルド版のみ。`Policy`（OnEveryBuild / OnTokenChange / Disabled）に応じて起動時に `GameFlow.ResetProgress()`。エディタ内は無効 |
-| `FreshBuildGuardBuildCheck` | (`Assets/Scripts/Editor/`, `IPreprocessBuildWithReport`) | `Policy = OnEveryBuild` のまま非開発ビルドを作ろうとしたら確認ダイアログでビルドを止める |
-| `StageManager` | 各ステージ/StageFlow | クリア/失敗判定・結果画面表示・結果ボタン処理・落下死判定（killY）・初回入場時の開始会話（`TryPlayIntro`, `Time.timeScale=0`）・ステージ開始時 / 会話終了時に `InputLock.LockFor(inputLockDuration=0.25)`（2026-09-12 に 0.5→0.25 へ半減）。体力0での失敗は`Fail()`とは別経路（`HandlePlayerHpDied`→死亡アニメーション→Animation Eventで`HandlePlayerAnimationEvent`がパネル表示、2026-09-21、§9-3） |
+| `FreshBuildGuard` | (static, `RuntimeInitializeOnLoadMethod`) | ビルド版のみ。**2026-09-22、`Debug.isDebugBuild`に直結**：Development Buildなら起動時に`GameFlow.ResetProgress()`、それ以外の通常ビルドは無条件で絶対にリセットしない（切り替える定数を廃止し、消し忘れ事故を構造的に排除）。エディタ内は無効 |
+| `StageManager` | 各ステージ/StageFlow | クリア/失敗判定・結果画面表示・結果ボタン処理・落下死判定（killY）・初回入場時の開始会話（`TryPlayIntro`, `Time.timeScale=0`）・ステージ開始時 / 会話終了時に `InputLock.LockFor(inputLockDuration=0.25)`（2026-09-12 に 0.5→0.25 へ半減）。体力0での失敗は`Fail()`とは別経路（`HandlePlayerHpDied`→死亡アニメーション→Animation Eventで`HandlePlayerAnimationEvent`がパネル表示、2026-09-21、§2-7）。落下死（killY）は既定`Fail()`だが、`softRetryOnFall`をtrue＋`softRetryPoint`を設定すると失敗にせず指定位置へ戻す「優しい」扱いに切り替えられる（2026-09-22追加、Stage1では既定オフ、§9-3） |
 | `Goal` | 各ステージ/Goal | 右端トリガー。ボス全滅後にプレイヤーが触れると `StageManager.Clear()` |
 | `MenuNavigation` | Title/StageSelect の Canvas, 各ステージの ClearPanel/FailPanel | メニュー UI のキーボード操作。位置ベース 2D 移動（W/S=上下・最近傍＋端ループ、A/D=同じ行内＋端ループ）、Space/Enter で決定、選択枠の自動生成。マウスホバーは移動時のみ反映。`OnEnable` で `InputLock.LockFor(inputLockDuration)`（全画面共通 0.5s、2026-09-12 に結果パネルの 1.0s を統一）。カーソル移動・マウスホバーは `InputLock.NavigationAllowed`（フェード中だけ false）を見る、決定（`HandleSubmit()`/`GraphicRaycaster`）は `InputLock.InputAllowed`（フェード中 or 猶予中は false）を見る——猶予中でもカーソル移動は効き、実際に成立したら `InputLock.Unlock()` で決定の猶予も即解除する（2026-09-12、§16-1）。`AddButton()` / `SetInitialFocus()` |
 | `InputLock` | (static クラス) | 入力ロック。`InputAllowed` = `!SceneTransition.Transitioning && Time.unscaledTime >= 解除時刻`。`LockFor(秒)` で一定時間 false に（一番遅い解除時刻を採用）。`MenuNavigation`/`DialoguePlayer`/`StageManager`/`SceneTransition` が LockFor、`MenuNavigation`/`DialoguePlayer`/`MainActionController`/`PlayerController` が参照 |

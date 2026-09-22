@@ -29,6 +29,11 @@ public class StageManager : MonoBehaviour
     [Header("落下死")]
     [Tooltip("プレイヤーの y がこれを下回ったら失敗")]
     [SerializeField] private float killY = -12f;
+    [Tooltip("true にすると、killY を下回っても失敗パネルを出さず、softRetryPoint の位置へ戻す" +
+             "（チュートリアルの落とし穴など、初見の落下を厳しくしたくない場合用。既定は今まで通り false＝通常の失敗）")]
+    [SerializeField] private bool softRetryOnFall = false;
+    [Tooltip("softRetryOnFall が true のときの復帰位置")]
+    [SerializeField] private Transform softRetryPoint;
 
     [Header("入力ロック")]
     [Tooltip("ステージ開始時（および開始会話の直後）、この秒数だけ入力を無効化する（連打の勢いでの誤アクション防止）")]
@@ -74,7 +79,23 @@ public class StageManager : MonoBehaviour
     private void Update()
     {
         if (_ended || _introPlaying || _playerTf == null) return;
-        if (_playerTf.position.y < killY) Fail();
+        if (_playerTf.position.y < killY)
+        {
+            if (softRetryOnFall && softRetryPoint != null) SoftRetry();
+            else Fail();
+        }
+    }
+
+    /// <summary>落とし穴などに落ちたとき、失敗にせず安全な位置へ戻す（softRetryOnFall 用）。</summary>
+    private void SoftRetry()
+    {
+        var rb = _playerTf.GetComponent<Rigidbody2D>();
+        _playerTf.position = softRetryPoint.position;
+        if (rb != null)
+        {
+            rb.position = softRetryPoint.position;
+            rb.linearVelocity = Vector2.zero;
+        }
     }
 
     // ── ステージ開始時の会話（そのステージに初めて入ったときだけ） ──
