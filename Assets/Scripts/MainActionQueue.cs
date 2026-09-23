@@ -51,7 +51,7 @@ public class MainActionQueue : MonoBehaviour
 
     [Header("チュートリアル用：アクションの動的解放")]
     [Tooltip("UnlockAction() が呼ばれたときの挙動。Cumulative=追加式（既定）、Exclusive=置き換え式")]
-    [SerializeField] private UnlockMode unlockMode = UnlockMode.Cumulative;
+    [SerializeField] private UnlockMode unlockMode = UnlockMode.Exclusive;
 
     private readonly List<MainActionType> _slots = new List<MainActionType>();
     private System.Random _rng;

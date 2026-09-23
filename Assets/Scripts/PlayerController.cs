@@ -27,6 +27,14 @@ public class PlayerController : MonoBehaviour
              "少しだけ落下していてもジャンプできる。上昇中には効かない")]
     [SerializeField] private float coyoteJumpGrace = 0.18f;
 
+    [Header("崖・段差のわずかな引っかかり救済")]
+    [Tooltip("当たり判定のうち、これ以上の割合が崖の上面より上にあれば「あと少しで乗り越えられる」とみなして引き上げる")]
+    [SerializeField] private float ledgeAssistMinAboveFraction = 0.9f;
+    [Tooltip("崖への接触判定を前方にどれだけ伸ばすか")]
+    [SerializeField] private float ledgeAssistProbeDistance = 0.08f;
+    [Tooltip("引き上げ後に足す余白。境界ぴったりに置くと次のフレームで再度ひっかかり判定してガタつくのを防ぐ")]
+    [SerializeField] private float ledgeAssistSkin = 0.02f;
+
     private Rigidbody2D _rb;
     private SpriteRenderer _sr;
     private Collider2D _col;
@@ -40,6 +48,9 @@ public class PlayerController : MonoBehaviour
 
     /// <summary>現在の左右移動入力。-1 / 0 / +1。ダッシュ中でも更新され続ける（MainActionController が参照）。</summary>
     public float MoveInput => _moveInput;
+
+    /// <summary>通常時の左右移動速度 (units/sec)。ダッシュ後半の減速目標に MainActionController が参照する。</summary>
+    public float MoveSpeed => moveSpeed;
 
     /// <summary>地面（groundLayer）に足が接しているか。ジャンプの空中発動禁止に使う。</summary>
     public bool IsGrounded { get; private set; }
@@ -100,7 +111,12 @@ public class PlayerController : MonoBehaviour
         IsGrounded = groundOverlap && _rb.linearVelocity.y <= 0.05f;
         if (IsGrounded) LastGroundedTime = Time.time;
 
-        // ダッシュ中は MainActionController が速度・重力を制御するので、ここでは触らない。
+        // 崖・段差のわずかな引っかかり救済。ダッシュ中（OverridesMovement）でも対象にする
+        // （ユーザー指定、2026-09-24。ダッシュの終了を待たず、その場で引き上げてよい）ため、
+        // 下の OverridesMovement による early return より前に呼ぶ。
+        ApplyLedgeAssist();
+
+        // ダッシュ中は MainActionController が速度・重力を制御するので、ここから先は触らない。
         if (_mainAction != null && _mainAction.OverridesMovement) { InCoyoteTime = false; return; }
 
         // ── 空中補助（2つの独立した猶予） ──
@@ -132,6 +148,54 @@ public class PlayerController : MonoBehaviour
         Vector2 v = _rb.linearVelocity;
         v.x = _moveInput * moveSpeed;
         _rb.linearVelocity = v;
+    }
+
+    /// <summary>崖・段差にわずかに引っかかって乗り越えられない不便さを救済する（2026-09-24）。
+    /// 当たり判定を「下から ledgeAssistMinAboveFraction 未満の帯」と「それ以上の帯」に分けて、進行方向
+    /// すぐ前方をそれぞれ別に判定する。下の帯だけが groundLayer にブロックされていて（＝ほぼ乗り越えて
+    /// いる）、上の帯は完全にクリアしている（＝背より高い壁ではない）ときだけ、段差の正確な高さまで
+    /// 直接引き上げる。差分は当たり判定の高さのごく一部（既定10%）なので、瞬間補正でも不自然に見えない
+    /// 想定。ダッシュ中（MainActionController が速度を制御中）も対象。実際の移動方向は入力ではなく
+    /// 現在の横速度 _rb.linearVelocity.x の符号で判定する（ダッシュ中は _moveInput と無関係にダッシュの
+    /// 向きへ進んでいるため）。ノックバック中は対象外（外部から与えられた速度を尊重する）。</summary>
+    private void ApplyLedgeAssist()
+    {
+        if (_knockbackTimeLeft > 0f) return;
+        if (_rb.linearVelocity.y > 0.01f) return; // 上昇中は対象外
+
+        float vx = _rb.linearVelocity.x;
+        if (Mathf.Abs(vx) < 0.01f) return;
+        float dir = Mathf.Sign(vx);
+
+        Bounds b = _col.bounds;
+        float height = b.size.y;
+        float bottomBandHeight = height * (1f - ledgeAssistMinAboveFraction);
+        if (bottomBandHeight <= 0f) return;
+
+        float frontX = b.center.x + dir * (b.extents.x + ledgeAssistProbeDistance * 0.5f);
+
+        Vector2 lowerOrigin = new Vector2(frontX, b.min.y + bottomBandHeight * 0.5f);
+        Vector2 lowerSize = new Vector2(ledgeAssistProbeDistance, bottomBandHeight);
+        if (!Physics2D.OverlapBox(lowerOrigin, lowerSize, 0f, groundLayer)) return;
+
+        float upperHeight = height - bottomBandHeight;
+        Vector2 upperOrigin = new Vector2(frontX, b.min.y + bottomBandHeight + upperHeight * 0.5f);
+        Vector2 upperSize = new Vector2(ledgeAssistProbeDistance, upperHeight);
+        if (Physics2D.OverlapBox(upperOrigin, upperSize, 0f, groundLayer)) return; // 背より高い壁は対象外
+
+        // 段差の正確な表面Yを、前方すぐ上から下向きの BoxCast で割り出す（単純な1本のレイだと、
+        // タイルの境界ちょうどなどで判定に使った帯からわずかに外れて空振りすることがあるため、
+        // 判定に使ったのと同じ幅の帯で確実に拾う）。
+        Vector2 castOrigin = new Vector2(frontX, b.max.y);
+        Vector2 castSize = new Vector2(ledgeAssistProbeDistance, 0.02f);
+        RaycastHit2D hit = Physics2D.BoxCast(castOrigin, castSize, 0f, Vector2.down, height, groundLayer);
+        if (hit.collider == null) return;
+
+        float targetBottomY = hit.point.y + ledgeAssistSkin;
+        float deltaY = targetBottomY - b.min.y;
+        if (deltaY <= 0f) return;
+
+        _rb.position += new Vector2(0f, deltaY);
     }
 
     /// <summary>敵接触時などに呼ばれる。指定した速度を duration 秒間、入力で上書きせず維持させる。</summary>

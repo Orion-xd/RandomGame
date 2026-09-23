@@ -5,15 +5,17 @@ using UnityEngine.UI;
 /// 1ステージの進行管理。クリア / 失敗の判定、結果画面の表示、結果画面のボタン処理。
 /// 各ステージシーンに1つ置く（結果画面の Canvas を子に持つ）。
 ///
-/// クリア = Goal に触れる（ボスがいれば撃破後）。
+/// クリア = Goal に触れる、またはボスを撃破する（`Enemy.clearStageOnDeath`）。どちらの経路も
+/// 最終的にこの `Clear()` 1箇所に集約されるため、クリア条件がステージによって違っても扱いは同じ。
 /// 失敗   = 体力0（PlayerHealth.OnDied）または落下（y &lt; killY）。
 /// 結果画面表示中は Time.timeScale = 0 で停止し、プレイヤーの操作スクリプトを無効化する。
 /// 「もう一度」はシーンの再読み込みなので、アクションの並びなども含めて完全に初期化される。
 ///
-/// ── 体力0での失敗だけ、死亡アニメーションを挟む（2026-09-21） ──
-/// 落下死・クリアは今まで通り即座にパネルを表示する。体力0の場合だけ、
-/// 「即座にゲーム内を全停止（Time.timeScale=0）→ プレイヤーの死亡アニメーション（UnscaledTime で再生され続ける）
-/// → アニメーション側の Animation Event（AnimationEventRelay 経由、"ShowFailPanel"）でパネルを表示」という流れになる。
+/// ── 体力0での失敗・ステージクリアは、それぞれ専用アニメーションを挟む（2026-09-21クリア、2026-09-23クリア対応） ──
+/// 落下死だけは今まで通り即座にパネルを表示する。体力0での失敗・クリアの場合は、
+/// 「即座にゲーム内を全停止（Time.timeScale=0）→ プレイヤーの死亡/クリアアニメーション（UnscaledTime で
+/// 再生され続ける、ループせず1周だけ）→ アニメーション側の Animation Event（AnimationEventRelay 経由、
+/// "ShowFailPanel"/"ShowClearPanel"）でパネルを表示」という流れになる。
 /// Time.timeScale=0 にしても Player の Animator は AnimatorUpdateMode.UnscaledTime のため止まらずに進み続ける
 /// （他の全オブジェクトは今まで通り Time.deltaTime ベースなので止まる）。
 /// </summary>
@@ -41,6 +43,7 @@ public class StageManager : MonoBehaviour
 
     private PlayerHealth _playerHealth;
     private AnimationEventRelay _playerAnimEvents;
+    private MainActionController _playerMainAction;
     private Transform _playerTf;
     private bool _ended;
     private bool _introPlaying;
@@ -62,6 +65,7 @@ public class StageManager : MonoBehaviour
             if (_playerHealth != null) _playerHealth.OnDied += HandlePlayerHpDied;
             _playerAnimEvents = p.GetComponent<AnimationEventRelay>();
             if (_playerAnimEvents != null) _playerAnimEvents.OnAnimationEvent += HandlePlayerAnimationEvent;
+            _playerMainAction = p.GetComponent<MainActionController>();
         }
         if (nextButton != null) nextButton.gameObject.SetActive(GameFlow.HasNextStage);
 
@@ -127,13 +131,16 @@ public class StageManager : MonoBehaviour
         InputLock.LockFor(inputLockDuration); // 開始会話を送り切った勢いでアクションが出ないように
     }
 
+    /// <summary>ステージクリア。パネルはまだ出さず、ゲーム内を即座に全停止してプレイヤーのクリア
+    /// アニメーションだけ再生させる。パネルはクリアアニメーション側の Animation Event
+    /// （HandlePlayerAnimationEvent の "ShowClearPanel"）で表示される。</summary>
     public void Clear()
     {
         if (_ended) return;
         _ended = true;
         GameFlow.MarkStageCleared(GameFlow.CurrentStageIndex); // 次のステージを解放
+        if (_playerMainAction != null) _playerMainAction.PlayClearAnimation();
         FreezeGameplay();
-        if (clearPanel != null) clearPanel.SetActive(true);
         Time.timeScale = 0f;
     }
 
@@ -160,8 +167,15 @@ public class StageManager : MonoBehaviour
 
     private void HandlePlayerAnimationEvent(string eventName)
     {
-        if (eventName != "ShowFailPanel") return;
-        if (failPanel != null) failPanel.SetActive(true);
+        switch (eventName)
+        {
+            case "ShowFailPanel":
+                if (failPanel != null) failPanel.SetActive(true);
+                break;
+            case "ShowClearPanel":
+                if (clearPanel != null) clearPanel.SetActive(true);
+                break;
+        }
     }
 
     private void FreezeGameplay()

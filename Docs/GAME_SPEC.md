@@ -67,9 +67,8 @@ Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.Ge
 - **ダッシュ (`StartDash` + `FixedUpdate`)**: 発動時に向いている方向へ `dashSpeed`（既定 18）で即最高速度。継続時間は `dashClip`（Animator の Dash クリップ）の長さそのもの（既定 0.8 秒、§2-7参照）。
   - ダッシュ中は `gravityScale = 0`、Y 速度 0 固定 → **落下しない**（落とし穴・敵をまたげる）。
   - **前半**（`dashLockFraction` = 0.5 → クリップ長の最初の半分、既定0.4秒）: 最高速度固定、**移動入力を完全に無視**、完全無敵。**この間は効果を解除できない**。
-  - **後半**（既定0.4秒）: 速度はキープ。入力があれば反映。
-    - 前方入力・入力なし: そのまま進みつつ緩やかに減速（`dashForwardDecel` = 40 u/s²、または速度キープ）。**効果は解除されない**（Animation Event で自然に終わるまで継続）。
-    - 後方入力: **急ブレーキ**（`dashBrakeDecel` = 160 u/s²）＋ **無敵・アニメーション・コンボ受付・クールタイムのすべてを即座に終了**（`_dashInvBroken` ラッチ。一度解除したらこのダッシュ中は戻らない。Animation Event を待たずに`EndBusy(Dash)`を直接呼ぶ）。ただし物理的な減速自体は`dashBrakeDecel`でのブレーキのまま（急停止ではない）。
+  - **後半**（既定0.4秒）: **2026-09-23、入力方向（前方/後方/なし）によらず常に同じ挙動に統一**。後半の残り時間のうち`dashDecelFraction`（既定0.5＝後半の半分＝`dashLockFraction`が0.5なら効果時間全体の1/4）ぶんの時間をかけて、`dashSpeed`から`PlayerController.MoveSpeed`（通常の移動速度）まで時間ベースで`Mathf.Lerp`により滑らかに減速する（1フレームでの急変はしない）。目標に達したあとは、そのままクールタイムが明けるまで通常速度で進み続ける。**効果は解除されない**（Animation Event で自然に終わるまで継続）。**後方入力による即時解除は2026-09-23に廃止した**（下記「後方入力キャンセルの廃止」参照）。
+  - **後方入力キャンセルの廃止（2026-09-23）**: 以前は後方入力でダッシュを即座に終了できる仕様だったが、`DashBreak`という専用のAnimatorトリガーで見た目側の終了を伝えていたところ、**原因不明のまま`DashBreak`がオンのまま残り続け**、次にダッシュを発動した瞬間だけ一瞬`Dash`アニメーションになった直後すぐに待機アニメーションへ戻ってしまう（一方で加速・無敵などゲームプレイ上の処理は正常）という再現困難な不具合が発生した。原因の特定は打ち切り、**「後方入力でのキャンセル」という機能自体を丸ごと削除**することで、`DashBreak`という状態そのものをコード・Animator両方から無くし、根本的に解消した。結果として、ダッシュ中に後方入力をしても何も起こらず、前方入力・入力なしと完全に同じ減速カーブをたどる。
   - `IsDashing` が true の間、`Enemy` 側がプレイヤーとの物理衝突を `Physics2D.IgnoreCollision` で無視（すり抜け）。
   - `OverridesMovement` が true の間、`PlayerController` は速度・向きを書かない（ダッシュが制御）。
 - **攻撃 (`DoAttack` + `AttackHitbox`)**: 前方に子オブジェクトの当たり判定を、**攻撃アニメーション中の一部区間だけ**有効化（前隙・後隙があるため、発動と同時にはもう有効化しない）。触れた敵に `attackDamage`（1）。同じ敵を多重ヒットしない（`HashSet<Enemy>`、有効化時にクリア）。攻撃判定はトリガー。前方距離は `AttackHitbox` の `Transform.localPosition.x` の絶対値をそのまま使う方式（2026-09-13〜）。`Configure()` は毎回その絶対値を向き（`facingSign`）に応じて符号だけ反転させる。これにより、インスペクターで Transform の X を直接編集すればそのまま前後距離の調整として反映される。
@@ -82,7 +81,7 @@ Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.Ge
 
 **「クールタイム」と「コンボ受付時間」は同じもの**になった。単発で終わらせてもコンボにしても、次に動けるようになるタイミングは一致する（＝一貫性のある操作方法にするため、というのが変更理由）。内部的には `MainActionController._busy`（`None`/`Dash`/`Jump`/`Attack`の enum）で一元管理する。`_busy != None` の間は次のアクションを発動できない（＝クールタイム中）が、`_comboStep == 1`（1つ目発動済み・2つ目未発動）でもあれば、その間に発動した入力は「2つ目」として受け付けられる（＝コンボ受付中）。**`IsReady => _busy == None`**。
 
-- **ダッシュ / 攻撃**: それぞれの AnimationClip（`dashClip` / `attackClip`）の長さぶん。Clip の末尾に仕込んだ Animation Event が発火した瞬間に `_busy` が `None` に戻る（§2-7）。**効果時間を変えたい場合は AnimationClip の長さを変える**（インスペクターの数値ではない）。ダッシュのみ、後半の後方入力で Animation Event を待たずに即座に終了する（§2-3）。
+- **ダッシュ / 攻撃**: それぞれの AnimationClip（`dashClip` / `attackClip`）の長さぶん。Clip の末尾に仕込んだ Animation Event が発火した瞬間に `_busy` が `None` に戻る（§2-7）。**効果時間を変えたい場合は AnimationClip の長さを変える**（インスペクターの数値ではない）。
 - **ジャンプ**: 今まで通り「着地するまで」。**滞空時間に上限は無い**（2026-09-21、以前あった `jumpAirCooldownCap`＝3秒の保険は撤廃。着地することだけが終了条件）。実装は `UpdateJumpBusy()`：発動後にまず「実際に地面を離れたか」（`_jumpLeftGround`）を確認 → その後 `IsGrounded` が再び true になった瞬間に `_busy = None`。発動しても `JumpLiftoffGrace`（0.25 秒 const、これは維持）以内に浮かなければ「着地済み」とみなして解除。
 - **コンボが無効なステージ（Stage1など）での扱い**: 無効化されるのは「その間に次のアクションをコンボとして発動できるか」だけ。**busy の長さ自体（＝実質的なクールタイム）は他ステージと変わらない**。つまり、コンボ有効なステージなら攻撃のクールタイム兼コンボ受付時間（既定0.5秒）の間に次のアクションをコンボとして発動することも、あえて何もせずクールタイムとして消費することもできるが、コンボ無効ステージでは同じ0.5秒が単純に「何もできないクールタイム」として扱われる。
 - **旧仕様との違い**: 以前は `dashCooldown`/`attackCooldown`（固定2秒）というクールタイム専用の値と、`comboGraceTime`（固定0.8秒、クールタイムとは独立）という別々の値があったが、**両方とも廃止**。この変更に伴い、ダッシュ・攻撃の実質的なクールタイムは大幅に短縮された（2秒 → 0.8秒/0.5秒）。ゲームバランスが変わることは意図している。
@@ -104,7 +103,11 @@ Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.Ge
 - **入力を離していても**、発動可能になった瞬間（`IsReady`）に次のアクションが自動発動する。
 - 実装（`MainActionController`）:
   - `Update()` で発動入力押下時、まず `TryTrigger()`（発動できたか `bool` を返す）。**出せなかった & `InInputBufferZone`** なら `_bufferedInput = true`（`_bufferedInputExpiry = Time.time + 0.4`＝`BufferedInputMaxLife` で失効させる保険つき）。
-  - 毎フレーム、`_bufferedInput` かつ `IsReady` になったら消費して `TryTrigger()`。ライブ入力で発動できたときは残っていた記憶を破棄。`OnDisable` でもクリア。
+  - 毎フレーム、`_bufferedInput` かつ `IsReady` かつ **`AnimatorSettled()`**（後述）になったら消費して `TryTrigger()`。ライブ入力で発動できたときは残っていた記憶を破棄。`OnDisable` でもクリア。
+  - **バグ修正（2026-09-23）：コンボ無効なステージ（Stage1など）で、ダッシュの効果時間中に次のダッシュを先行入力しておくと、ゲームプレイ上は正しく2回目のダッシュが始まる（加速・無敵になる）のに、Animatorの見た目だけ`Idle`/`Move`のままになってしまう不具合があった。** ユーザーが実機で`Animator`ウィンドウを見ながら特定した真因: `_busy`は`"DashEnd"`Animation Eventで即座に`None`に戻るが、**Animator自身がその古い`Dash`状態から実際に抜け始める（遷移が始まる）のは、その1ステップ後**。つまり`IsReady`が立った「その瞬間」に`TryTrigger()`→`animator.SetTrigger("Dash")`を呼ぶと、Animatorはまだ完全に古い`Dash`状態のまま（`IsInTransition(0)==false`、`GetCurrentAnimatorStateInfo(0)`は`Dash`のまま）。この状態で`AnyState→Dash`遷移条件が成立しても、**既に`Dash`state内にいるため何も起こらず、トリガーだけが消費されて終わる**（Animatorウィンドウでは遷移の矢印が一瞬点灯するが、実際の状態遷移は起きない）。その後、古い方の`Dash`→`Idle`遷移（`DashBreak`）はそのまま予定通り発火し、Animatorは`Idle`/`Move`へ落ち着いてしまう——ゲームプレイ上は新しい（2回目の）ダッシュが確定しているにも関わらず。Play実機での`Animator.GetCurrentAnimatorStateInfo`/`IsInTransition`のログ確認で、`_busy`が`None`になった直後の1〜2ステップは`state=Dash`のまま（`IsInTransition=false`）→さらに後で`IsInTransition=true`（古い方のDash→Idle遷移中）という順序を実際に確認し、上記の機構を裏付けた。
+    - **なぜコンボ無効ステージで起きやすいか**: コンボ有効なステージでは、busy中の先行押下は`comboContinuation`が成立して`TryTrigger()`が**即座に**成功する（本来のコンボの仕様どおり、`_bufferedInput`を経由しない）。コンボ無効ステージでは`comboContinuation`が常にfalseなので、busy中の押下は必ず一旦`_bufferedInput`に積まれ、`IsReady`が立つのを待ってから発動する、という経路を毎回通る。この「`IsReady`が立った瞬間に発動する」という経路そのものが、上記のAnimator側とのタイミング競合を起こす原因だったため、コンボ無効ステージで必ず・確実に再現していた（コンボ有効ステージでも、2連続コンボを使い切った後に3回目を先行入力した場合など、同じ経路を通れば理論上は同じ症状が起こり得る）。
+    - **修正**: `MainActionController.AnimatorSettled()`（新規）を追加。`animator.IsInTransition(0)==false` かつ現在のstateが`Idle`または`Move`であることを確認する。先行入力の発動条件に`IsReady && AnimatorSettled()`を追加し、Animatorが実際に古い状態から完全に抜けたことを確認してから`TryTrigger()`を呼ぶようにした。即時発動（busyでない通常のケース）やコンボ継続（`comboContinuation`）はこの確認の対象外（従来通り即座に割り込む）。ジャンプ・攻撃も同じ先行入力の経路を通るため、同様に恩恵を受ける。Play実機で、`_busy`が`None`になった直後（Animatorがまだ`Dash`のまま）は`AnimatorSettled()==false`で発動が正しく保留され、実際に`Idle`へ到達した瞬間（`settled==true`）に発動すると、正しく`Dash`へ遷移してそのまま維持されることを確認済み。
+    - **試行錯誤の記録**: 当初はAnimator Controller側の問題（`Dash→Idle`の冗長な二重経路、`interruptionSource`の既定値`None`）を疑って2つの修正を試したが、いずれも実機で症状が直っておらず、ユーザーの指示で元に戻した（§2-7参照）。真因はコード側（`MainActionController`のタイミング）にあった。
 - **受付区間（`InInputBufferZone`）と CD ゲージ上の割合（`InputBufferZoneFraction01`）を公開** → `PlayerDebugBars` が色付き表示に使う（§8）。
   - **ダッシュ / 攻撃**: 残り `<= inputBufferTime` で受付。割合 = `inputBufferTime / (dashClip または attackClip の長さ)`。
   - **ジャンプ**（着地ベースで時間が不定）: `PlayerController.TryPredictLandingTime()` で「着地まで `<= inputBufferTime` 秒」と予測できたときだけ受付。予測不可（上昇中・真下に地面なし）なら受け付けない。**滞空時間の上限が無くなったため、ゲージ上の区間表示（`_bufferZoneFraction`）は出さない**（2026-09-21、以前は`jumpAirCooldownCap`基準の目安表示だったが、その基準自体が無くなった）。
@@ -117,17 +120,22 @@ Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.Ge
 - **バグ修正（2026-09-21、初回実装直後）**: 仮のAnimationClipとして最初`Transform.m_LocalPosition.x`に同じ値の2キーフレームを打った「見た目に一切変化のないダミーカーブ」を使っていたところ、**プレイヤーが一切移動できなくなる**不具合が発生した（見た目の左右反転は機能するが、位置が変わらない）。原因は、Animator が Player 自身の GameObject に付いており、Playerの`Transform.m_LocalPosition`を**毎フレーム、どの状態でも常に同じ値へ強制的に書き戻していた**ため（アニメーションが物理演算による位置変更を毎フレーム上書きしてしまっていた）。対処として、ダミーカーブを`Transform`ではなく`SpriteRenderer.m_Color`（RGBA、計4本のfloatカーブ）に変更。これなら位置には一切影響せず、しかも「状態ごとに色を変える」という仮素材仕様をそのまま兼ねられた（当時は状態ごとに`Idle`=青（無変更）/`Move`=暗めの青/`Jump`=明るめの青/`Dash`=黄/`Attack`=赤/`Dead`=ほぼ黒、に着色していた）。
 - **本番素材インポートの準備として色カーブを全削除（2026-09-21）**: 本番のイラスト素材を入れる作業に入るにあたり、上記の`SpriteRenderer.m_Color`ダミーカーブを6Clipすべてから削除（`remove_animation_curve`、アセット自体（`PlayerArrow.png`）は削除していない）。**Animation Event（Dash/Attackの発動タイミング系イベント）はそのまま残してある**。カーブを全て削除しても`AnimationClip.length`とイベントの時刻は保持されることを確認済み（Unity側がカーブと独立して長さを保持する）ので、キーフレームが1つも無い状態でも`dashClip.length`/`attackClip.length`に依存する既存のクールタイム計算（§2-4）や`hasExitTime`の遷移は壊れていない。現状、各Clipは実質「長さとAnimation Eventだけを持つ空の器」になっている。今後、本番のスプライトアニメーション用カーブ（Sprite差し替えなど）をここに追加していく想定。
 
-- **状態**: `Idle` / `Move` / `Dash` / `Jump` / `Attack` / `Dead` の6つ（`Assets/Animations/Player.controller`、Base Layer 1層のみ）。
+- **状態**: `Idle` / `Move` / `Dash` / `Jump` / `Attack` / `Dead` / `Clear`（2026-09-23追加）の7つ（`Assets/Animations/Player.controller`、Base Layer 1層のみ）。
   - `Idle`⇔`Move`: `Moving`（Bool）パラメータで自動的に行き来する（`MainActionController.Update()`が毎フレーム`_player.MoveInput`から設定）。
-  - `AnyState`→`Dash`/`Jump`/`Attack`/`Dead`: 各同名の Trigger パラメータで**即座に割り込む**（コンボで2つのアクションが同時に効果を持つ場合でも、見た目のアニメーションは後から発動した方が単純に上書きする。レイヤー分けなどは行っていない、当面のプレースホルダー仕様。実際のイラストが入る際に見直す可能性あり）。
-  - `Dash`→`Idle`: 2経路。① Exit Time（clip終端、duration 0）で自然に戻る。② `DashBreak`トリガー（後方入力での即時終了用、duration 0.05秒）。
+  - `AnyState`→`Dash`/`Jump`/`Attack`/`Dead`/`Clear`: 各同名の Trigger パラメータで**即座に割り込む**（コンボで2つのアクションが同時に効果を持つ場合でも、見た目のアニメーションは後から発動した方が単純に上書きする。レイヤー分けなどは行っていない、当面のプレースホルダー仕様。実際のイラストが入る際に見直す可能性あり）。
+  - `Dash`→`Idle`: Exit Time（clip終端、duration 0）のみ。**以前あった`DashBreak`トリガー経由の経路（後方入力での即時終了用）は2026-09-23に完全撤去した**（後方入力キャンセル機能自体の廃止に伴う。`DashBreak`パラメータ自体もAnimator Controllerから削除済み。§2-3参照）。
   - `Attack`→`Idle`: Exit Time（clip終端、duration 0）のみ。
-  - `Jump`→`Idle`: `Landed`トリガーのみ（着地検出時に`MainActionController`が発火。滞空時間が不定なため Exit Time は使えない）。
+  - `Jump`→`Idle`: `Landed`パラメータのみ（着地検出時に`MainActionController`が発火。滞空時間が不定なため Exit Time は使えない）。**2026-09-23、Trigger→Boolへ変更**（理由は下記バグ修正参照）。
+  - `Dead`/`Clear`: 出口の遷移なし（終端state。ステージ終了後はシーンごとリロードされるだけなので後始末は不要）。
+  - **一連のバグ修正の経緯（2026-09-23）**: 「左右移動しながらダッシュを連打すると、実際はダッシュ中なのにAnimatorの状態が`Move`のままになる」症状に対し、最初に2つのAnimator Controller側の修正（①`Dash`→`Idle`の冗長な二重経路の解消、②全遷移の`interruptionSource`を`Source`に変更）を試したが、**ユーザーが実機で確認したところ症状は直っていなかった**ため、両方ともユーザーの指示で一旦元の状態へ差し戻した。本当の原因は先行入力のタイミング（`MainActionController.cs`側、§2-6「先行入力」の`AnimatorSettled()`で対処済み）だった。その修正で改善したものの、**別の症状（後方入力で終了させる際に使っていた`DashBreak`トリガーが、原因不明のまま「待機状態なのにオンになり続ける」ことがあり、次のダッシュ発動時に一瞬だけ`Dash`アニメーションになってすぐ待機アニメーションへ戻ってしまう）がまだ残っていた**。これ以上の原因特定はコストに見合わないと判断し、**後方入力キャンセル機能自体を丸ごと廃止**（§2-3参照）。結果として`DashBreak`というパラメータ・トリガー・遷移がコード・Animator Controller両方から完全に無くなり、この状態が最終形。
+  - **ジャンプ側の同種バグ修正（2026-09-23）**: ダッシュの不具合解消後、同じ症状（ジャンプ中に待機アニメーションへ戻ってしまう）がジャンプでも発生していることが判明。実機で`_busy`/`Landed`/Animatorの状態を毎ステップ記録して再現したところ、**着地の物理判定（`_player.IsGrounded`）が、`AnyState→Jump`の入場遷移（0.05秒ブレンド）がまだ完了する前に成立するケースが実在する**ことを確認（短いジャンプや踏切直後の着地などで起こりうる）。当時`Landed`はTriggerだったため、`EndBusy(Jump)`がこのタイミングで`SetTrigger("Landed")`を呼んでも、**現在stateがまだ`Jump`に到達していない（＝消費できる`Jump→Idle`遷移が存在しない）ため、トリガーは誰にも消費されずに残り続けた**。その後Animatorが実際に`Jump`へ到達した瞬間に運良く拾われることもあれば、次の再ジャンプなど別の遷移に巻き込まれて長時間（体感「着地後はずっとtrueで、次にジャンプするまで戻らない」）固まったままになることもあった（ダッシュの`DashBreak`と同系統だが、出口側ではなく入口側のレース）。**修正**: `Landed`パラメータをTrigger→Boolに変更（`DoJump()`で`SetBool("Landed", false)`してから`SetTrigger("Jump")`、`EndBusy(Jump)`で`SetBool("Landed", true)`）。Boolは「消費されたら自動で戻る」性質を持たないため、`Jump`にまだ到達していないタイミングで`true`になっても単に居座るだけで、Animatorが実際に`Jump`へ到達した瞬間に確実に`Jump→Idle`遷移条件として拾われる（取りこぼしが原理的に起こらない）。Play実機で、上記の競合状態（着地検出が入場ブレンド中に発生するケース）をあえて再現させた上で、`Landed`が`true`のまま保持され、Animatorが`Jump`へ到達した直後に正しく`Idle`へ遷移することを確認。通常の（競合しない）着地サイクルでも従来通り機能することを確認済み。
 - **Animation Event**: いずれも`AnimationEventRelay.RaiseEvent(string)`を呼ぶイベントとして設定（`AnimationUtility.SetAnimationEvents`、Unity Editor MCPに専用ツールが無いため`eval`のRoslyn経由）。
   - `Player_Dash.anim`：末尾（t=0.8秒）に`"DashEnd"`のみ。
   - `Player_Attack.anim`：`"AttackHitboxOn"`（t=0.15秒）/`"AttackHitboxOff"`（t=0.35秒）/`"AttackEnd"`（末尾、t=0.5秒）の3つ（2026-09-21、前隙・後隙の追加に伴い2つ増えた）。
+  - `Player_Dead.anim`：末尾付近（t=2.0秒、clip長の約99%）に`"ShowFailPanel"`のみ。
+  - `Player_Clear.anim`（2026-09-23追加、プレースホルダー）：末尾付近（t=0.99秒、clip長の約99%）に`"ShowClearPanel"`のみ。`SpriteRenderer.m_Color.a`のダミーカーブ（0秒・1秒とも値1、見た目に影響しない）だけを持つ長さ1秒・ループなしの器。本番の見た目を作る際はこのカーブを差し替えるだけでよい。
 - **`AnimationEventRelay.cs`（新規、汎用コンポーネント）**: Animator と同じ GameObject に置く。`RaiseEvent(string eventName)`だけを持ち、それを`event Action<string> OnAnimationEvent`として中継するだけ。「何が起きたら何をするか」は一切関知しないので、将来敵キャラのアニメーションにも同じ部品をそのまま使い回せる（敵はコンボの仕組みを持たないので、反応ロジックはキャラクターごとに別に書く前提）。`MainActionController`が`"DashEnd"`/`"AttackEnd"`を購読し、`EndBusy()`を呼ぶ。
-- **死亡アニメーション**: `PlayerHealth.OnDied`を`MainActionController`が購読し、`Dead`トリガーを発火するだけ（`HandlePlayerDied()`）。落下死の場合はカメラ外で見えないことが多いが、それで問題ない（仕様として許容）。**失敗パネルの表示は`MainActionController`ではなく`StageManager`側がAnimation Event（`"ShowFailPanel"`、`Player_Dead.anim`）経由で行う**（2026-09-21、詳細は§9-3「失敗条件」参照）。`Animator.updateMode=UnscaledTime`にしてあるので、死亡確定と同時に`Time.timeScale=0`にしても死亡アニメーションだけは止まらずに再生される。
+- **死亡アニメーション**: `PlayerHealth.OnDied`を`MainActionController`が購読し、`Dead`トリガーを発火するだけ（`HandlePlayerDied()`）。落下死の場合はカメラ外で見えないことが多いが、それで問題ない（仕様として許容）。**失敗パネルの表示は`MainActionController`ではなく`StageManager`側がAnimation Event（`"ShowFailPanel"`、`Player_Dead.anim`）経由で行う**（2026-09-21、詳細は§9-0「失敗条件」参照）。`Animator.updateMode=UnscaledTime`にしてあるので、死亡確定と同時に`Time.timeScale=0`にしても死亡アニメーションだけは止まらずに再生される。**ステージクリアも2026-09-23に同じ方式へ変更済み**（§9-0「クリア条件」参照）。
 - **安全策（`WatchdogEffectEnd`）**: Animation Eventが何らかの理由（Clip/Animatorの設定漏れなど）で発火しなかった場合に永久に発動不可のまま固まらないよう、`Update()`で「経過時間が Clip の長さ＋0.5秒を超えたら強制的に`EndBusy`」という保険を追加（通常はここに来る前にAnimation Event側で片付く）。**Dead状態にはこの保険は適用していない**（そもそも`_busy`と無関係で、失敗確定後は`MainActionController`ごと無効化されるため）。
 - **本番のスプライトアニメーション素材、6Clipすべてに導入済み（2026-09-21）**: `Idle`(1フレーム)/`Move`(3フレーム)/`Jump`(1フレーム)/`Dash`(2フレーム)/`Attack`(8フレーム)/`Dead`(1フレーム、今後追加予定)。`m_Sprite`を差し替える`PPtrCurve`として実装されており、`get_animation_clip`の`bindings`一覧には出てこない（floatカーブのみを列挙するツールのため）ので、内容を確認する際は`.anim`ファイルの生YAML（`m_PPtrCurves`）を直接読む必要がある。**Unityのアニメーションウィンドウでクリップの長さを広げると、既存のAnimation Eventの時刻も自動的に動くことがある**（実際にAttack/Dashの各イベントの時刻がスプライト導入後にずれていた）。実装時に置いていた仮の時刻（前隙0.15秒/後隙0.35秒など）は本番素材の尺に合わせて必要ならユーザー側で調整が必要（コード側はイベント名だけを見ているので時刻はいつでも自由に動かしてよい）。
   - **ハマったポイント**: 空のAnimationClip（カーブが1つも無い状態）は`AnimationClip.length`が信頼できない（`AnimationUtility.SetAnimationClipSettings`で`stopTime`を明示的に設定しても反映されないことがある）。仮素材として「見た目に影響しないダミーカーブ＋Animation Event」を使う場合は、カーブを完全にゼロにしないこと。本番のスプライトカーブが入っていれば、それ自体が長さを正しく決定する。
@@ -135,7 +143,7 @@ Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.Ge
     - 各PNGの実ピクセルデータを`Texture2D.GetPixels`で読み、α>0の範囲（＝キャラクターの実際の描画範囲）のバウンディングボックス中心を算出して判定（`isReadable`を一時的にtrueにして計測後、元の設定に戻した）。Attackは剣を振るエフェクト（黄色い軌跡）が一部のフレームでバウンディングボックスを大きく右に広げてしまう（＝そのフレームだけ計測結果が歪む）ため、エフェクトの影響が少ない最初の2フレーム（振りかぶり前）の計測値を採用した（`attackX≈0.25, attackY≈0.50`）。Deadは1フレームのみで、素直に計測値を採用（`deadX≈0.533, deadY≈0.498`）。
     - 実装は`UnityEditor.U2D.Sprites.SpriteDataProviderFactories`（新しいSprite Editor用データプロバイダAPI）経由。**`TextureImporter.spritesheet`（旧APIのSpriteMetaData[]）で`alignment`/`pivot`を書き換えても、このUnityバージョンでは`.meta`の実データ（`spriteSheet.sprites[].alignment`/`.pivot`）に反映されなかった**（要`SaveAndReimport`しても無反応）。新APIなら正しく反映される。`alignment`を`SpriteAlignment.Custom`（9）にしないと`pivot`の値自体が無視される点にも注意。
     - Attackの8フレーム全部に**同じ**pivot値を一律適用（フレームごとに実測値を使うと、エフェクトで歪んだフレームに引っ張られてキャラクター本体が逆にガクガク動いてしまうため）。Playで、Idle→Attack切り替え時・剣を振るフレーム（エフェクトが右に伸びる）でもキャラクター本体の画面上の位置がほぼ変わらないことをスクリーンショットで確認済み。
-- Playで、Dash/Attack/Jumpそれぞれについて「発動→Animator側の状態遷移→効果終了（Animation Event or 着地）→`IsReady`復帰→Animatorが`Idle`に戻る」の一連の流れと、Attack中にDashへコンボした場合に攻撃判定が強制的に閉じること、ダッシュ後半の後方入力で即座に全効果が終了することを確認済み。上記のTransform curveバグ修正後、実際に`PlayerController.FixedUpdate`を複数回呼んで座標が正しく進むこと、状態ごとに`SpriteRenderer.color`が意図した色になることも確認済み。死亡時のフリーズ→死亡アニメーション（UnscaledTime）→Animation Eventでのパネル表示、致死ダメージでノックバックが発生しないことも確認済み。
+- Playで、Dash/Attack/Jumpそれぞれについて「発動→Animator側の状態遷移→効果終了（Animation Event or 着地）→`IsReady`復帰→Animatorが`Idle`に戻る」の一連の流れと、Attack中にDashへコンボした場合に攻撃判定が強制的に閉じることを確認済み（**ダッシュ後半の後方入力での即時終了は2026-09-23に仕様ごと廃止したため、この項目はもう存在しない**）。上記のTransform curveバグ修正後、実際に`PlayerController.FixedUpdate`を複数回呼んで座標が正しく進むこと、状態ごとに`SpriteRenderer.color`が意図した色になることも確認済み。死亡時のフリーズ→死亡アニメーション（UnscaledTime）→Animation Eventでのパネル表示、致死ダメージでノックバックが発生しないことも確認済み。
 
 ---
 
@@ -158,10 +166,9 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 ### 3-2. ダッシュ → ジャンプでも無敵は途切れない
 
 - 無敵は `_dashInvTimeLeft` という**専用タイマー**で管理（発動時に `dashClip.length` ぶんセット。ダッシュの移動処理とは独立して毎 `FixedUpdate` 減少）。
-- `IsInvincible = _dashInvTimeLeft > 0 && !_dashInvBroken`。
+- `IsInvincible = _dashInvTimeLeft > 0`。
 - ダッシュ → ジャンプのコンボでジャンプに移っても（`InterruptDashMovement` は `_dashInvTimeLeft` に触れない）、無敵は**通常のダッシュ効果時間ぶん継続**。その間の左右入力は移動に反映されるが無敵は切れない。
-- **無敵が早期に切れる唯一の条件**: 「ダッシュ効果時間の後半に、後方への左右入力をした」とき（`_dashInvBroken` ラッチ）。
-- 効果時間が満了すれば必ず無敵解除。
+- **無敵が早期に切れることは無い（2026-09-23、後方入力キャンセル廃止に伴い変更）**: 以前は「ダッシュ効果時間の後半に後方入力をする」と即座に無敵解除できたが、この仕様自体を廃止したため（§2-3参照）、現在は入力方向によらず**効果時間が満了するまで必ず無敵が継続する**。
 
 ### 3-3. コンボ受付猶予 = クールタイム（2026-09-21、旧仕様から反転）
 
@@ -176,6 +183,22 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 - どちらも `vy <= 0.01` 条件があるので上昇中（ジャンプの弧）には効かず、コヨーテジャンプの多重発動も起きない。
 - `IsGrounded` 自体はスティッキーにしていない（すると `UpdateJumpCooldown` の離陸・着地検出が壊れる）。
 - `gravityScale` はダッシュ非制御中、`PlayerController` が毎フレーム権威を持って書き戻す（元の値は `_baseGravityScale` を `Awake` で取得）。ダッシュ終了時に一瞬だけ古い値が残ることがあるが次フレームで自己修正。
+
+### 3-5. 崖・段差のわずかな引っかかり救済（ledge assist、2026-09-24追加）
+
+わずかに高さが足りずジャンプで乗り越えられない段差・崖にストレスなく登れるようにする救済措置。`PlayerController.ApplyLedgeAssist()`、`FixedUpdate()`の冒頭（接地判定の直後、ダッシュによる`OverridesMovement`の早期returnより**前**）で毎フレーム呼ぶ。
+
+- **発動条件**（3つとも満たす必要あり）:
+  1. 実際の移動方向（`_rb.linearVelocity.x`の符号。入力`_moveInput`ではなく実速度を見る——理由は次項）が、これから判定する向きと一致
+  2. 上昇中でない（`_rb.linearVelocity.y <= 0.01`）
+  3. 当たり判定のうち`ledgeAssistMinAboveFraction`（既定 **90%**）以上が崖の上面より上にある
+- **条件3の判定方法**: 当たり判定を「下から`(1-0.9)=10%`の帯」と「残り90%の帯」に分け、進行方向のすぐ前方（`ledgeAssistProbeDistance`、既定0.08、分だけ張り出す）でそれぞれ独立に`Physics2D.OverlapBox`判定する。**下の帯だけが`groundLayer`にブロックされていて、上の帯は完全にクリア**なら「あと少しで乗り越えられる段差」と確定する（崖の正確な高さを先に求めなくても、この2回のオーバーラップ判定だけで90%条件を直接判定できる）。背より高い壁（上の帯もブロックされる）は対象外なので誤爆しない。
+- **引き上げ方法**: 条件が揃ったら、進行方向のすぐ前・当たり判定の上端あたりから下向きに`Physics2D.BoxCast`（幅は判定に使ったのと同じ`ledgeAssistProbeDistance`）を飛ばし、段差の正確な表面Y座標を割り出す。`Rigidbody2D.position`のYを、当たり判定の底がその表面ぴったり（＋`ledgeAssistSkin`の余白）に乗る位置まで**直接**補正する。差分は当たり判定の高さの10%以内なので、瞬間補正でも「段差をひょいと登った」ように見える想定（テレポートではなく、あくまで位置の微調整）。
+  - **実装時の落とし穴**: 表面Yを求めるのに最初は単純な`Physics2D.Raycast`（1本のレイ）を使っていたが、判定に使った帯の境界ぎりぎり（タイルの境界など）だとレイが対象を1本分だけ空振りすることがあり、判定（オーバーラップ）は成立しているのに引き上げが起こらないというズレが実機テストで発覚した。判定と同じ幅の`BoxCast`に変更して解消。
+- **ダッシュ中も対象**（ユーザー指定、2026-09-24。ダッシュの終了を待たずその場で引き上げる）。ダッシュ中は`MainActionController`が`_rb.linearVelocity`を直接制御していて`_moveInput`とは無関係の向きに進むため、条件1の判定を`_moveInput`ではなく実際の横速度`_rb.linearVelocity.x`の符号で行うのはこのため。位置(Y)だけを補正する処理なので、ダッシュ側の速度制御とは競合しない。
+- **一方通行の足場（`OneWayPlatform`）も対象**（ユーザー指定、2026-09-24）。このプロジェクトには一方通行専用のレイヤーが無く通常の`Ground`と同じレイヤーを使っているため、既存の`groundLayer`をそのまま使うだけで自然にそうなる。既存の`OneWayPlatform.cs`側の未解決の縁引っかかりバグ（§後述／メモリ参照）とは別のコード（`PlayerController`側の新規メソッド、`OneWayPlatform.cs`は無変更）なので、直接の干渉はない。
+- ノックバック中（`_knockbackTimeLeft > 0`）は対象外（外部から与えられた速度を尊重する）。
+- 新規パラメータ（インスペクターで調整可）: `ledgeAssistMinAboveFraction`（0.9）、`ledgeAssistProbeDistance`（0.08）、`ledgeAssistSkin`（0.02）。
 
 ---
 
@@ -385,9 +408,10 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
   - **「もう一度」= シーンの再読み込み**なので、アクションの並びも含めて完全初期化される（＝リトライで同じ並びになる仕様を自動で満たす）。
   - クリア画面: `Next Stage`（次が無ければ非表示 → 実質 Stage Select）/ `Retry` / `Stage Select`。
   - 失敗画面: `Retry` / `Stage Select`。
-- **クリア条件**: `Goal`（ステージ右端のトリガー）にプレイヤー本体が触れる。ただし `Enemy` で `MaxHealth >= 2`（＝ボス）が生存中は無効。
+- **クリア条件**: `Goal`（ステージ右端のトリガー）にプレイヤー本体が触れる。ただし `Enemy` で `MaxHealth >= 2`（＝ボス）が生存中は無効。または`Enemy.clearStageOnDeath`（ボス撃破で即クリアの敵）。**どちらの経路も最終的に`StageManager.Clear()`1箇所に集約される**（`Goal.cs`／`Enemy.Die()`のどちらから呼ばれても同じ）ため、クリア条件がステージによって「ゴールに触れる」か「特定の敵を倒す」かで違っても、クリア時の演出フローは完全に共通。
+  - **クリアアニメーションを挟む（2026-09-23、体力0での失敗と同じ方式）**: `Clear()`が呼ばれた瞬間、**即座に**`_ended=true`にしつつ`_playerMainAction.PlayClearAnimation()`（`Animator`の`Clear`トリガーを発火）→`FreezeGameplay()`→`Time.timeScale=0`にするが、**パネルはまだ出さない**。`Player_Clear.anim`（プレースホルダー、ループなし・1周のみ、長さ1秒）の末尾に仕込んだAnimation Event（`"ShowClearPanel"`）が発火した瞬間に`HandlePlayerAnimationEvent()`が`clearPanel`を表示する。`Animator.updateMode=UnscaledTime`のおかげで`Time.timeScale=0`でも再生され続けるのは死亡アニメーションと同じ。`MainActionController.PlayClearAnimation()`が`animator.SetTrigger("Clear")`を呼ぶだけの薄いラッパー。Animator Controller側は`AnyState→Clear`（トリガー条件、duration 0.05、Deadと同じ形）を追加、`Clear`state自体に出口の遷移は無い（Deadと同じく終端state。ステージはこの後リロードされるだけなので後始末は不要）。
 - **失敗条件**: `PlayerHealth.OnDied`（体力 0、1 回だけ発火）または `StageManager` の `player.y < killY`（既定 -12）。
-  - **体力0の場合だけ死亡アニメーションを挟む（2026-09-21）**: 落下死・クリアは今まで通り即座にパネルを表示する。体力0の場合は`StageManager.HandlePlayerHpDied()`（`Fail()`とは別メソッド）が呼ばれ、**即座に**`_ended=true`＋`FreezeGameplay()`＋`Time.timeScale=0`にするが、**パネルはまだ出さない**。Playerの`Animator`だけは`updateMode=UnscaledTime`（2026-09-21変更、既定のNormalから変更）にしてあるので、`Time.timeScale=0`でも死亡アニメーション（`Dead`状態）は止まらずに再生され続ける（他の全オブジェクトは`Time.deltaTime`ベースなので今まで通り完全停止）。死亡アニメーションのClip側に仕込んだAnimation Event（`AnimationEventRelay`経由、`"ShowFailPanel"`）が発火した瞬間に`StageManager.HandlePlayerAnimationEvent()`が`failPanel`を表示する。§2-7も参照。
+  - **体力0の場合だけ死亡アニメーションを挟む（2026-09-21。クリアも2026-09-23に同様の方式になったため、即座にパネルを出すのは落下死だけ）**: 落下死は今まで通り即座にパネルを表示する。体力0の場合は`StageManager.HandlePlayerHpDied()`（`Fail()`とは別メソッド）が呼ばれ、**即座に**`_ended=true`＋`FreezeGameplay()`＋`Time.timeScale=0`にするが、**パネルはまだ出さない**。Playerの`Animator`だけは`updateMode=UnscaledTime`（2026-09-21変更、既定のNormalから変更）にしてあるので、`Time.timeScale=0`でも死亡アニメーション（`Dead`状態）は止まらずに再生され続ける（他の全オブジェクトは`Time.deltaTime`ベースなので今まで通り完全停止）。死亡アニメーションのClip側に仕込んだAnimation Event（`AnimationEventRelay`経由、`"ShowFailPanel"`）が発火した瞬間に`StageManager.HandlePlayerAnimationEvent()`が`failPanel`を表示する。§2-7も参照。
   - **致死ダメージにはノックバック無し（2026-09-21）**: `Enemy.TryTouchPlayer`で`health.TakeDamage()`後、`health.Health <= 0`（＝やられた瞬間）ならその場でreturnし、`ApplyKnockback`を呼ばない。それ以外のダメージ（体力が残る場合）は今まで通りノックバックする。
 - **キーボード操作（`MenuNavigation`, 2026-09-06 / 2D 化 2026-09-08）**: メニュー系 UI をキーボードでも操作可能。
   - 付いている場所: `Title/Canvas`、`StageSelect/Canvas`、各ステージの `StageFlow/ResultCanvas/ClearPanel` と `FailPanel`（パネルに付けてあるので、そのパネルが表示された瞬間だけ働く）。対象ボタンは子から階層順で自動収集。実行時生成ボタンは `AddButton()` で追加（`DevProgressResetButton` が使用）。
@@ -602,7 +626,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | `DevStorySeenToggles` | StageSelect/Canvas ＋ Title/Canvas | 【開発者用】会話の既読トグル＋"story" ラベルを実行時生成。StageSelect＝各ステージの開始会話、Title＝プロローグ。`public ResetAll()`（StageSelect 側のみ実効）。表示は `DeveloperSettings.Active` |
 | `DevProgressResetButton` | StageSelect/Canvas | 【開発者用】BackButton の少し上に「Reset story & clear」ボタンを実行時生成し `MenuNavigation.AddButton` で登録。`GameFlow.ResetStageProgress()` ＋ 両トグルの `ResetAll()`。表示は `DeveloperSettings.Active` |
 | `FreshBuildGuard` | (static, `RuntimeInitializeOnLoadMethod`) | ビルド版のみ。**2026-09-22、`Debug.isDebugBuild`に直結**：Development Buildなら起動時に`GameFlow.ResetProgress()`、それ以外の通常ビルドは無条件で絶対にリセットしない（切り替える定数を廃止し、消し忘れ事故を構造的に排除）。エディタ内は無効 |
-| `StageManager` | 各ステージ/StageFlow | クリア/失敗判定・結果画面表示・結果ボタン処理・落下死判定（killY）・初回入場時の開始会話（`TryPlayIntro`, `Time.timeScale=0`）・ステージ開始時 / 会話終了時に `InputLock.LockFor(inputLockDuration=0.25)`（2026-09-12 に 0.5→0.25 へ半減）。体力0での失敗は`Fail()`とは別経路（`HandlePlayerHpDied`→死亡アニメーション→Animation Eventで`HandlePlayerAnimationEvent`がパネル表示、2026-09-21、§2-7）。落下死（killY）は既定`Fail()`だが、`softRetryOnFall`をtrue＋`softRetryPoint`を設定すると失敗にせず指定位置へ戻す「優しい」扱いに切り替えられる（2026-09-22追加、Stage1では既定オフ、§9-3） |
+| `StageManager` | 各ステージ/StageFlow | クリア/失敗判定・結果画面表示・結果ボタン処理・落下死判定（killY）・初回入場時の開始会話（`TryPlayIntro`, `Time.timeScale=0`）・ステージ開始時 / 会話終了時に `InputLock.LockFor(inputLockDuration=0.25)`（2026-09-12 に 0.5→0.25 へ半減）。体力0での失敗は`Fail()`とは別経路（`HandlePlayerHpDied`→死亡アニメーション→Animation Eventで`HandlePlayerAnimationEvent`がパネル表示、2026-09-21、§2-7）。**`Clear()`も2026-09-23に同様の方式へ変更**（`PlayClearAnimation()`→クリアアニメーション→Animation Eventでパネル表示）。落下死（killY）は既定`Fail()`だが、`softRetryOnFall`をtrue＋`softRetryPoint`を設定すると失敗にせず指定位置へ戻す「優しい」扱いに切り替えられる（2026-09-22追加、Stage1では既定オフ、§9-3） |
 | `Goal` | 各ステージ/Goal | 右端トリガー。ボス全滅後にプレイヤーが触れると `StageManager.Clear()` |
 | `MenuNavigation` | Title/StageSelect の Canvas, 各ステージの ClearPanel/FailPanel | メニュー UI のキーボード操作。位置ベース 2D 移動（W/S=上下・最近傍＋端ループ、A/D=同じ行内＋端ループ）、Space/Enter で決定、選択枠の自動生成。マウスホバーは移動時のみ反映。`OnEnable` で `InputLock.LockFor(inputLockDuration)`（全画面共通 0.5s、2026-09-12 に結果パネルの 1.0s を統一）。カーソル移動・マウスホバーは `InputLock.NavigationAllowed`（フェード中だけ false）を見る、決定（`HandleSubmit()`/`GraphicRaycaster`）は `InputLock.InputAllowed`（フェード中 or 猶予中は false）を見る——猶予中でもカーソル移動は効き、実際に成立したら `InputLock.Unlock()` で決定の猶予も即解除する（2026-09-12、§16-1）。`AddButton()` / `SetInitialFocus()` |
 | `InputLock` | (static クラス) | 入力ロック。`InputAllowed` = `!SceneTransition.Transitioning && Time.unscaledTime >= 解除時刻`。`LockFor(秒)` で一定時間 false に（一番遅い解除時刻を採用）。`MenuNavigation`/`DialoguePlayer`/`StageManager`/`SceneTransition` が LockFor、`MenuNavigation`/`DialoguePlayer`/`MainActionController`/`PlayerController` が参照 |
@@ -621,7 +645,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | ジャンプ | JumpLiftoffGrace（離陸猶予, const） | 0.25 秒 | MainActionController |
 | ダッシュ | dashSpeed / ダッシュの効果時間（＝クールタイム兼コンボ受付時間） | 18 / **`dashClip`の長さ、既定0.8秒**（2026-09-21、旧`dashDuration`=0.5秒は廃止） | MainActionController |
 | ダッシュ | dashLockFraction（前半ロック割合） | 0.5（＝0.8秒中、前半0.4秒がロック区間） | MainActionController |
-| ダッシュ | dashForwardDecel / dashBrakeDecel | 40 / 160 u/s² | MainActionController |
+| ダッシュ | dashDecelFraction（後半のうち減速にかける割合、2026-09-23） | 0.5 | MainActionController |
 | 攻撃 | 攻撃の効果時間（＝攻撃判定が出ている時間、クールタイム兼コンボ受付時間） / attackDamage | **`attackClip`の長さ、既定0.5秒**（2026-09-21、旧`attackDuration`=0.4秒・`attackCooldown`=2秒は廃止） / 1 | MainActionController |
 | 攻撃 | 判定の前方オフセット | Transform.localPosition.x の絶対値（既定 0.9、専用フィールドは廃止 2026-09-13） | AttackHitbox |
 | コンボ | 受付猶予 | **＝クールタイムと同じ（busyの間ずっと）**（2026-09-21、旧`comboGraceTime`=0.8秒という独立パラメータは廃止） | MainActionController |
@@ -708,7 +732,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
    - 例外 A: **コヨーテタイム**（地面を離れて 0.18 秒以内）。少し落下していても跳べる。
    - 例外 B: **ダッシュ → ジャンプのコンボ**のときだけ、完全な空中でもジャンプ可。ダッシュ移動を中断して跳ぶ。
 2. **落下しない猶予（0.1 秒）とジャンプ受付猶予（0.18 秒）は別パラメータ**。後者が長い。
-3. **ダッシュ → ジャンプでも無敵は途切れない**。無敵はダッシュ効果時間ぶんの専用タイマーで管理し、ジャンプ移行でも減り続ける。無敵が早期に切れるのは「ダッシュ後半に後方入力」したときだけ。
+3. **ダッシュ → ジャンプでも無敵は途切れない**。無敵はダッシュ効果時間ぶんの専用タイマーで管理し、ジャンプ移行でも減り続ける。入力方向によらず、効果時間が満了するまで無敵は途切れない（2026-09-23、後方入力キャンセル廃止に伴い変更）。
 4. **クールタイム**: ダッシュ 2 秒 / 攻撃 2 秒（固定）、ジャンプは「着地まで」（上限 3 秒）。
    - コンボにジャンプを含めば「着地まで」だけを見る。含まなければ 2 つ目のクールタイムだけ見る。相方のクールタイムは常に無視。
 5. **コンボ受付猶予（0.8 秒）はクールタイムと独立**。最大 2 連続。

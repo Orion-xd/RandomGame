@@ -927,6 +927,9 @@ MonoBehaviour:
   groundCheckDistance: 0.1
   noFallGrace: 0.1
   coyoteJumpGrace: 0.18
+  ledgeAssistMinAboveFraction: 0.8
+  ledgeAssistProbeDistance: 0.08
+  ledgeAssistSkin: 0.02
 --- !u!114 &3935582452086558697
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -958,8 +961,7 @@ MonoBehaviour:
   jumpForce: 12
   dashSpeed: 12
   dashLockFraction: 0.5
-  dashForwardDecel: 40
-  dashBrakeDecel: 160
+  dashDecelFraction: 0.5
   attackHitbox: {fileID: 9214507723811584833}
   attackDamage: 1
   animator: {fileID: 1977925573387622073}

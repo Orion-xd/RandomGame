@@ -12,7 +12,6 @@ using UnityEngine.InputSystem;
 ///  - ダッシュ / 攻撃：それぞれの AnimationClip（dashClip / attackClip）の長さぶん。
 ///    Clip の末尾に仕込んだ Animation Event（AnimationEventRelay 経由）が発火した瞬間に終了する。
 ///    効果時間を変えたい場合は AnimationClip の長さを変えればよい（インスペクターの数値ではない）。
-///    ダッシュのみ例外的に、後半で後方入力があると Animation Event を待たずにその場で終了する（後述）。
 ///  - ジャンプ：今まで通り「着地するまで」。滞空時間に上限は設けない（着地することだけが終了条件）。
 /// 内部的には「今どのアクションで busy か（_busy）」で一元管理する（Jump/Dash/Attack/None）。
 ///
@@ -55,13 +54,13 @@ public class MainActionController : MonoBehaviour
     [Tooltip("ダッシュの最高速度（発動時にこの速度になる）")]
     [SerializeField] private float dashSpeed = 18f;
     [Range(0f, 1f)]
-    [Tooltip("継続時間のうち『前半（完全ロック区間）』が占める割合。前半は最高速度固定・入力無視・完全無敵。" +
-             "残り（後半）は後方入力で即座に解除できる")]
+    [Tooltip("継続時間のうち『前半（完全ロック区間）』が占める割合。前半は最高速度固定・入力無視・完全無敵")]
     [SerializeField] private float dashLockFraction = 0.5f;
-    [Tooltip("後半に前方入力があるときの減速の強さ (units/秒^2)。ゆるめ")]
-    [SerializeField] private float dashForwardDecel = 40f;
-    [Tooltip("後半に後方入力があるときの減速の強さ (units/秒^2)。急ブレーキ")]
-    [SerializeField] private float dashBrakeDecel = 160f;
+    [Range(0f, 1f)]
+    [Tooltip("後半のうち、最高速度から通常の移動速度まで滑らかに落とすのにかける時間の割合" +
+             "（後半の長さに対する割合。既定0.5＝後半の半分＝効果時間全体の1/4ぶん、dashLockFraction=0.5のとき）。" +
+             "入力方向（前方/後方/なし）によらず常に同じ挙動になる（2026-09-23、後方入力での即時解除を廃止し統一した）")]
+    [SerializeField] private float dashDecelFraction = 0.5f;
 
     [Header("攻撃")]
     [Tooltip("前方に出す攻撃判定（子オブジェクト）。通常は非アクティブ")]
@@ -109,7 +108,6 @@ public class MainActionController : MonoBehaviour
     private int _dashDir;
     private float _savedGravityScale;
     private float _dashCurSpeed;   // 現在のダッシュ速度（大きさ）
-    private bool _dashInvBroken;   // 後半に後方入力で無敵を解除したか（ラッチ：一度解除したらこのダッシュ中は戻らない）
 
     // ジャンプ：着地するまで busy。滞空時間に上限は無い。
     private bool _jumpLeftGround;      // 発動後、実際に地面を離れたか
@@ -236,10 +234,12 @@ public class MainActionController : MonoBehaviour
         }
 
         // 記憶した先行入力の消化：発動可能になった瞬間に実行する（キーを離していてもよい）。
+        // ただし IsReady になった「その瞬間」ではなく、Animator が実際に Idle/Move へ戻ったことを
+        // 確認してから発動する（AnimatorSettled()、後述）。
         if (_bufferedInput)
         {
             if (Time.time > _bufferedInputExpiry) _bufferedInput = false;
-            else if (IsReady) { _bufferedInput = false; TryTrigger(); }
+            else if (IsReady && AnimatorSettled()) { _bufferedInput = false; TryTrigger(); }
         }
     }
 
@@ -276,6 +276,32 @@ public class MainActionController : MonoBehaviour
         InInputBufferZone = remaining <= inputBufferTime;
     }
 
+    /// <summary>先行入力を発動してよいか＝Animatorが実際にIdle/Moveへ戻っていることを確認する
+    /// （2026-09-23追加）。
+    ///
+    /// 背景: `_busy`はAnimation Event（"DashEnd"/"AttackEnd"等）で即座にNoneへ戻るが、
+    /// **Animator自身の状態遷移（例: Dash→Idle）もちょうど同じタイミングで処理される**。
+    /// コンボが無効なステージ（Stage1など）では、先行入力による次のアクションはこの
+    /// `IsReady`が立った「その瞬間」に`TryTrigger()`→ `animator.SetTrigger("Dash")`等を呼んでいたが、
+    /// これがAnimator側の「古い状態から抜ける」処理とちょうど同時に重なると、
+    /// `AnyState`遷移そのものは発火する（Animatorウィンドウで矢印が点灯する）ものの、
+    /// まだ古いDash等の見た目が再生中のタイミングと被って消費されるだけで、実際の見た目には
+    /// 反映されない（＝ゲームプレイ上は次のダッシュが始まっているのに、見た目はIdle/Moveのまま）
+    /// という不具合が実際に発生した。
+    ///
+    /// 対策として、先行入力の発動だけは「Animatorが実際にIdle/Moveへ戻ったこと」を確認してから
+    /// 行う（＝古い状態の遷移処理が完全に片付くのを待つ）。即時発動（busyでないときにボタンを押した
+    /// 通常のケース）や、コンボ継続（`comboContinuation`、`TryTrigger()`内で別途判定）はこの確認の
+    /// 対象外（従来通り即座に割り込む。コンボは「後から発動した方が上書きする」仕様のため）。
+    /// ジャンプ・攻撃についても同じ経路（先行入力）を通るため、同様にこの確認の恩恵を受ける。</summary>
+    private bool AnimatorSettled()
+    {
+        if (animator == null) return true;
+        if (animator.IsInTransition(0)) return false;
+        var info = animator.GetCurrentAnimatorStateInfo(0);
+        return info.IsName("Idle") || info.IsName("Move");
+    }
+
     private void FixedUpdate()
     {
         float dt = Time.fixedDeltaTime;
@@ -306,26 +332,17 @@ public class MainActionController : MonoBehaviour
             }
             else
             {
-                // ── 後半：速度はキープ。ただし入力があれば反映する。──
-                float mv = _player != null ? _player.MoveInput : 0f;
-                int inputDir = Mathf.Abs(mv) > 0.01f ? (mv > 0f ? 1 : -1) : 0;
-
-                if (inputDir == _dashDir)
-                {
-                    // 前方入力：そのまま進みつつ徐々に減速（ゆるめ）。効果は解除されない。
-                    _dashCurSpeed = Mathf.MoveTowards(_dashCurSpeed, 0f, dashForwardDecel * dt);
-                }
-                else if (inputDir == -_dashDir)
-                {
-                    // 後方入力：急ブレーキ ＋ 無敵・アニメーション・コンボ受付・クールタイムを即座に終了。
-                    _dashCurSpeed = Mathf.MoveTowards(_dashCurSpeed, 0f, dashBrakeDecel * dt);
-                    if (!_dashInvBroken)
-                    {
-                        _dashInvBroken = true;
-                        EndBusy(BusyAction.Dash);
-                    }
-                }
-                // 入力なし：_dashCurSpeed 据え置き（速度キープ）。効果は解除されない。
+                // ── 後半：入力方向（前方/後方/なし）によらず常に同じ挙動（2026-09-23、後方入力での
+                //    即時解除を廃止して統一。原因不明のまま`DashBreak`が意図せずオンになり続け、
+                //    アニメーションだけIdle/Moveに戻ってしまう不具合の根本対策）。
+                //    後半の残り時間のうち dashDecelFraction ぶんをかけて、最高速度(dashSpeed)から
+                //    通常の移動速度(PlayerController.MoveSpeed)まで滑らかに落とす。
+                float backHalfDuration = duration * (1f - dashLockFraction);
+                float decelDuration = backHalfDuration * dashDecelFraction;
+                float backHalfElapsed = elapsed - duration * dashLockFraction;
+                float t = decelDuration > 0f ? Mathf.Clamp01(backHalfElapsed / decelDuration) : 1f;
+                float normalSpeed = _player != null ? _player.MoveSpeed : dashSpeed;
+                _dashCurSpeed = Mathf.Lerp(dashSpeed, normalSpeed, t);
             }
 
             // 落下しないよう Y は 0 に固定。進行方向は発動時の向きのまま。
@@ -335,8 +352,7 @@ public class MainActionController : MonoBehaviour
             if (_dashTimeLeft <= 0f) EndDash();
         }
 
-        // 無敵状態を確定（この FixedUpdate 内での _dashInvBroken 更新も反映する）。
-        IsInvincible = _dashInvTimeLeft > 0f && !_dashInvBroken;
+        IsInvincible = _dashInvTimeLeft > 0f;
     }
 
     /// <summary>ジャンプの busy 進行。時間ではなく「着地」で明ける（滞空時間に上限は無い）。</summary>
@@ -433,7 +449,11 @@ public class MainActionController : MonoBehaviour
         _busy = BusyAction.Jump;
         _busyStartTime = Time.time;
         _jumpLeftGround = false;
-        if (animator != null) animator.SetTrigger("Jump");
+        if (animator != null)
+        {
+            animator.SetBool("Landed", false);
+            animator.SetTrigger("Jump");
+        }
     }
 
     private void StartDash()
@@ -442,7 +462,6 @@ public class MainActionController : MonoBehaviour
         _dashTimeLeft = DashDuration;
         _dashInvTimeLeft = DashDuration; // 無敵タイマー（移動を中断しても残りを走らせる）
         _dashCurSpeed = dashSpeed;       // 発動時に最高速度
-        _dashInvBroken = false;
 
         // ダッシュ中は重力を完全に切る（＝落下ゼロ）。終了時に戻す。
         _savedGravityScale = _rb.gravityScale;
@@ -460,14 +479,14 @@ public class MainActionController : MonoBehaviour
     }
 
     /// <summary>ダッシュの物理的な移動を完全に終了する（効果時間切れ / 無効化時）。無敵も解除する。
-    /// busy/コンボ/アニメーションの終了は Animation Event（または後方入力での即時終了）が別途担当するので、
-    /// ここでは触らない（保険として WatchdogEffectEnd はある）。</summary>
+    /// busy/コンボの終了は Animation Event（"DashEnd"）が別途担当するので、ここでは触らない
+    /// （保険として WatchdogEffectEnd はある）。アニメーション側の Dash→Idle は Animator 自身の
+    /// Exit Time で完結するので、C# 側から明示的にトリガーを送る必要は無い。</summary>
     private void EndDash()
     {
         _dashTimeLeft = 0f;
         _dashInvTimeLeft = 0f;
         _rb.gravityScale = _savedGravityScale;
-        _dashInvBroken = false;
         IsInvincible = false;
         OverridesMovement = false;
         IsDashing = false;
@@ -480,7 +499,7 @@ public class MainActionController : MonoBehaviour
         _rb.gravityScale = _savedGravityScale;
         OverridesMovement = false;
         IsDashing = false;
-        // _dashInvTimeLeft / _dashInvBroken はそのまま → 無敵は通常のダッシュ効果時間ぶん継続
+        // _dashInvTimeLeft はそのまま → 無敵は通常のダッシュ効果時間ぶん継続
     }
 
     /// <summary>攻撃判定そのものは有効化しない（前隙があるため）。Animation Event の
@@ -525,11 +544,13 @@ public class MainActionController : MonoBehaviour
             case BusyAction.Attack:
                 if (attackHitbox != null) attackHitbox.gameObject.SetActive(false);
                 break;
-            case BusyAction.Dash:
-                if (animator != null) animator.SetTrigger("DashBreak");
-                break;
             case BusyAction.Jump:
-                if (animator != null) animator.SetTrigger("Landed");
+                // 2026-09-23: Trigger→Boolに変更。AnyState→Jumpの遷移がまだブレンド中（＝Animatorが
+                // 本当にはまだJump状態に到達していない）タイミングでここに来ると、旧Trigger実装では
+                // 消費先(Jump→Idle)が存在しないため一度も消費されずに残り続け、「Landedが常時trueに
+                // 固まる」不具合になっていた（Dashの時と同種、ただし入口側のレース）。Boolならその瞬間に
+                // trueへ変わって"居座る"だけなので、AnimatorがJumpへ到達した瞬間に確実に拾われる。
+                if (animator != null) animator.SetBool("Landed", true);
                 break;
         }
     }
@@ -537,6 +558,13 @@ public class MainActionController : MonoBehaviour
     private void HandlePlayerDied()
     {
         if (animator != null) animator.SetTrigger("Dead");
+    }
+
+    /// <summary>ステージクリア時、StageManager から呼ばれる。クリアアニメーションを再生する
+    /// （ループせず1周だけ。末尾の Animation Event "ShowClearPanel" で StageManager がパネルを表示する）。</summary>
+    public void PlayClearAnimation()
+    {
+        if (animator != null) animator.SetTrigger("Clear");
     }
 
     private void OnDisable()
