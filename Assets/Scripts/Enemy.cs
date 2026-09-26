@@ -42,6 +42,11 @@ public class Enemy : MonoBehaviour
     /// <summary>ダメージを受けるたびに発火（体力が実際に減った時のみ）。ボスの行動制御などに使う。</summary>
     public event System.Action OnDamaged;
 
+    /// <summary>いずれかの敵が倒れた瞬間に発火（Destroy されるより前）。
+    /// チュートリアル「AttackEnemy」の達成判定用（TutorialHint がこれを購読し、倒れた位置が
+    /// 自分のヒントゾーンの範囲内かどうかで判定する。特定の敵には紐付けない）。</summary>
+    public static event System.Action<Enemy> OnAnyEnemyDied;
+
     private void Awake()
     {
         _col = GetComponent<Collider2D>();
@@ -92,6 +97,8 @@ public class Enemy : MonoBehaviour
 
     private void Die()
     {
+        OnAnyEnemyDied?.Invoke(this);
+
         if (clearStageOnDeath)
         {
             var stageManager = FindAnyObjectByType<StageManager>();

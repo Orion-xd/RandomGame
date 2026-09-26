@@ -16,7 +16,7 @@ using UnityEngine.UI;
 ///  - BottomTextbox   : 暗転＋一枚絵＋下部テキストボックス（プロローグ後半）。絵未指定なら仮イラスト。
 ///  - TopTextbox      : 暗転なし＋上部テキストボックス（ステージ開始時。ゲーム画面が見える）
 ///
-/// ── 文字送り（タイプライター演出、2026-09-12） ──
+/// ── 文字送り（タイプライター演出） ──
 /// on/off・速さともに**ページ単位**（`DialogueSequence.Page.useTypewriterEffect` / `.typewriterCharsPerSecond`、
 /// 既定 true / 30）で決める（シーン一律ではなく、テキストごとに個別設定できる）。true のページは
 /// 本文を先頭から1文字ずつ表示していく（「こんにちは」→「こ」→「こん」→…）。
@@ -36,17 +36,20 @@ public class DialoguePlayer : MonoBehaviour
     /// <summary>いずれかの DialoguePlayer が会話を再生中か。</summary>
     public static bool IsPlaying { get; private set; }
 
-    [Header("色 / サイズ")]
+    [Header("色 / サイズ（中央テキスト・送り待ちヒントなど、共有テキストボックス以外の部分）")]
     [SerializeField] private Color blackColor = new Color(0.05f, 0.05f, 0.06f, 1f);
-    [SerializeField] private Color boxColor = new Color(0f, 0f, 0f, 0.78f);
     [SerializeField] private Color textColor = Color.white;
-    [SerializeField] private Color speakerColor = new Color(1f, 0.92f, 0.55f, 1f);
     [SerializeField] private int centerFontSize = 40;
-    [SerializeField] private int bodyFontSize = 30;
-    [SerializeField] private int speakerFontSize = 26;
     [SerializeField] private int hintFontSize = 18;
     [Tooltip("会話 Canvas の描画順。HUD(0) や結果画面(100) より前面に。")]
     [SerializeField] private int sortingOrder = 200;
+
+    [Header("テキストボックス（話者アイコン・名前欄・本文）")]
+    [Tooltip("箱・話者アイコン・名前欄・本文の見た目本体。チュートリアルヒントと共有の " +
+             "Assets/Prefabs/UI/SpeakerTextBox.prefab を指す。位置/色/フォントサイズ等の見た目を" +
+             "調整したい場合は、このフィールドではなくそのプレハブ自身を直接編集すること" +
+             "（Prefab Mode で開けばゲームを実行せずに実際のレイアウトを確認できる）")]
+    [SerializeField] private SpeakerTextBoxView textBoxPrefab;
 
     [Tooltip("会話（プロローグ / ステージ開始会話）が出てからこの秒数、送り入力を無効化する（連打で飛ばさないように）")]
     [SerializeField] private float inputLockDuration = 0.25f;
@@ -73,10 +76,7 @@ public class DialoguePlayer : MonoBehaviour
     private Image _illust;
     private GameObject _placeholder;
     private Text _centerText;
-    private RectTransform _boxRt;
-    private Image _boxBg;
-    private Text _speakerText;
-    private Text _bodyText;
+    private SpeakerTextBoxView _textBox;
     private Text _hintText;
 
     private void Awake()
@@ -256,20 +256,28 @@ public class DialoguePlayer : MonoBehaviour
         _centerText.enabled = centered;
         if (centered)
         {
-            LayoutCenteredText(p.text ?? ""); // 全文表示時に中央へ来る位置へ左端を固定（文字送り中の左右ブレ防止）
+            CenterTextHorizontally(_centerText, 0f, 0f, p.text ?? ""); // 全文表示時に中央へ来る位置へ左端を固定（文字送り中の左右ブレ防止）
             SetPageText(_centerText, p.text, p.useTypewriterEffect, p.typewriterCharsPerSecond);
         }
 
-        // テキストボックス。
-        _boxBg.enabled = box;
-        _bodyText.enabled = box;
-        bool hasSpeaker = box && !string.IsNullOrEmpty(p.speaker);
-        _speakerText.enabled = hasSpeaker;
+        // テキストボックス（箱・話者アイコン・名前欄・本文の見た目は共有ビュー SpeakerTextBoxView に委譲）。
+        _textBox.Background.enabled = box;
+        _textBox.Body.enabled = box;
+        // ナレーション＝None のときは話者アイコン・名前欄とも出さない。表示名・アイコンは
+        // SpeakerRegistry から解決する（誰がどのアイコンかはここでは決めない）。
+        bool hasSpeaker = box && p.speaker != SpeakerId.None;
+        var profile = hasSpeaker ? SpeakerRegistry.Get(p.speaker) : null;
+        _textBox.SetSpeaker(profile);
         if (box)
         {
-            SetPageText(_bodyText, p.text, p.useTypewriterEffect, p.typewriterCharsPerSecond); // 話者名は対象外（下で即時表示）、台詞本文だけ文字送りする
-            if (hasSpeaker) _speakerText.text = p.speaker;
             LayoutBox(top);
+            // 話者の有無によらず、本文の左右は常に同じだけ空けてアイコン欄ぶんのスペースを確保する
+            // （ユーザー指定）。中央揃えの見た目を保ったまま文字送りしてもブレないよう、
+            // CenterTextHorizontally で「全文表示時にちょうど収まる位置」へあらかじめ左端を固定してから
+            // 文字送りを始める。
+            float inset = _textBox.GetBodyInset();
+            CenterTextHorizontally(_textBox.Body, inset, inset, p.text ?? "");
+            SetPageText(_textBox.Body, p.text, p.useTypewriterEffect, p.typewriterCharsPerSecond); // 話者名は対象外（上で即時表示済み）、台詞本文だけ文字送りする
         }
 
         _hintText.enabled = true;
@@ -278,39 +286,43 @@ public class DialoguePlayer : MonoBehaviour
     private void LayoutBox(bool top)
     {
         // 左右 8% マージン、高さ画面の約 26%。上 or 下に寄せる。
-        _boxRt.anchorMin = new Vector2(0.08f, top ? 0.71f : 0.06f);
-        _boxRt.anchorMax = new Vector2(0.92f, top ? 0.97f : 0.32f);
-        _boxRt.offsetMin = Vector2.zero;
-        _boxRt.offsetMax = Vector2.zero;
+        var rt = _textBox.RectTransform;
+        rt.anchorMin = new Vector2(0.08f, top ? 0.71f : 0.06f);
+        rt.anchorMax = new Vector2(0.92f, top ? 0.97f : 0.32f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
     }
 
     /// <summary>
-    /// `_centerText`（CenteredOnBlack）は元々 `TextAnchor.MiddleCenter` で描画していたため、
-    /// 文字送りで文字数が増えるたびに中央揃えの基準がズレて左右にブレて見える問題があった。
+    /// 中央揃え（`TextAnchor.MiddleCenter`）のまま文字送りすると、文字数が増えるたびに中央の基準が
+    /// ズレて左右にブレて見える問題がある（`CenteredOnBlack` の `_centerText` で最初に発覚）。
     ///
-    /// 対策：全文をあらかじめ測って必要な横幅を求め、確保領域（画面の 12%〜88%）の中でその横幅ぶんだけ
-    /// 中央寄せした位置に「左端」を固定する（`offsetMin`/`offsetMax` で領域自体を狭める）。
-    /// 揃えは `MiddleLeft` に変更し、その固定された左端から文字を生やしていく。全文表示時にちょうど
-    /// 元の中央位置へ収まるので、見た目は変えずに文字送り中のブレだけを無くせる。
-    /// 全文が確保領域より広い（改行が要る）場合は `pad=0` になり、領域いっぱいを使う左揃えにフォールバックする。
+    /// 対策：全文をあらかじめ測って必要な横幅を求め、確保領域（`leftBound`/`rightBound` を追加で
+    /// 差し引いた残り）の中でその横幅ぶんだけ中央寄せした位置に「左端」を固定する
+    /// （`offsetMin`/`offsetMax` で領域自体を狭める）。揃えは `MiddleLeft` に変更し、その固定された
+    /// 左端から文字を生やしていく。全文表示時にちょうど中央に収まるので、見た目は変えずに
+    /// 文字送り中のブレだけを無くせる。全文が確保領域より広い（改行が要る）場合は `pad=0` になり、
+    /// 確保領域いっぱいを使う左揃えにフォールバックする。
+    /// `leftBound`/`rightBound` は話者アイコン欄ぶんなど、中央寄せ計算の前に確保しておきたい
+    /// 追加の左右マージン（px）。`_centerText`（アイコン無し）なら 0/0 を渡す。
     /// </summary>
-    private void LayoutCenteredText(string fullText)
+    private static void CenterTextHorizontally(Text target, float leftBound, float rightBound, string fullText)
     {
-        var rt = (RectTransform)_centerText.transform;
+        var rt = (RectTransform)target.transform;
 
-        // 一旦 inset を 0 に戻し、確保領域（FillRect で決めた 12%〜88%）そのものの横幅を測る。
-        rt.offsetMin = new Vector2(0f, rt.offsetMin.y);
-        rt.offsetMax = new Vector2(0f, rt.offsetMax.y);
+        // 一旦 leftBound/rightBound だけの inset に戻し、その残り領域の横幅を測る。
+        rt.offsetMin = new Vector2(leftBound, rt.offsetMin.y);
+        rt.offsetMax = new Vector2(-rightBound, rt.offsetMax.y);
         float availableWidth = rt.rect.width;
 
         // 全文の横幅を測る（Text.preferredWidth は改行を無視した「1行に並べた場合」の幅）。
-        _centerText.text = fullText;
-        float textWidth = Mathf.Min(_centerText.preferredWidth, availableWidth);
+        target.text = fullText;
+        float textWidth = Mathf.Min(target.preferredWidth, availableWidth);
 
         float pad = Mathf.Max(0f, (availableWidth - textWidth) / 2f);
-        rt.offsetMin = new Vector2(pad, rt.offsetMin.y);
-        rt.offsetMax = new Vector2(-pad, rt.offsetMax.y);
-        _centerText.alignment = TextAnchor.MiddleLeft;
+        rt.offsetMin = new Vector2(leftBound + pad, rt.offsetMin.y);
+        rt.offsetMax = new Vector2(-(rightBound + pad), rt.offsetMax.y);
+        target.alignment = TextAnchor.MiddleLeft;
     }
 
     // ── UI 構築（実行時生成） ─────────────────────────────
@@ -347,30 +359,15 @@ public class DialoguePlayer : MonoBehaviour
         _centerText = NewText("CenterText", _root.transform, centerFontSize, TextAnchor.MiddleCenter);
         FillRect((RectTransform)_centerText.transform, 0.12f, 0.20f, 0.88f, 0.80f);
 
-        // テキストボックス
-        var boxGo = NewRect("Textbox", _root.transform);
-        _boxRt = (RectTransform)boxGo.transform;
+        // テキストボックス（箱・話者アイコン・名前欄・本文）：チュートリアルヒントと共有のプレハブを
+        // インスタンス化するだけ。見た目そのものはこのプレハブ側が持つので、ここでは色/サイズ等を
+        // 一切設定しない（統一前は DialoguePlayer 側にも同じ内容のフィールドが重複していた）。
+        _textBox = Instantiate(textBoxPrefab, _root.transform);
         LayoutBox(false);
-        _boxBg = boxGo.AddComponent<Image>();
-        _boxBg.color = boxColor;
-        _boxBg.raycastTarget = false;
-
-        _speakerText = NewText("Speaker", boxGo.transform, speakerFontSize, TextAnchor.UpperLeft);
-        _speakerText.color = speakerColor;
-        _speakerText.fontStyle = FontStyle.Bold;
-        var srt = (RectTransform)_speakerText.transform;
-        srt.anchorMin = new Vector2(0f, 1f);
-        srt.anchorMax = new Vector2(1f, 1f);
-        srt.pivot = new Vector2(0f, 1f);
-        srt.anchoredPosition = new Vector2(30f, -14f);
-        srt.sizeDelta = new Vector2(-60f, 40f);
-
-        _bodyText = NewText("Body", boxGo.transform, bodyFontSize, TextAnchor.UpperLeft);
-        var brt = (RectTransform)_bodyText.transform;
-        brt.anchorMin = Vector2.zero;
-        brt.anchorMax = Vector2.one;
-        brt.offsetMin = new Vector2(30f, 22f);
-        brt.offsetMax = new Vector2(-30f, -60f); // 上に話者名ぶんの余白
+        // シーン上に直接置いたインスタンスは日本語フォント修正の対象外なので、念のためここでも
+        // 明示的に設定する（プレハブ自体に既に設定済みだが、二重の安全策として）。
+        if (_textBox.SpeakerName != null) _textBox.SpeakerName.font = _font;
+        if (_textBox.Body != null) _textBox.Body.font = _font;
 
         _hintText = NewText("Hint", _root.transform, hintFontSize, TextAnchor.LowerRight);
         _hintText.text = "Click / Space / Enter ▶";

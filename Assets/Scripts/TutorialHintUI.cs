@@ -3,13 +3,18 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 画面上部にチュートリアルのヒントテキストを表示する（ストーリー表示の DialoguePlayer とは別系統、使い回さない。
-/// 表示位置だけはDialoguePlayerの会話ボックス「上部」レイアウトと一貫性を持たせて画面上部にしてある、2026-09-22）。
+/// 画面上部にチュートリアルのヒントテキストを表示する。
+/// 見た目（箱・話者アイコン・名前欄・本文の位置/色/フォント）は、ストーリー会話（`DialoguePlayer`）と
+/// 完全に共有の `SpeakerTextBoxView`（`Assets/Prefabs/UI/SpeakerTextBox.prefab`）インスタンスが担当する。
+/// 見た目を調整したい場合は、このスクリプトではなく必ずそのプレハブ自身を直接編集すること
+/// （Prefab Mode でダブルクリックして開けば、ゲームを実行しなくてもそのまま実際のレイアウトを確認できる）。
+/// このクラスは「いつ・何を表示するか」という振る舞いだけを担当する。
+///
 /// 複数の TutorialHint が同時に表示を要求した場合は、プレイヤーに一番近い（distanceが最小の）ものだけを
-/// 表示する（2026-09-22、1オブジェクト=1ヒントの制約のもとで複数の対象に同時に近づいてしまった場合の
+/// 表示する（1オブジェクト=1ヒントの制約のもとで複数の対象に同時に近づいてしまった場合の
 /// 優先順位として、判定用コライダーがより近いものを優先する仕様）。
 ///
-/// 【表示/非表示を GameObject.SetActive ではなく CanvasGroup.alpha で行う理由（2026-09-22修正）】
+/// 【表示/非表示を GameObject.SetActive ではなく CanvasGroup.alpha で行う理由】
 /// 当初は自分自身（このスクリプトが付いている GameObject）を SetActive(false) で隠していたが、
 /// それだと「自分自身が非アクティブな間、他のスクリプトの Awake() から
 /// FindAnyObjectByType&lt;TutorialHintUI&gt;() で自分を見つけられなくなる」問題があった
@@ -22,33 +27,49 @@ using UnityEngine.UI;
 public class TutorialHintUI : MonoBehaviour
 {
     [SerializeField] private CanvasGroup canvasGroup;
-    [SerializeField] private Text label;
+    [Tooltip("見た目本体（箱・話者アイコン・名前欄・本文）。ストーリー会話と共有の " +
+             "Assets/Prefabs/UI/SpeakerTextBox.prefab のインスタンスを指す")]
+    [SerializeField] private SpeakerTextBoxView textBox;
 
-    private readonly List<(object requester, string text, float distance)> _requests = new();
+    private readonly List<(object requester, string text, float distance, SpeakerId speaker)> _requests = new();
 
     private void Awake()
     {
         SetVisible(false);
 
-        // シーン上に直接置いた Text は DialoguePlayer の日本語フォント修正の対象外なので、ここで明示的に設定する
-        // （過去のNoto Sans JP対応の教訓：シーン作成の Text は自動継承されない）。
-        var font = Resources.Load<Font>("Fonts/NotoSansJP-Regular");
-        if (font != null && label != null) label.font = font;
+        if (textBox != null && textBox.Body != null)
+        {
+            // ヒントは短い一文を一気に表示するだけなので、箱の中央に据える（会話本文は左揃えで別途
+            // DialoguePlayer 側が文字送り用に設定するため、ここでは触れない＝食い違わない）。
+            textBox.Body.alignment = TextAnchor.MiddleCenter;
+
+            // シーン上に直接置いた Text は DialoguePlayer の日本語フォント修正の対象外なので、
+            // ここで明示的に設定する（過去のNoto Sans JP対応の教訓：シーン作成の Text は自動継承されない）。
+            var font = Resources.Load<Font>("Fonts/NotoSansJP-Regular");
+            if (font != null)
+            {
+                textBox.Body.font = font;
+                if (textBox.SpeakerName != null) textBox.SpeakerName.font = font;
+            }
+        }
     }
 
-    /// <summary>表示を要求する。distance はプレイヤーとの近さ（小さいほど優先表示される）。</summary>
-    public void RequestShow(object requester, string text, float distance)
+    /// <summary>表示を要求する。distance はプレイヤーとの近さ（小さいほど優先表示される）。
+    /// speaker は任意（ストーリー会話の TopTextbox と同じ話者アイコン欄の仕組み）。
+    /// 省略（None）すればこれまで通りアイコン・名前欄とも非表示のまま。表示名・アイコンは
+    /// SpeakerRegistry から解決する。</summary>
+    public void RequestShow(object requester, string text, float distance, SpeakerId speaker = SpeakerId.None)
     {
         for (int i = 0; i < _requests.Count; i++)
         {
             if (Equals(_requests[i].requester, requester))
             {
-                _requests[i] = (requester, text, distance);
+                _requests[i] = (requester, text, distance, speaker);
                 Refresh();
                 return;
             }
         }
-        _requests.Add((requester, text, distance));
+        _requests.Add((requester, text, distance, speaker));
         Refresh();
     }
 
@@ -71,7 +92,16 @@ public class TutorialHintUI : MonoBehaviour
             if (_requests[i].distance < nearest.distance) nearest = _requests[i];
 
         SetVisible(true);
-        if (label != null) label.text = nearest.text;
+        if (textBox == null) return;
+        if (textBox.Body != null) textBox.Body.text = nearest.text;
+
+        // 話者アイコン・名前欄・本文の余白は、共有ビュー（SpeakerTextBoxView）へ丸ごと委譲する
+        // （見た目の計算はそちら側の責務。表示名・アイコンは SpeakerRegistry から解決する）。
+        // 本文の左右マージンは話者の有無によらず常に同じ（ユーザー指定）。
+        bool hasSpeaker = nearest.speaker != SpeakerId.None;
+        var profile = hasSpeaker ? SpeakerRegistry.Get(nearest.speaker) : null;
+        textBox.SetSpeaker(profile);
+        textBox.ApplyBodyInset();
     }
 
     private void SetVisible(bool visible)

@@ -6,7 +6,7 @@ using UnityEngine.InputSystem;
 /// スペース / エンター / テンキー Enter / 左クリックでキュー先頭のアクションを1つ消費して実行し、
 /// そのアクションの効果が終わるまで次を受け付けない（会話送りやメニュー決定と操作系を統一するため複数キーを許可）。
 ///
-/// ── クールタイム＝コンボ受付時間（2026-09-21、仕様変更）──
+/// ── クールタイム＝コンボ受付時間（仕様変更）──
 /// 「クールタイム」と「コンボ受付時間」は同じもの（＝そのアクションの効果が続いている間）になった。
 /// つまり単発で終わらせてもコンボにしても、次に動けるようになるタイミングは一致する。
 ///  - ダッシュ / 攻撃：それぞれの AnimationClip（dashClip / attackClip）の長さぶん。
@@ -26,8 +26,8 @@ using UnityEngine.InputSystem;
 /// （AnimationEventRelay.RaiseEvent("DashEnd" / "AttackEnd")）で効果終了を通知する。Jump は着地で
 /// 終了（Animation Event は使わない）。Move は水平入力の有無で Idle と自動的に行き来する。
 /// Attack はさらに前隙・攻撃判定発生中・後隙の3区間に分かれており、"AttackHitboxOn"/"AttackHitboxOff"
-/// という2つの追加 Animation Event で攻撃判定（AttackHitbox）の有効/無効だけを個別に切り替える
-/// （2026-09-21）。"AttackEnd" は busy の終了だけを意味し、攻撃判定はそれより前に閉じている想定。
+/// という2つの追加 Animation Event で攻撃判定（AttackHitbox）の有効/無効だけを個別に切り替える。
+/// "AttackEnd" は busy の終了だけを意味し、攻撃判定はそれより前に閉じている想定。
 /// 2つのアクションが同時に効果を持つ場合（例：ジャンプ+攻撃）でも、見た目のアニメーションは
 /// 後から発動した方が単純に上書きする（レイヤー分けなどは行わない。当面のプレースホルダー仕様）。
 ///
@@ -59,7 +59,7 @@ public class MainActionController : MonoBehaviour
     [Range(0f, 1f)]
     [Tooltip("後半のうち、最高速度から通常の移動速度まで滑らかに落とすのにかける時間の割合" +
              "（後半の長さに対する割合。既定0.5＝後半の半分＝効果時間全体の1/4ぶん、dashLockFraction=0.5のとき）。" +
-             "入力方向（前方/後方/なし）によらず常に同じ挙動になる（2026-09-23、後方入力での即時解除を廃止し統一した）")]
+             "入力方向（前方/後方/なし）によらず常に同じ挙動になる（後方入力での即時解除を廃止し統一した）")]
     [SerializeField] private float dashDecelFraction = 0.5f;
 
     [Header("攻撃")]
@@ -125,6 +125,12 @@ public class MainActionController : MonoBehaviour
     /// <summary>ダッシュ中か（Enemy が接触をすり抜けさせるかどうかの判定に使う）。</summary>
     public bool IsDashing { get; private set; }
 
+    /// <summary>ダッシュを発動するたびに1つずつ増える通し番号。「途中で終了した後、別のダッシュを
+    /// 発動し直したもの」を「最初から続いている同じダッシュ」と区別するために使う
+    /// （TutorialHint の DashPastEnemy 判定：敵と接触した瞬間のダッシュと、接触が解除された瞬間の
+    /// ダッシュが本当に同一かどうかを確認する必要があるため）。</summary>
+    public int DashId { get; private set; }
+
     /// <summary>ジャンプ由来の busy 中か（着地するまで明けない＝経過割合を安定して計算できない）。
     /// アクションバーUIが、ジャンプの次アクション表示を通常のグラデーションではなく「着地まで一律で暗い」扱いにするために使う。</summary>
     public bool IsJumpCooldownActive => _busy == BusyAction.Jump;
@@ -189,7 +195,11 @@ public class MainActionController : MonoBehaviour
         if (animEvents != null) animEvents.OnAnimationEvent += HandleAnimationEvent;
 
         var health = GetComponent<PlayerHealth>();
-        if (health != null) health.OnDied += HandlePlayerDied;
+        if (health != null)
+        {
+            health.OnDied += HandlePlayerDied;
+            health.OnDamaged += HandlePlayerDamaged;
+        }
 
         // ステージ設定でコンボを無効化する（ステージ1など）。
         _combosEnabled = !(GameFlow.Stages != null
@@ -276,8 +286,7 @@ public class MainActionController : MonoBehaviour
         InInputBufferZone = remaining <= inputBufferTime;
     }
 
-    /// <summary>先行入力を発動してよいか＝Animatorが実際にIdle/Moveへ戻っていることを確認する
-    /// （2026-09-23追加）。
+    /// <summary>先行入力を発動してよいか＝Animatorが実際にIdle/Moveへ戻っていることを確認する。
     ///
     /// 背景: `_busy`はAnimation Event（"DashEnd"/"AttackEnd"等）で即座にNoneへ戻るが、
     /// **Animator自身の状態遷移（例: Dash→Idle）もちょうど同じタイミングで処理される**。
@@ -332,7 +341,7 @@ public class MainActionController : MonoBehaviour
             }
             else
             {
-                // ── 後半：入力方向（前方/後方/なし）によらず常に同じ挙動（2026-09-23、後方入力での
+                // ── 後半：入力方向（前方/後方/なし）によらず常に同じ挙動（後方入力での
                 //    即時解除を廃止して統一。原因不明のまま`DashBreak`が意図せずオンになり続け、
                 //    アニメーションだけIdle/Moveに戻ってしまう不具合の根本対策）。
                 //    後半の残り時間のうち dashDecelFraction ぶんをかけて、最高速度(dashSpeed)から
@@ -470,6 +479,7 @@ public class MainActionController : MonoBehaviour
         IsInvincible = true;
         OverridesMovement = true;
         IsDashing = true;
+        DashId++;
 
         _rb.linearVelocity = new Vector2(_dashDir * dashSpeed, 0f);
 
@@ -545,7 +555,7 @@ public class MainActionController : MonoBehaviour
                 if (attackHitbox != null) attackHitbox.gameObject.SetActive(false);
                 break;
             case BusyAction.Jump:
-                // 2026-09-23: Trigger→Boolに変更。AnyState→Jumpの遷移がまだブレンド中（＝Animatorが
+                // Trigger→Boolに変更。AnyState→Jumpの遷移がまだブレンド中（＝Animatorが
                 // 本当にはまだJump状態に到達していない）タイミングでここに来ると、旧Trigger実装では
                 // 消費先(Jump→Idle)が存在しないため一度も消費されずに残り続け、「Landedが常時trueに
                 // 固まる」不具合になっていた（Dashの時と同種、ただし入口側のレース）。Boolならその瞬間に
@@ -558,6 +568,14 @@ public class MainActionController : MonoBehaviour
     private void HandlePlayerDied()
     {
         if (animator != null) animator.SetTrigger("Dead");
+    }
+
+    /// <summary>被弾リアクション（PlayerHealth.OnDamaged、致死ダメージでないときのみ発火）。
+    /// busy状態やコンボの進行は一切変更しない、純粋に見た目だけの割り込み演出
+    /// （AnyState→Hit→Idle。他のAnyState遷移＝Dash/Jump/Attack/Deadと同じ扱い）。</summary>
+    private void HandlePlayerDamaged()
+    {
+        if (animator != null) animator.SetTrigger("Hit");
     }
 
     /// <summary>ステージクリア時、StageManager から呼ばれる。クリアアニメーションを再生する

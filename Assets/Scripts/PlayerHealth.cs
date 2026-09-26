@@ -26,6 +26,11 @@ public class PlayerHealth : MonoBehaviour
     /// <summary>体力が0になったとき1回だけ発火。ステージ失敗の判定に使う。</summary>
     public event Action OnDied;
 
+    /// <summary>ダメージが実際に適用され、かつそれで死ななかった（体力が残っている）ときに発火。
+    /// 被弾リアクション（見た目のアニメーション）のトリガー用。致死ダメージのときは OnDied 側の
+    /// 死亡アニメーションだけを再生し、こちらは発火しない（同時にAnyState遷移が競合するのを防ぐ）。</summary>
+    public event Action OnDamaged;
+
     private void Awake()
     {
         _health = maxHealth;
@@ -55,6 +60,10 @@ public class PlayerHealth : MonoBehaviour
             _died = true;
             Debug.Log("Player MISS (体力0)");
             OnDied?.Invoke();
+        }
+        else
+        {
+            OnDamaged?.Invoke();
         }
 
         return true;
