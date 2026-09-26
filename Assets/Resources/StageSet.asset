@@ -20,12 +20,12 @@ MonoBehaviour:
     allowedActions: 01000000
     disableCombos: 1
   - displayName: Stage 2
-    sceneName: Stage2
+    sceneName: Stage2_test
     intro: {fileID: 11400000, guid: 2aae5261df96d8f4b85e08ca06fc5037, type: 2}
-    allowedActions: 000000000100000002000000
+    allowedActions: 010000000200000000000000
     disableCombos: 0
   - displayName: Stage 3
-    sceneName: Stage3
+    sceneName: Stage3_test
     intro: {fileID: 11400000, guid: cdf63d9108e27b647b9e2b47031c5a63, type: 2}
     allowedActions: 000000000100000002000000
     disableCombos: 0
