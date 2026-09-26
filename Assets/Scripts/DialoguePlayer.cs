@@ -263,9 +263,9 @@ public class DialoguePlayer : MonoBehaviour
         // テキストボックス（箱・話者アイコン・名前欄・本文の見た目は共有ビュー SpeakerTextBoxView に委譲）。
         _textBox.Background.enabled = box;
         _textBox.Body.enabled = box;
-        // ナレーション＝Narrator のときは話者アイコン・名前欄とも出さない。表示名・アイコンは
+        // ナレーション＝None のときは話者アイコン・名前欄とも出さない。表示名・アイコンは
         // SpeakerRegistry から解決する（誰がどのアイコンかはここでは決めない）。
-        bool hasSpeaker = box && p.speaker != SpeakerId.Narrator;
+        bool hasSpeaker = box && p.speaker != SpeakerId.None;
         var profile = hasSpeaker ? SpeakerRegistry.Get(p.speaker) : null;
         _textBox.SetSpeaker(profile);
         if (box)

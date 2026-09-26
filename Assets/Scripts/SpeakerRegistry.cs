@@ -21,7 +21,7 @@ public class SpeakerRegistry : ScriptableObject
         public Sprite icon;
     }
 
-    [Tooltip("話者ごとの表示名・アイコン。Narrator 分は呼び出し側がそもそも参照しないので設定不要")]
+    [Tooltip("話者ごとの表示名・アイコン。None 分は呼び出し側がそもそも参照しないので設定不要")]
     public Profile[] profiles;
 
     private static SpeakerRegistry _instance;

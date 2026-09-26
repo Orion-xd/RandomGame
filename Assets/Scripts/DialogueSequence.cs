@@ -31,7 +31,7 @@ public class DialogueSequence : ScriptableObject
     [System.Serializable]
     public class Page
     {
-        [Tooltip("話者。Narrator ならナレーション（名前欄・アイコンとも非表示）。" +
+        [Tooltip("話者。None ならナレーション（名前欄・アイコンとも非表示）。" +
                  "表示名・アイコンは SpeakerRegistry（Assets/Resources/SpeakerRegistry.asset）で一括管理している")]
         public SpeakerId speaker;
 

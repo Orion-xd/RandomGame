@@ -5,8 +5,9 @@
 /// </summary>
 public enum SpeakerId
 {
-    /// <summary>特定のキャラクターではないナレーション。名前欄・アイコンとも非表示になる特別値。</summary>
-    Narrator,
+    /// <summary>特定のキャラクターではないナレーション。名前欄・アイコンとも非表示になる特別値。
+    /// インスペクター上は「ナレーターって何？」とならないよう、あえて分かりやすい名前（None）にしている。</summary>
+    None,
     Hero,
     LastBoss,
     // 新しい話者は必ず末尾に追加すること（DialogueSequence.Page.speaker / TutorialHint の speaker が

@@ -125,6 +125,12 @@ public class MainActionController : MonoBehaviour
     /// <summary>ダッシュ中か（Enemy が接触をすり抜けさせるかどうかの判定に使う）。</summary>
     public bool IsDashing { get; private set; }
 
+    /// <summary>ダッシュを発動するたびに1つずつ増える通し番号。「途中で終了した後、別のダッシュを
+    /// 発動し直したもの」を「最初から続いている同じダッシュ」と区別するために使う
+    /// （TutorialHint の DashPastEnemy 判定：敵と接触した瞬間のダッシュと、接触が解除された瞬間の
+    /// ダッシュが本当に同一かどうかを確認する必要があるため）。</summary>
+    public int DashId { get; private set; }
+
     /// <summary>ジャンプ由来の busy 中か（着地するまで明けない＝経過割合を安定して計算できない）。
     /// アクションバーUIが、ジャンプの次アクション表示を通常のグラデーションではなく「着地まで一律で暗い」扱いにするために使う。</summary>
     public bool IsJumpCooldownActive => _busy == BusyAction.Jump;
@@ -473,6 +479,7 @@ public class MainActionController : MonoBehaviour
         IsInvincible = true;
         OverridesMovement = true;
         IsDashing = true;
+        DashId++;
 
         _rb.linearVelocity = new Vector2(_dashDir * dashSpeed, 0f);
 

@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1 &7695699394312212093
+--- !u!1 &6403758103637746492
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -8,23 +8,23 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 3707875462909060906}
-  - component: {fileID: 1204945163846184882}
-  - component: {fileID: 803475877402906356}
+  - component: {fileID: 6554258967619435785}
+  - component: {fileID: 3993796164031317793}
+  - component: {fileID: 1143162466663913331}
   m_Layer: 0
-  m_Name: HintZone_Enemy_Dash
+  m_Name: HintZone_Bullet_Attack
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &3707875462909060906
+--- !u!4 &6554258967619435785
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7695699394312212093}
+  m_GameObject: {fileID: 6403758103637746492}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -33,13 +33,13 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!61 &1204945163846184882
+--- !u!61 &3993796164031317793
 BoxCollider2D:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7695699394312212093}
+  m_GameObject: {fileID: 6403758103637746492}
   m_Enabled: 1
   serializedVersion: 3
   m_Density: 1
@@ -77,23 +77,25 @@ BoxCollider2D:
     drawMode: 0
     adaptiveTiling: 0
   m_AutoTiling: 0
-  m_Size: {x: 10, y: 3}
+  m_Size: {x: 12, y: 3}
   m_EdgeRadius: 0
---- !u!114 &803475877402906356
+--- !u!114 &1143162466663913331
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7695699394312212093}
+  m_GameObject: {fileID: 6403758103637746492}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4451c4a58ee9f66408d02f1ad89d0b92, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TutorialHint
-  category: 0
-  hintText: "\u30C0\u30C3\u30B7\u30E5\u3067\u6575\u3092\u304B\u308F\u3059\u308F(\u30B9\u30DA\u30FC\u30B9\u30AD\u30FC\u3067\u767A\u52D5)"
+  category: 6
+  hintText: "\u653B\u6483\u3067\u6575\u306E\u5F3E\u3092\u3053\u308F\u305B\u308B\u308F(\u30B9\u30DA\u30FC\u30B9\u30AD\u30FC\u3067\u767A\u52D5)"
   speaker: 1
+  targetEnemy: {fileID: 0}
+  passThroughMargin: 1.5
   landingZone: {fileID: 0}
   highGroundCollider: {fileID: 0}
   raycastDistance: 1.5

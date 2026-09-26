@@ -56,9 +56,9 @@ public class TutorialHintUI : MonoBehaviour
 
     /// <summary>表示を要求する。distance はプレイヤーとの近さ（小さいほど優先表示される）。
     /// speaker は任意（ストーリー会話の TopTextbox と同じ話者アイコン欄の仕組み）。
-    /// 省略（Narrator）すればこれまで通りアイコン・名前欄とも非表示のまま。表示名・アイコンは
+    /// 省略（None）すればこれまで通りアイコン・名前欄とも非表示のまま。表示名・アイコンは
     /// SpeakerRegistry から解決する。</summary>
-    public void RequestShow(object requester, string text, float distance, SpeakerId speaker = SpeakerId.Narrator)
+    public void RequestShow(object requester, string text, float distance, SpeakerId speaker = SpeakerId.None)
     {
         for (int i = 0; i < _requests.Count; i++)
         {
@@ -98,7 +98,7 @@ public class TutorialHintUI : MonoBehaviour
         // 話者アイコン・名前欄・本文の余白は、共有ビュー（SpeakerTextBoxView）へ丸ごと委譲する
         // （見た目の計算はそちら側の責務。表示名・アイコンは SpeakerRegistry から解決する）。
         // 本文の左右マージンは話者の有無によらず常に同じ（ユーザー指定）。
-        bool hasSpeaker = nearest.speaker != SpeakerId.Narrator;
+        bool hasSpeaker = nearest.speaker != SpeakerId.None;
         var profile = hasSpeaker ? SpeakerRegistry.Get(nearest.speaker) : null;
         textBox.SetSpeaker(profile);
         textBox.ApplyBodyInset();

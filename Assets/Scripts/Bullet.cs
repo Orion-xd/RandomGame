@@ -54,6 +54,11 @@ public class Bullet : MonoBehaviour
     private MainActionController _playerMainAction;
     private bool _ignoringPlayer;
 
+    /// <summary>プレイヤーの攻撃で弾が破壊された瞬間に発火（壊れた位置を渡す。誰が撃ったかは問わない）。
+    /// チュートリアル「Attack Enemy's Bullet」の達成判定用（TutorialHint がこれを購読し、その位置が
+    /// 自分のヒントゾーンの範囲内かどうかで判定する）。</summary>
+    public static event System.Action<Vector2> OnDestroyedByAttack;
+
     private void Awake()
     {
         _col = GetComponent<Collider2D>();
@@ -176,6 +181,7 @@ public class Bullet : MonoBehaviour
     /// <summary>プレイヤーの攻撃判定（AttackHitbox）から呼ばれる。一撃で消滅する。</summary>
     public void DestroyByAttack()
     {
+        OnDestroyedByAttack?.Invoke(transform.position);
         Destroy(gameObject);
     }
 }
