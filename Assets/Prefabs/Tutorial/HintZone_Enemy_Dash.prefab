@@ -92,7 +92,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TutorialHint
   category: 0
-  hintText: "\u30C0\u30C3\u30B7\u30E5\u3067\u6575\u3092\u304B\u308F\u3059(\u30B9\u30DA\u30FC\u30B9\u30AD\u30FC\u3067\u767A\u52D5)"
+  hintText: "\u30C0\u30C3\u30B7\u30E5\u3067\u6575\u3092\u304B\u308F\u3059\u308F(\u30B9\u30DA\u30FC\u30B9\u30AD\u30FC\u3067\u767A\u52D5)"
+  speaker: 1
   targetEnemy: {fileID: 0}
   passThroughMargin: 1.5
   landingZone: {fileID: 0}

@@ -402,7 +402,7 @@ MonoBehaviour:
   smoothTime: 0.15
   xOffset: 0
   yOffset: 0
-  followHorizontal: 1
+  followHorizontal: 0
   followVertical: 0
 --- !u!114 &538298670
 MonoBehaviour:
@@ -753,7 +753,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8960627561933570841, guid: 3f2298b8e85ad194f9dae5643fac8078, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 0
+      value: -6
       objectReference: {fileID: 0}
     - target: {fileID: 8960627561933570841, guid: 3f2298b8e85ad194f9dae5643fac8078, type: 3}
       propertyPath: m_LocalPosition.y
@@ -3965,7 +3965,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8036194978225424255, guid: d2e1f8fc0838da847aa67dc7fee3c449, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 15
+      value: 6
       objectReference: {fileID: 0}
     - target: {fileID: 8036194978225424255, guid: d2e1f8fc0838da847aa67dc7fee3c449, type: 3}
       propertyPath: m_LocalPosition.y

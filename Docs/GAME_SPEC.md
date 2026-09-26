@@ -1,6 +1,6 @@
 # RandomGame 仕様・実装まとめ
 
-最終更新: 2026-09-12 / 対象ブランチ: `feature/action-assist`（地面・高台の Tilemap 化、日本語フォント対応は `feature/tilemap` ブランチで実施済み・マージ済み。Player/Enemy/Goal の Prefab 化は §15）
+対象ブランチ: `feature/action-assist`（地面・高台の Tilemap 化、日本語フォント対応は `feature/tilemap` ブランチで実施済み・マージ済み。Player/Enemy/Goal の Prefab 化は §15）
 Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.GetAxis` は不可、`UnityEngine.InputSystem.Keyboard.current` を使う）
 
 このドキュメントは「後日、続きの作業をするとき」に現状を把握するためのもの。
@@ -14,18 +14,18 @@ Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.Ge
 
 - **操作は2系統**
   - **通常操作**: 左右移動のみ（A/D または ←/→）。
-  - **メインアクション**: スペース / エンター / テンキー Enter / 左クリック（2026-09-12、会話送りやメニュー決定と操作系を統一するため追加）。ジャンプ / ダッシュ / 攻撃 のいずれかが発動する。
+  - **メインアクション**: スペース / エンター / テンキー Enter / 左クリック（会話送りやメニュー決定と操作系を統一するため追加）。ジャンプ / ダッシュ / 攻撃 のいずれかが発動する。
     ※ 名称は必ず「メインアクション」。以前「特殊操作」と呼んでいたが変更済み。
 - **体力**: カービィ風。敵に接触で 1 ダメージ、3 回でミス（→ リザルト画面。未実装）。
 - **落下 = 即ミス**（未実装）。
 - **ステージ数**: 全 5 ステージ（企画確定）。
 - **画面遷移**: タイトル →（Game Start）→ プロローグ会話 → ステージ選択 → ステージ（初回入場時は開始会話）→ リザルト（クリア / ミス）→「次のステージ」/「リトライ」。
-- **会話 / プロローグ**（2026-09-07, §9-2）: ゲーム開始時のプロローグと、各ステージ初回入場時の会話。データは `DialogueSequence`（ScriptableObject）。スペース / エンターで送る一本道。
+- **会話 / プロローグ**（§9-2）: ゲーム開始時のプロローグと、各ステージ初回入場時の会話。データは `DialogueSequence`（ScriptableObject）。スペース / エンターで送る一本道。
 
-### 企画側からの仕様確認（2026-09-05 回答ぶん。これが優先）
+### 企画側からの仕様確認（回答ぶん。これが優先）
 
 - **ダッシュ以外での敵接触はすり抜けない**。実体としてぶつかり、ノックバック + 1 ダメージ。すり抜けるのはダッシュ中だけ（ダッシュは無敵）。
-- **地面は Tilemap で作る**（2026-09-09 に移行済み。§7 / §9-1）。1 セル = 1 ワールドユニット。仮タイル素材で実装済みで、最終的に 90×90px（PPU 90）の地面タイルに差し替える想定。**高台も 2026-09-11 に Tilemap 化済み**（§7「一方通行の高台」）、現在は Stage3 のみに配置。参考記事: https://zenn.dev/sasshi_i/articles/bcc55419a1af9d
+- **地面は Tilemap で作る**（移行済み。§7 / §9-1）。1 セル = 1 ワールドユニット。仮タイル素材で実装済みで、最終的に 90×90px（PPU 90）の地面タイルに差し替える想定。**高台も Tilemap 化済み**（§7「一方通行の高台」）、現在は Stage3 のみに配置。参考記事: https://zenn.dev/sasshi_i/articles/bcc55419a1af9d
 - **ゴールに全敵撃破は不要**。雑魚は回避して進んでよい。**ボスは撃破必須**（何かが進行を塞ぐ想定）。ゴール判定自体は未実装。
 - **空中ジャンプ不可**（ただし後述のコヨーテタイムとダッシュ→ジャンプ特例あり）。
 - **アクションの並び**: コンボは 2 つまで。同じアクションは 2 連続で並ばない。**ステージ全体で並びは固定**（ゲームオーバーして最初からやり直しても同じ順番）。
@@ -44,7 +44,7 @@ Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.Ge
 - **並びは決定的**: `stageSeed`（既定 12345）を種にした専用 `System.Random` で生成。`Awake` で毎回作り直すので、リトライしても同じ並びが再現される。`UnityEngine.Random` はグローバル状態を他と共有するため使わない。
 - **連続同一禁止**: 直前と同じ結果が出たら振り直す（`Roll()`）。振り直しループは `lottery.Length > 1` のときだけ回る＝**抽選対象が1種類なら振り直しはスキップ**（無限ループ・エラーなし）。上限 20 回。`lottery` 未設定時は Jump をフォールバック。
 - `lottery` 配列で抽選対象を指定（同じ値を複数入れると重み付けになる）。既定は Jump / Dash / Attack 各 1。
-- **ステージごとの使用可能アクション（2026-09-09）**: `StageSet.stages[i].allowedActions`（`MainActionType[]`, インスペクター）が設定されていれば、`MainActionQueue.Awake` が `lottery` をそれで**上書き**する。ステージ判定は `GameFlow.ActiveStageIndex`（アクティブシーン名 → `StageSet` の index。フロー経由でも直接 Play でも正しい）。
+- **ステージごとの使用可能アクション**: `StageSet.stages[i].allowedActions`（`MainActionType[]`, インスペクター）が設定されていれば、`MainActionQueue.Awake` が `lottery` をそれで**上書き**する。ステージ判定は `GameFlow.ActiveStageIndex`（アクティブシーン名 → `StageSet` の index。フロー経由でも直接 Play でも正しい）。
   - **現在の設定**: Stage1 = `Dash` のみ ／ Stage2 = `Dash`, `Attack` ／ Stage3〜5 = 3 つ全部（空でもシーン既定が 3 つなので同じ）。
   - Stage1 は抽選対象が Dash だけ → 上記のとおり連続 Dash が並ぶ（想定どおり、バグではない）。
 - `event Action OnChanged` を発火 → `ActionBarUI` が購読して表示更新。
@@ -52,14 +52,14 @@ Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.Ge
 ### 2-2. アクションバー UI（`ActionBarUI`, HUD_Canvas/ActionBar）
 
 - `Slot0..3` の背景 Image 色とラベル Text を `queue.Peek(i)` で更新。色: Jump=青 / Dash=黄 / Attack=赤。
-- **クールタイム/コンボ受付の可視化（2026-09-19追加）**: 各スロットに背景 Image（常に「暗い」色）と、その上に重ねた `Fill` という子 Image（常に「明るい＝デフォルト」色、`Image.type=Filled` / `fillMethod=Vertical` / `fillOrigin=Bottom`）を持つ。`fillAmount`（0〜1）を毎フレーム変えることで、長方形の**下からどれだけ明るいか**を表現する。「明るい」＝今までのデフォルト色そのもの、「暗い」＝それを`dimAmount`（`[Range(0,1)]`、既定0.6）ぶん黒に寄せた色（`Color.Lerp(color, Color.black, dimAmount)`）。`dimAmount`を大きくするほど暗い部分が黒に近づきコントラストが強くなり、小さくするほど元の色に近づいてコントラストが弱くなる。
-  - 状況によって明るさが変わるのは**Slot0（次に発動するアクション）だけ**。**Slot1以降は状況によらず常に`fillAmount=1`（全体明るい）**（2026-09-19、実装直後にユーザーがプレイして「他の3枠は常に明るいままの方がよい」と判断し、コンボ受付中/クールタイム中でのSlot1以降の暗転を撤廃）。
+- **クールタイム/コンボ受付の可視化**: 各スロットに背景 Image（常に「暗い」色）と、その上に重ねた `Fill` という子 Image（常に「明るい＝デフォルト」色、`Image.type=Filled` / `fillMethod=Vertical` / `fillOrigin=Bottom`）を持つ。`fillAmount`（0〜1）を毎フレーム変えることで、長方形の**下からどれだけ明るいか**を表現する。「明るい」＝今までのデフォルト色そのもの、「暗い」＝それを`dimAmount`（`[Range(0,1)]`、既定0.6）ぶん黒に寄せた色（`Color.Lerp(color, Color.black, dimAmount)`）。`dimAmount`を大きくするほど暗い部分が黒に近づきコントラストが強くなり、小さくするほど元の色に近づいてコントラストが弱くなる。
+  - 状況によって明るさが変わるのは**Slot0（次に発動するアクション）だけ**。**Slot1以降は状況によらず常に`fillAmount=1`（全体明るい）**（実装直後にユーザーがプレイして「他の3枠は常に明るいままの方がよい」と判断し、コンボ受付中/クールタイム中でのSlot1以降の暗転を撤廃）。
   - Slot0：通常時は`fillAmount=1`。**コンボ受付中**（`MainActionController.ComboGraceFraction01 > 0`）は受付時間の**残り割合**をそのまま`fillAmount`に（時間経過とともに下から暗くなっていく）。**クールタイム中**（コンボ待ちではなく発動不可）はクールタイムの**経過割合**を`fillAmount`に（時間経過とともに下から明るくなっていく）。**ジャンプ由来のクールタイム**（`MainActionController.IsJumpCooldownActive`）は着地時刻が不定で経過割合を安定して出せないため、着地するまで常に`fillAmount=0`（全体暗いまま、グラデーションなし）で扱う。
-  - **2026-09-21の仕様変更（§2-4参照）以降**：コンボ受付時間とクールタイムはそもそも同じもの（`_busy`）になったため、上記の「移行時に経過済みに見える」という配慮自体が不要になった。
+  - **仕様変更（§2-4参照）以降**：コンボ受付時間とクールタイムはそもそも同じもの（`_busy`）になったため、上記の「移行時に経過済みに見える」という配慮自体が不要になった。
   - 先行入力（`InInputBufferZone`/`InputBufferZoneFraction01`、既存の頭上デバッグゲージ`PlayerDebugBars`が使用）は、このアクションバーUIには反映しない（ユーザー確認済み、対象外のまま）。
   - `ActionBarUI`は`MainActionQueue.OnChanged`に加えて毎フレーム`Update()`でも再計算するように変更（割合は毎フレーム変わるため）。`controller`（`MainActionController`）フィールドを新規追加、`queue`と同様Tag=Playerから自動解決。
-  - **バグ修正（2026-09-19）**: 実装直後、`dimAmount`をどんな値にしても見た目が変化しない不具合があった。原因は`Fill`のImageに`Source Image`（Sprite）が未設定だったこと。Unityの`Image`は**Spriteが無いと`type=Filled`/`fillAmount`の設定を無視して常に単純な塗りつぶし四角形として描画する**仕様のため、スクリプト側の計算は正しくても見た目には反映されなかった。`Assets/Art/WhiteSquare.png`（既存の未使用アセット、`spriteImportMode`を`Multiple`→`Single`に変更）を`Fill`のSource Imageに割り当てて解決。Playで、クールタイム中（経過70%）・コンボ受付中（残り20%）とも`fillAmount`が正しい値になり、見た目にも明暗の境目が出ることをスクリーンショットで確認済み。
-  - **発動可能な瞬間を明示する枠（`nextActionBorder`、2026-09-19追加）**: 「クールタイムがほぼ明けている状態」と「完全に発動可能な状態」が明るさだけだと見分けにくいというユーザー指摘への対策。`HUD_Canvas/ActionBar/Slot0Border`（Slot0より一回り大きい白いImage、Slot0の背後・同じ`ActionBar`の子として配置し、Slot0の直前のsibling indexに置くことで縁だけが見える）を、**発動可能なとき（待機中、またはコンボ受付中）だけ`SetActive(true)`**、クールタイム中（ジャンプ含む）は`SetActive(false)`にする。Slot1以降には付けない（Slot0専用）。Playで3状態（待機/クールタイム中/コンボ受付中）とも期待通りの表示・非表示を確認済み。
+  - **バグ修正**: 実装直後、`dimAmount`をどんな値にしても見た目が変化しない不具合があった。原因は`Fill`のImageに`Source Image`（Sprite）が未設定だったこと。Unityの`Image`は**Spriteが無いと`type=Filled`/`fillAmount`の設定を無視して常に単純な塗りつぶし四角形として描画する**仕様のため、スクリプト側の計算は正しくても見た目には反映されなかった。`Assets/Art/WhiteSquare.png`（既存の未使用アセット、`spriteImportMode`を`Multiple`→`Single`に変更）を`Fill`のSource Imageに割り当てて解決。Playで、クールタイム中（経過70%）・コンボ受付中（残り20%）とも`fillAmount`が正しい値になり、見た目にも明暗の境目が出ることをスクリーンショットで確認済み。
+  - **発動可能な瞬間を明示する枠（`nextActionBorder`）**: 「クールタイムがほぼ明けている状態」と「完全に発動可能な状態」が明るさだけだと見分けにくいというユーザー指摘への対策。`HUD_Canvas/ActionBar/Slot0Border`（Slot0より一回り大きい白いImage、Slot0の背後・同じ`ActionBar`の子として配置し、Slot0の直前のsibling indexに置くことで縁だけが見える）を、**発動可能なとき（待機中、またはコンボ受付中）だけ`SetActive(true)`**、クールタイム中（ジャンプ含む）は`SetActive(false)`にする。Slot1以降には付けない（Slot0専用）。Playで3状態（待機/クールタイム中/コンボ受付中）とも期待通りの表示・非表示を確認済み。
 
 ### 2-3. 各アクションの挙動（`MainActionController`）
 
@@ -67,28 +67,28 @@ Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.Ge
 - **ダッシュ (`StartDash` + `FixedUpdate`)**: 発動時に向いている方向へ `dashSpeed`（既定 18）で即最高速度。継続時間は `dashClip`（Animator の Dash クリップ）の長さそのもの（既定 0.8 秒、§2-7参照）。
   - ダッシュ中は `gravityScale = 0`、Y 速度 0 固定 → **落下しない**（落とし穴・敵をまたげる）。
   - **前半**（`dashLockFraction` = 0.5 → クリップ長の最初の半分、既定0.4秒）: 最高速度固定、**移動入力を完全に無視**、完全無敵。**この間は効果を解除できない**。
-  - **後半**（既定0.4秒）: **2026-09-23、入力方向（前方/後方/なし）によらず常に同じ挙動に統一**。後半の残り時間のうち`dashDecelFraction`（既定0.5＝後半の半分＝`dashLockFraction`が0.5なら効果時間全体の1/4）ぶんの時間をかけて、`dashSpeed`から`PlayerController.MoveSpeed`（通常の移動速度）まで時間ベースで`Mathf.Lerp`により滑らかに減速する（1フレームでの急変はしない）。目標に達したあとは、そのままクールタイムが明けるまで通常速度で進み続ける。**効果は解除されない**（Animation Event で自然に終わるまで継続）。**後方入力による即時解除は2026-09-23に廃止した**（下記「後方入力キャンセルの廃止」参照）。
-  - **後方入力キャンセルの廃止（2026-09-23）**: 以前は後方入力でダッシュを即座に終了できる仕様だったが、`DashBreak`という専用のAnimatorトリガーで見た目側の終了を伝えていたところ、**原因不明のまま`DashBreak`がオンのまま残り続け**、次にダッシュを発動した瞬間だけ一瞬`Dash`アニメーションになった直後すぐに待機アニメーションへ戻ってしまう（一方で加速・無敵などゲームプレイ上の処理は正常）という再現困難な不具合が発生した。原因の特定は打ち切り、**「後方入力でのキャンセル」という機能自体を丸ごと削除**することで、`DashBreak`という状態そのものをコード・Animator両方から無くし、根本的に解消した。結果として、ダッシュ中に後方入力をしても何も起こらず、前方入力・入力なしと完全に同じ減速カーブをたどる。
+  - **後半**（既定0.4秒）: **入力方向（前方/後方/なし）によらず常に同じ挙動に統一**。後半の残り時間のうち`dashDecelFraction`（既定0.5＝後半の半分＝`dashLockFraction`が0.5なら効果時間全体の1/4）ぶんの時間をかけて、`dashSpeed`から`PlayerController.MoveSpeed`（通常の移動速度）まで時間ベースで`Mathf.Lerp`により滑らかに減速する（1フレームでの急変はしない）。目標に達したあとは、そのままクールタイムが明けるまで通常速度で進み続ける。**効果は解除されない**（Animation Event で自然に終わるまで継続）。**後方入力による即時解除は廃止した**（下記「後方入力キャンセルの廃止」参照）。
+  - **後方入力キャンセルの廃止**: 以前は後方入力でダッシュを即座に終了できる仕様だったが、`DashBreak`という専用のAnimatorトリガーで見た目側の終了を伝えていたところ、**原因不明のまま`DashBreak`がオンのまま残り続け**、次にダッシュを発動した瞬間だけ一瞬`Dash`アニメーションになった直後すぐに待機アニメーションへ戻ってしまう（一方で加速・無敵などゲームプレイ上の処理は正常）という再現困難な不具合が発生した。原因の特定は打ち切り、**「後方入力でのキャンセル」という機能自体を丸ごと削除**することで、`DashBreak`という状態そのものをコード・Animator両方から無くし、根本的に解消した。結果として、ダッシュ中に後方入力をしても何も起こらず、前方入力・入力なしと完全に同じ減速カーブをたどる。
   - `IsDashing` が true の間、`Enemy` 側がプレイヤーとの物理衝突を `Physics2D.IgnoreCollision` で無視（すり抜け）。
   - `OverridesMovement` が true の間、`PlayerController` は速度・向きを書かない（ダッシュが制御）。
-- **攻撃 (`DoAttack` + `AttackHitbox`)**: 前方に子オブジェクトの当たり判定を、**攻撃アニメーション中の一部区間だけ**有効化（前隙・後隙があるため、発動と同時にはもう有効化しない）。触れた敵に `attackDamage`（1）。同じ敵を多重ヒットしない（`HashSet<Enemy>`、有効化時にクリア）。攻撃判定はトリガー。前方距離は `AttackHitbox` の `Transform.localPosition.x` の絶対値をそのまま使う方式（2026-09-13〜）。`Configure()` は毎回その絶対値を向き（`facingSign`）に応じて符号だけ反転させる。これにより、インスペクターで Transform の X を直接編集すればそのまま前後距離の調整として反映される。
-  - **2026-09-21**: `DoAttack`はコルーチンではなくなった。全てAnimation Eventベース（§2-7）で、`WaitForSeconds`は使わない。
-  - **前隙・後隙（2026-09-21追加）**: Attack クリップ（既定0.5秒）の中に3つの Animation Event。`"AttackHitboxOn"`（既定 t=0.15秒）で`attackHitbox.Configure()`＋`SetActive(true)`、`"AttackHitboxOff"`（既定 t=0.35秒）で`SetActive(false)`、`"AttackEnd"`（Clip末尾、t=0.5秒）で busy（クールタイム兼コンボ受付）を終了。つまり最初の0.15秒（前隙）と最後の0.15秒（後隙）は攻撃判定が出ておらず、中間の0.2秒だけ判定が有効。前隙・後隙の長さを変えたい場合はAnimation Eventの時刻を、攻撃判定発生中の長さを変えたい場合はOn/Offの間隔を調整すればよい。
+- **攻撃 (`DoAttack` + `AttackHitbox`)**: 前方に子オブジェクトの当たり判定を、**攻撃アニメーション中の一部区間だけ**有効化（前隙・後隙があるため、発動と同時にはもう有効化しない）。触れた敵に `attackDamage`（1）。同じ敵を多重ヒットしない（`HashSet<Enemy>`、有効化時にクリア）。攻撃判定はトリガー。前方距離は `AttackHitbox` の `Transform.localPosition.x` の絶対値をそのまま使う方式。`Configure()` は毎回その絶対値を向き（`facingSign`）に応じて符号だけ反転させる。これにより、インスペクターで Transform の X を直接編集すればそのまま前後距離の調整として反映される。
+  - `DoAttack`はコルーチンではなくなった。全てAnimation Eventベース（§2-7）で、`WaitForSeconds`は使わない。
+  - **前隙・後隙**: Attack クリップ（既定0.5秒）の中に3つの Animation Event。`"AttackHitboxOn"`（既定 t=0.15秒）で`attackHitbox.Configure()`＋`SetActive(true)`、`"AttackHitboxOff"`（既定 t=0.35秒）で`SetActive(false)`、`"AttackEnd"`（Clip末尾、t=0.5秒）で busy（クールタイム兼コンボ受付）を終了。つまり最初の0.15秒（前隙）と最後の0.15秒（後隙）は攻撃判定が出ておらず、中間の0.2秒だけ判定が有効。前隙・後隙の長さを変えたい場合はAnimation Eventの時刻を、攻撃判定発生中の長さを変えたい場合はOn/Offの間隔を調整すればよい。
   - もし攻撃の効果中に別のアクションへコンボした場合、Animation Event が発火しなくなる（Animator が上書きされて Attack クリップの再生が中断するため）ので、`Execute()`側で強制的にヒットボックスを閉じる保険が入っている（`EndBusy(Attack)`側にも同様の保険がある）。
-  - **バグ修正（2026-09-19、ラスボスに攻撃が当たらないことがある）**: 追尾弾がしばらく生成されて画面に映っている状況でラスボスを攻撃すると、ダメージが入らず、かつ追尾弾も消滅しない不具合があった。原因は `AttackHitbox` にも `Enemy3`（ラスボス）にも `Rigidbody2D` が付いておらず、双方とも実質 Static 扱いだったこと。**プレイヤーが移動しながら攻撃すると、`AttackHitbox` はプレイヤーの `Rigidbody2D`（Dynamic）の子として動いている状態になるため `OnTrigger` 系が正常に発火するが、プレイヤーが静止した状態で攻撃を発動すると `AttackHitbox` も静止した状態になり、たとえラスボスの当たり判定と重なっていても `OnTrigger` が発火しないことがある**（ユーザーが実機検証で特定）。**対処として `AttackHitbox` のプレハブに `Rigidbody2D` を追加**。これにより本不具合は解消。
+  - **バグ修正（ラスボスに攻撃が当たらないことがある）**: 追尾弾がしばらく生成されて画面に映っている状況でラスボスを攻撃すると、ダメージが入らず、かつ追尾弾も消滅しない不具合があった。原因は `AttackHitbox` にも `Enemy3`（ラスボス）にも `Rigidbody2D` が付いておらず、双方とも実質 Static 扱いだったこと。**プレイヤーが移動しながら攻撃すると、`AttackHitbox` はプレイヤーの `Rigidbody2D`（Dynamic）の子として動いている状態になるため `OnTrigger` 系が正常に発火するが、プレイヤーが静止した状態で攻撃を発動すると `AttackHitbox` も静止した状態になり、たとえラスボスの当たり判定と重なっていても `OnTrigger` が発火しないことがある**（ユーザーが実機検証で特定）。**対処として `AttackHitbox` のプレハブに `Rigidbody2D` を追加**。これにより本不具合は解消。
 
-### 2-4. クールタイム＝コンボ受付時間（2026-09-21、仕様変更）
+### 2-4. クールタイム＝コンボ受付時間（仕様変更）
 
 **「クールタイム」と「コンボ受付時間」は同じもの**になった。単発で終わらせてもコンボにしても、次に動けるようになるタイミングは一致する（＝一貫性のある操作方法にするため、というのが変更理由）。内部的には `MainActionController._busy`（`None`/`Dash`/`Jump`/`Attack`の enum）で一元管理する。`_busy != None` の間は次のアクションを発動できない（＝クールタイム中）が、`_comboStep == 1`（1つ目発動済み・2つ目未発動）でもあれば、その間に発動した入力は「2つ目」として受け付けられる（＝コンボ受付中）。**`IsReady => _busy == None`**。
 
 - **ダッシュ / 攻撃**: それぞれの AnimationClip（`dashClip` / `attackClip`）の長さぶん。Clip の末尾に仕込んだ Animation Event が発火した瞬間に `_busy` が `None` に戻る（§2-7）。**効果時間を変えたい場合は AnimationClip の長さを変える**（インスペクターの数値ではない）。
-- **ジャンプ**: 今まで通り「着地するまで」。**滞空時間に上限は無い**（2026-09-21、以前あった `jumpAirCooldownCap`＝3秒の保険は撤廃。着地することだけが終了条件）。実装は `UpdateJumpBusy()`：発動後にまず「実際に地面を離れたか」（`_jumpLeftGround`）を確認 → その後 `IsGrounded` が再び true になった瞬間に `_busy = None`。発動しても `JumpLiftoffGrace`（0.25 秒 const、これは維持）以内に浮かなければ「着地済み」とみなして解除。
+- **ジャンプ**: 今まで通り「着地するまで」。**滞空時間に上限は無い**（以前あった `jumpAirCooldownCap`＝3秒の保険は撤廃。着地することだけが終了条件）。実装は `UpdateJumpBusy()`：発動後にまず「実際に地面を離れたか」（`_jumpLeftGround`）を確認 → その後 `IsGrounded` が再び true になった瞬間に `_busy = None`。発動しても `JumpLiftoffGrace`（0.25 秒 const、これは維持）以内に浮かなければ「着地済み」とみなして解除。
 - **コンボが無効なステージ（Stage1など）での扱い**: 無効化されるのは「その間に次のアクションをコンボとして発動できるか」だけ。**busy の長さ自体（＝実質的なクールタイム）は他ステージと変わらない**。つまり、コンボ有効なステージなら攻撃のクールタイム兼コンボ受付時間（既定0.5秒）の間に次のアクションをコンボとして発動することも、あえて何もせずクールタイムとして消費することもできるが、コンボ無効ステージでは同じ0.5秒が単純に「何もできないクールタイム」として扱われる。
 - **旧仕様との違い**: 以前は `dashCooldown`/`attackCooldown`（固定2秒）というクールタイム専用の値と、`comboGraceTime`（固定0.8秒、クールタイムとは独立）という別々の値があったが、**両方とも廃止**。この変更に伴い、ダッシュ・攻撃の実質的なクールタイムは大幅に短縮された（2秒 → 0.8秒/0.5秒）。ゲームバランスが変わることは意図している。
 
 ### 2-5. コンボ（連続発動）
 
-- **ステージごとに無効化できる（2026-09-09）**: `StageSet.stages[i].disableCombos` が true、または `allowedActions` が実質1種類のステージでは、`MainActionController._combosEnabled = false` になる（`Awake` で `GameFlow.ActiveStageIndex` から判定）。無効時は `comboContinuation` が常に false ＝ **1 回発動したら、その busy が明けるまで次は出せない**。**現在 Stage1 が該当**（Dash のみ）。
+- **ステージごとに無効化できる**: `StageSet.stages[i].disableCombos` が true、または `allowedActions` が実質1種類のステージでは、`MainActionController._combosEnabled = false` になる（`Awake` で `GameFlow.ActiveStageIndex` から判定）。無効時は `comboContinuation` が常に false ＝ **1 回発動したら、その busy が明けるまで次は出せない**。**現在 Stage1 が該当**（Dash のみ）。
 - **受付猶予 ＝ busy の間ずっと**（§2-4参照。以前あった`comboGraceTime`という独立パラメータは廃止）。
 - **最大 2 連続**。2 つ目を発動すると、その時点で `_comboStep` が 0 に戻り、コンボ受付は打ち切り（3 連目は無い）。
 - **効果の合成**: 特別な合成処理はなく「2 つのアクションを続けて発動するだけ」。
@@ -104,46 +104,46 @@ Unity 6000.3.11f1 / URP / 2D / 入力は **新 Input System のみ**（`Input.Ge
 - 実装（`MainActionController`）:
   - `Update()` で発動入力押下時、まず `TryTrigger()`（発動できたか `bool` を返す）。**出せなかった & `InInputBufferZone`** なら `_bufferedInput = true`（`_bufferedInputExpiry = Time.time + 0.4`＝`BufferedInputMaxLife` で失効させる保険つき）。
   - 毎フレーム、`_bufferedInput` かつ `IsReady` かつ **`AnimatorSettled()`**（後述）になったら消費して `TryTrigger()`。ライブ入力で発動できたときは残っていた記憶を破棄。`OnDisable` でもクリア。
-  - **バグ修正（2026-09-23）：コンボ無効なステージ（Stage1など）で、ダッシュの効果時間中に次のダッシュを先行入力しておくと、ゲームプレイ上は正しく2回目のダッシュが始まる（加速・無敵になる）のに、Animatorの見た目だけ`Idle`/`Move`のままになってしまう不具合があった。** ユーザーが実機で`Animator`ウィンドウを見ながら特定した真因: `_busy`は`"DashEnd"`Animation Eventで即座に`None`に戻るが、**Animator自身がその古い`Dash`状態から実際に抜け始める（遷移が始まる）のは、その1ステップ後**。つまり`IsReady`が立った「その瞬間」に`TryTrigger()`→`animator.SetTrigger("Dash")`を呼ぶと、Animatorはまだ完全に古い`Dash`状態のまま（`IsInTransition(0)==false`、`GetCurrentAnimatorStateInfo(0)`は`Dash`のまま）。この状態で`AnyState→Dash`遷移条件が成立しても、**既に`Dash`state内にいるため何も起こらず、トリガーだけが消費されて終わる**（Animatorウィンドウでは遷移の矢印が一瞬点灯するが、実際の状態遷移は起きない）。その後、古い方の`Dash`→`Idle`遷移（`DashBreak`）はそのまま予定通り発火し、Animatorは`Idle`/`Move`へ落ち着いてしまう——ゲームプレイ上は新しい（2回目の）ダッシュが確定しているにも関わらず。Play実機での`Animator.GetCurrentAnimatorStateInfo`/`IsInTransition`のログ確認で、`_busy`が`None`になった直後の1〜2ステップは`state=Dash`のまま（`IsInTransition=false`）→さらに後で`IsInTransition=true`（古い方のDash→Idle遷移中）という順序を実際に確認し、上記の機構を裏付けた。
+  - **バグ修正：コンボ無効なステージ（Stage1など）で、ダッシュの効果時間中に次のダッシュを先行入力しておくと、ゲームプレイ上は正しく2回目のダッシュが始まる（加速・無敵になる）のに、Animatorの見た目だけ`Idle`/`Move`のままになってしまう不具合があった。** ユーザーが実機で`Animator`ウィンドウを見ながら特定した真因: `_busy`は`"DashEnd"`Animation Eventで即座に`None`に戻るが、**Animator自身がその古い`Dash`状態から実際に抜け始める（遷移が始まる）のは、その1ステップ後**。つまり`IsReady`が立った「その瞬間」に`TryTrigger()`→`animator.SetTrigger("Dash")`を呼ぶと、Animatorはまだ完全に古い`Dash`状態のまま（`IsInTransition(0)==false`、`GetCurrentAnimatorStateInfo(0)`は`Dash`のまま）。この状態で`AnyState→Dash`遷移条件が成立しても、**既に`Dash`state内にいるため何も起こらず、トリガーだけが消費されて終わる**（Animatorウィンドウでは遷移の矢印が一瞬点灯するが、実際の状態遷移は起きない）。その後、古い方の`Dash`→`Idle`遷移（`DashBreak`）はそのまま予定通り発火し、Animatorは`Idle`/`Move`へ落ち着いてしまう——ゲームプレイ上は新しい（2回目の）ダッシュが確定しているにも関わらず。Play実機での`Animator.GetCurrentAnimatorStateInfo`/`IsInTransition`のログ確認で、`_busy`が`None`になった直後の1〜2ステップは`state=Dash`のまま（`IsInTransition=false`）→さらに後で`IsInTransition=true`（古い方のDash→Idle遷移中）という順序を実際に確認し、上記の機構を裏付けた。
     - **なぜコンボ無効ステージで起きやすいか**: コンボ有効なステージでは、busy中の先行押下は`comboContinuation`が成立して`TryTrigger()`が**即座に**成功する（本来のコンボの仕様どおり、`_bufferedInput`を経由しない）。コンボ無効ステージでは`comboContinuation`が常にfalseなので、busy中の押下は必ず一旦`_bufferedInput`に積まれ、`IsReady`が立つのを待ってから発動する、という経路を毎回通る。この「`IsReady`が立った瞬間に発動する」という経路そのものが、上記のAnimator側とのタイミング競合を起こす原因だったため、コンボ無効ステージで必ず・確実に再現していた（コンボ有効ステージでも、2連続コンボを使い切った後に3回目を先行入力した場合など、同じ経路を通れば理論上は同じ症状が起こり得る）。
-    - **修正**: `MainActionController.AnimatorSettled()`（新規）を追加。`animator.IsInTransition(0)==false` かつ現在のstateが`Idle`または`Move`であることを確認する。先行入力の発動条件に`IsReady && AnimatorSettled()`を追加し、Animatorが実際に古い状態から完全に抜けたことを確認してから`TryTrigger()`を呼ぶようにした。即時発動（busyでない通常のケース）やコンボ継続（`comboContinuation`）はこの確認の対象外（従来通り即座に割り込む）。ジャンプ・攻撃も同じ先行入力の経路を通るため、同様に恩恵を受ける。Play実機で、`_busy`が`None`になった直後（Animatorがまだ`Dash`のまま）は`AnimatorSettled()==false`で発動が正しく保留され、実際に`Idle`へ到達した瞬間（`settled==true`）に発動すると、正しく`Dash`へ遷移してそのまま維持されることを確認済み。
+    - **修正**: `MainActionController.AnimatorSettled()`を追加。`animator.IsInTransition(0)==false` かつ現在のstateが`Idle`または`Move`であることを確認する。先行入力の発動条件に`IsReady && AnimatorSettled()`を追加し、Animatorが実際に古い状態から完全に抜けたことを確認してから`TryTrigger()`を呼ぶようにした。即時発動（busyでない通常のケース）やコンボ継続（`comboContinuation`）はこの確認の対象外（従来通り即座に割り込む）。ジャンプ・攻撃も同じ先行入力の経路を通るため、同様に恩恵を受ける。Play実機で、`_busy`が`None`になった直後（Animatorがまだ`Dash`のまま）は`AnimatorSettled()==false`で発動が正しく保留され、実際に`Idle`へ到達した瞬間（`settled==true`）に発動すると、正しく`Dash`へ遷移してそのまま維持されることを確認済み。
     - **試行錯誤の記録**: 当初はAnimator Controller側の問題（`Dash→Idle`の冗長な二重経路、`interruptionSource`の既定値`None`）を疑って2つの修正を試したが、いずれも実機で症状が直っておらず、ユーザーの指示で元に戻した（§2-7参照）。真因はコード側（`MainActionController`のタイミング）にあった。
 - **受付区間（`InInputBufferZone`）と CD ゲージ上の割合（`InputBufferZoneFraction01`）を公開** → `PlayerDebugBars` が色付き表示に使う（§8）。
   - **ダッシュ / 攻撃**: 残り `<= inputBufferTime` で受付。割合 = `inputBufferTime / (dashClip または attackClip の長さ)`。
-  - **ジャンプ**（着地ベースで時間が不定）: `PlayerController.TryPredictLandingTime()` で「着地まで `<= inputBufferTime` 秒」と予測できたときだけ受付。予測不可（上昇中・真下に地面なし）なら受け付けない。**滞空時間の上限が無くなったため、ゲージ上の区間表示（`_bufferZoneFraction`）は出さない**（2026-09-21、以前は`jumpAirCooldownCap`基準の目安表示だったが、その基準自体が無くなった）。
+  - **ジャンプ**（着地ベースで時間が不定）: `PlayerController.TryPredictLandingTime()` で「着地まで `<= inputBufferTime` 秒」と予測できたときだけ受付。予測不可（上昇中・真下に地面なし）なら受け付けない。**滞空時間の上限が無くなったため、ゲージ上の区間表示（`_bufferZoneFraction`）は出さない**（以前は`jumpAirCooldownCap`基準の目安表示だったが、その基準自体が無くなった）。
 - **`PlayerController.TryPredictLandingTime(out float seconds)`**: 足元中央から真下へレイ 1 本 → 距離 `d` と `vy`・重力（`_baseGravityScale * Physics2D.gravity.y`）から `d = v0·t + ½g·t²` の正の根で着地秒数を出す簡易予測。呼ぶのは「ジャンプ busy 中かつ非上昇」のときだけなので負荷は無視できる。台の端などは誤差あり。
 
-### 2-7. アニメーション（`Animator` + `AnimationEventRelay`、2026-09-21追加）
+### 2-7. アニメーション（`Animator` + `AnimationEventRelay`）
 
 プレイヤーの見た目のイラスト素材は準備済みだが、まだUnityエディターにはインポートしていない（担当イラストレーターがAI学習利用を懸念しており、プログラミング側を一通り終えてからインポートする方針のため）。そのため、実際のイラストが入るまでの仮素材として、既存の`PlayerArrow`スプライト（`SpriteRenderer.color`で青に着色されているだけの矢印）を**状態ごとに色だけ変える**方式にした。実際のイラストが入ったら、各Clipの中身（スプライト差し替えなど）を作り直すだけで、スクリプト側は変更不要な想定。
 
-- **バグ修正（2026-09-21、初回実装直後）**: 仮のAnimationClipとして最初`Transform.m_LocalPosition.x`に同じ値の2キーフレームを打った「見た目に一切変化のないダミーカーブ」を使っていたところ、**プレイヤーが一切移動できなくなる**不具合が発生した（見た目の左右反転は機能するが、位置が変わらない）。原因は、Animator が Player 自身の GameObject に付いており、Playerの`Transform.m_LocalPosition`を**毎フレーム、どの状態でも常に同じ値へ強制的に書き戻していた**ため（アニメーションが物理演算による位置変更を毎フレーム上書きしてしまっていた）。対処として、ダミーカーブを`Transform`ではなく`SpriteRenderer.m_Color`（RGBA、計4本のfloatカーブ）に変更。これなら位置には一切影響せず、しかも「状態ごとに色を変える」という仮素材仕様をそのまま兼ねられた（当時は状態ごとに`Idle`=青（無変更）/`Move`=暗めの青/`Jump`=明るめの青/`Dash`=黄/`Attack`=赤/`Dead`=ほぼ黒、に着色していた）。
-- **本番素材インポートの準備として色カーブを全削除（2026-09-21）**: 本番のイラスト素材を入れる作業に入るにあたり、上記の`SpriteRenderer.m_Color`ダミーカーブを6Clipすべてから削除（`remove_animation_curve`、アセット自体（`PlayerArrow.png`）は削除していない）。**Animation Event（Dash/Attackの発動タイミング系イベント）はそのまま残してある**。カーブを全て削除しても`AnimationClip.length`とイベントの時刻は保持されることを確認済み（Unity側がカーブと独立して長さを保持する）ので、キーフレームが1つも無い状態でも`dashClip.length`/`attackClip.length`に依存する既存のクールタイム計算（§2-4）や`hasExitTime`の遷移は壊れていない。現状、各Clipは実質「長さとAnimation Eventだけを持つ空の器」になっている。今後、本番のスプライトアニメーション用カーブ（Sprite差し替えなど）をここに追加していく想定。
+- **バグ修正（初回実装直後）**: 仮のAnimationClipとして最初`Transform.m_LocalPosition.x`に同じ値の2キーフレームを打った「見た目に一切変化のないダミーカーブ」を使っていたところ、**プレイヤーが一切移動できなくなる**不具合が発生した（見た目の左右反転は機能するが、位置が変わらない）。原因は、Animator が Player 自身の GameObject に付いており、Playerの`Transform.m_LocalPosition`を**毎フレーム、どの状態でも常に同じ値へ強制的に書き戻していた**ため（アニメーションが物理演算による位置変更を毎フレーム上書きしてしまっていた）。対処として、ダミーカーブを`Transform`ではなく`SpriteRenderer.m_Color`（RGBA、計4本のfloatカーブ）に変更。これなら位置には一切影響せず、しかも「状態ごとに色を変える」という仮素材仕様をそのまま兼ねられた（当時は状態ごとに`Idle`=青（無変更）/`Move`=暗めの青/`Jump`=明るめの青/`Dash`=黄/`Attack`=赤/`Dead`=ほぼ黒、に着色していた）。
+- **本番素材インポートの準備として色カーブを全削除**: 本番のイラスト素材を入れる作業に入るにあたり、上記の`SpriteRenderer.m_Color`ダミーカーブを6Clipすべてから削除（`remove_animation_curve`、アセット自体（`PlayerArrow.png`）は削除していない）。**Animation Event（Dash/Attackの発動タイミング系イベント）はそのまま残してある**。カーブを全て削除しても`AnimationClip.length`とイベントの時刻は保持されることを確認済み（Unity側がカーブと独立して長さを保持する）ので、キーフレームが1つも無い状態でも`dashClip.length`/`attackClip.length`に依存する既存のクールタイム計算（§2-4）や`hasExitTime`の遷移は壊れていない。現状、各Clipは実質「長さとAnimation Eventだけを持つ空の器」になっている。今後、本番のスプライトアニメーション用カーブ（Sprite差し替えなど）をここに追加していく想定。
 
-- **状態**: `Idle` / `Move` / `Dash` / `Jump` / `Attack` / `Dead` / `Clear`（2026-09-23追加）の7つ（`Assets/Animations/Player.controller`、Base Layer 1層のみ）。
+- **状態**: `Idle` / `Move` / `Dash` / `Jump` / `Attack` / `Dead` / `Clear`の7つ（`Assets/Animations/Player.controller`、Base Layer 1層のみ）。
   - `Idle`⇔`Move`: `Moving`（Bool）パラメータで自動的に行き来する（`MainActionController.Update()`が毎フレーム`_player.MoveInput`から設定）。
   - `AnyState`→`Dash`/`Jump`/`Attack`/`Dead`/`Clear`: 各同名の Trigger パラメータで**即座に割り込む**（コンボで2つのアクションが同時に効果を持つ場合でも、見た目のアニメーションは後から発動した方が単純に上書きする。レイヤー分けなどは行っていない、当面のプレースホルダー仕様。実際のイラストが入る際に見直す可能性あり）。
-  - `Dash`→`Idle`: Exit Time（clip終端、duration 0）のみ。**以前あった`DashBreak`トリガー経由の経路（後方入力での即時終了用）は2026-09-23に完全撤去した**（後方入力キャンセル機能自体の廃止に伴う。`DashBreak`パラメータ自体もAnimator Controllerから削除済み。§2-3参照）。
+  - `Dash`→`Idle`: Exit Time（clip終端、duration 0）のみ。**以前あった`DashBreak`トリガー経由の経路（後方入力での即時終了用）は完全撤去した**（後方入力キャンセル機能自体の廃止に伴う。`DashBreak`パラメータ自体もAnimator Controllerから削除済み。§2-3参照）。
   - `Attack`→`Idle`: Exit Time（clip終端、duration 0）のみ。
-  - `Jump`→`Idle`: `Landed`パラメータのみ（着地検出時に`MainActionController`が発火。滞空時間が不定なため Exit Time は使えない）。**2026-09-23、Trigger→Boolへ変更**（理由は下記バグ修正参照）。
+  - `Jump`→`Idle`: `Landed`パラメータのみ（着地検出時に`MainActionController`が発火。滞空時間が不定なため Exit Time は使えない）。**Trigger→Boolへ変更**（理由は下記バグ修正参照）。
   - `Dead`/`Clear`: 出口の遷移なし（終端state。ステージ終了後はシーンごとリロードされるだけなので後始末は不要）。
-  - **一連のバグ修正の経緯（2026-09-23）**: 「左右移動しながらダッシュを連打すると、実際はダッシュ中なのにAnimatorの状態が`Move`のままになる」症状に対し、最初に2つのAnimator Controller側の修正（①`Dash`→`Idle`の冗長な二重経路の解消、②全遷移の`interruptionSource`を`Source`に変更）を試したが、**ユーザーが実機で確認したところ症状は直っていなかった**ため、両方ともユーザーの指示で一旦元の状態へ差し戻した。本当の原因は先行入力のタイミング（`MainActionController.cs`側、§2-6「先行入力」の`AnimatorSettled()`で対処済み）だった。その修正で改善したものの、**別の症状（後方入力で終了させる際に使っていた`DashBreak`トリガーが、原因不明のまま「待機状態なのにオンになり続ける」ことがあり、次のダッシュ発動時に一瞬だけ`Dash`アニメーションになってすぐ待機アニメーションへ戻ってしまう）がまだ残っていた**。これ以上の原因特定はコストに見合わないと判断し、**後方入力キャンセル機能自体を丸ごと廃止**（§2-3参照）。結果として`DashBreak`というパラメータ・トリガー・遷移がコード・Animator Controller両方から完全に無くなり、この状態が最終形。
-  - **ジャンプ側の同種バグ修正（2026-09-23）**: ダッシュの不具合解消後、同じ症状（ジャンプ中に待機アニメーションへ戻ってしまう）がジャンプでも発生していることが判明。実機で`_busy`/`Landed`/Animatorの状態を毎ステップ記録して再現したところ、**着地の物理判定（`_player.IsGrounded`）が、`AnyState→Jump`の入場遷移（0.05秒ブレンド）がまだ完了する前に成立するケースが実在する**ことを確認（短いジャンプや踏切直後の着地などで起こりうる）。当時`Landed`はTriggerだったため、`EndBusy(Jump)`がこのタイミングで`SetTrigger("Landed")`を呼んでも、**現在stateがまだ`Jump`に到達していない（＝消費できる`Jump→Idle`遷移が存在しない）ため、トリガーは誰にも消費されずに残り続けた**。その後Animatorが実際に`Jump`へ到達した瞬間に運良く拾われることもあれば、次の再ジャンプなど別の遷移に巻き込まれて長時間（体感「着地後はずっとtrueで、次にジャンプするまで戻らない」）固まったままになることもあった（ダッシュの`DashBreak`と同系統だが、出口側ではなく入口側のレース）。**修正**: `Landed`パラメータをTrigger→Boolに変更（`DoJump()`で`SetBool("Landed", false)`してから`SetTrigger("Jump")`、`EndBusy(Jump)`で`SetBool("Landed", true)`）。Boolは「消費されたら自動で戻る」性質を持たないため、`Jump`にまだ到達していないタイミングで`true`になっても単に居座るだけで、Animatorが実際に`Jump`へ到達した瞬間に確実に`Jump→Idle`遷移条件として拾われる（取りこぼしが原理的に起こらない）。Play実機で、上記の競合状態（着地検出が入場ブレンド中に発生するケース）をあえて再現させた上で、`Landed`が`true`のまま保持され、Animatorが`Jump`へ到達した直後に正しく`Idle`へ遷移することを確認。通常の（競合しない）着地サイクルでも従来通り機能することを確認済み。
+  - **一連のバグ修正の経緯**: 「左右移動しながらダッシュを連打すると、実際はダッシュ中なのにAnimatorの状態が`Move`のままになる」症状に対し、最初に2つのAnimator Controller側の修正（①`Dash`→`Idle`の冗長な二重経路の解消、②全遷移の`interruptionSource`を`Source`に変更）を試したが、**ユーザーが実機で確認したところ症状は直っていなかった**ため、両方ともユーザーの指示で一旦元の状態へ差し戻した。本当の原因は先行入力のタイミング（`MainActionController.cs`側、§2-6「先行入力」の`AnimatorSettled()`で対処済み）だった。その修正で改善したものの、**別の症状（後方入力で終了させる際に使っていた`DashBreak`トリガーが、原因不明のまま「待機状態なのにオンになり続ける」ことがあり、次のダッシュ発動時に一瞬だけ`Dash`アニメーションになってすぐ待機アニメーションへ戻ってしまう）がまだ残っていた**。これ以上の原因特定はコストに見合わないと判断し、**後方入力キャンセル機能自体を丸ごと廃止**（§2-3参照）。結果として`DashBreak`というパラメータ・トリガー・遷移がコード・Animator Controller両方から完全に無くなり、この状態が最終形。
+  - **ジャンプ側の同種バグ修正**: ダッシュの不具合解消後、同じ症状（ジャンプ中に待機アニメーションへ戻ってしまう）がジャンプでも発生していることが判明。実機で`_busy`/`Landed`/Animatorの状態を毎ステップ記録して再現したところ、**着地の物理判定（`_player.IsGrounded`）が、`AnyState→Jump`の入場遷移（0.05秒ブレンド）がまだ完了する前に成立するケースが実在する**ことを確認（短いジャンプや踏切直後の着地などで起こりうる）。当時`Landed`はTriggerだったため、`EndBusy(Jump)`がこのタイミングで`SetTrigger("Landed")`を呼んでも、**現在stateがまだ`Jump`に到達していない（＝消費できる`Jump→Idle`遷移が存在しない）ため、トリガーは誰にも消費されずに残り続けた**。その後Animatorが実際に`Jump`へ到達した瞬間に運良く拾われることもあれば、次の再ジャンプなど別の遷移に巻き込まれて長時間（体感「着地後はずっとtrueで、次にジャンプするまで戻らない」）固まったままになることもあった（ダッシュの`DashBreak`と同系統だが、出口側ではなく入口側のレース）。**修正**: `Landed`パラメータをTrigger→Boolに変更（`DoJump()`で`SetBool("Landed", false)`してから`SetTrigger("Jump")`、`EndBusy(Jump)`で`SetBool("Landed", true)`）。Boolは「消費されたら自動で戻る」性質を持たないため、`Jump`にまだ到達していないタイミングで`true`になっても単に居座るだけで、Animatorが実際に`Jump`へ到達した瞬間に確実に`Jump→Idle`遷移条件として拾われる（取りこぼしが原理的に起こらない）。Play実機で、上記の競合状態（着地検出が入場ブレンド中に発生するケース）をあえて再現させた上で、`Landed`が`true`のまま保持され、Animatorが`Jump`へ到達した直後に正しく`Idle`へ遷移することを確認。通常の（競合しない）着地サイクルでも従来通り機能することを確認済み。
 - **Animation Event**: いずれも`AnimationEventRelay.RaiseEvent(string)`を呼ぶイベントとして設定（`AnimationUtility.SetAnimationEvents`、Unity Editor MCPに専用ツールが無いため`eval`のRoslyn経由）。
   - `Player_Dash.anim`：末尾（t=0.8秒）に`"DashEnd"`のみ。
-  - `Player_Attack.anim`：`"AttackHitboxOn"`（t=0.15秒）/`"AttackHitboxOff"`（t=0.35秒）/`"AttackEnd"`（末尾、t=0.5秒）の3つ（2026-09-21、前隙・後隙の追加に伴い2つ増えた）。
+  - `Player_Attack.anim`：`"AttackHitboxOn"`（t=0.15秒）/`"AttackHitboxOff"`（t=0.35秒）/`"AttackEnd"`（末尾、t=0.5秒）の3つ（前隙・後隙の追加に伴い2つ増えた）。
   - `Player_Dead.anim`：末尾付近（t=2.0秒、clip長の約99%）に`"ShowFailPanel"`のみ。
-  - `Player_Clear.anim`（2026-09-23追加、プレースホルダー）：末尾付近（t=0.99秒、clip長の約99%）に`"ShowClearPanel"`のみ。`SpriteRenderer.m_Color.a`のダミーカーブ（0秒・1秒とも値1、見た目に影響しない）だけを持つ長さ1秒・ループなしの器。本番の見た目を作る際はこのカーブを差し替えるだけでよい。
+  - `Player_Clear.anim`（プレースホルダー）：末尾付近（t=0.99秒、clip長の約99%）に`"ShowClearPanel"`のみ。`SpriteRenderer.m_Color.a`のダミーカーブ（0秒・1秒とも値1、見た目に影響しない）だけを持つ長さ1秒・ループなしの器。本番の見た目を作る際はこのカーブを差し替えるだけでよい。
 - **`AnimationEventRelay.cs`（新規、汎用コンポーネント）**: Animator と同じ GameObject に置く。`RaiseEvent(string eventName)`だけを持ち、それを`event Action<string> OnAnimationEvent`として中継するだけ。「何が起きたら何をするか」は一切関知しないので、将来敵キャラのアニメーションにも同じ部品をそのまま使い回せる（敵はコンボの仕組みを持たないので、反応ロジックはキャラクターごとに別に書く前提）。`MainActionController`が`"DashEnd"`/`"AttackEnd"`を購読し、`EndBusy()`を呼ぶ。
-- **死亡アニメーション**: `PlayerHealth.OnDied`を`MainActionController`が購読し、`Dead`トリガーを発火するだけ（`HandlePlayerDied()`）。落下死の場合はカメラ外で見えないことが多いが、それで問題ない（仕様として許容）。**失敗パネルの表示は`MainActionController`ではなく`StageManager`側がAnimation Event（`"ShowFailPanel"`、`Player_Dead.anim`）経由で行う**（2026-09-21、詳細は§9-0「失敗条件」参照）。`Animator.updateMode=UnscaledTime`にしてあるので、死亡確定と同時に`Time.timeScale=0`にしても死亡アニメーションだけは止まらずに再生される。**ステージクリアも2026-09-23に同じ方式へ変更済み**（§9-0「クリア条件」参照）。
+- **死亡アニメーション**: `PlayerHealth.OnDied`を`MainActionController`が購読し、`Dead`トリガーを発火するだけ（`HandlePlayerDied()`）。落下死の場合はカメラ外で見えないことが多いが、それで問題ない（仕様として許容）。**失敗パネルの表示は`MainActionController`ではなく`StageManager`側がAnimation Event（`"ShowFailPanel"`、`Player_Dead.anim`）経由で行う**（詳細は§9-0「失敗条件」参照）。`Animator.updateMode=UnscaledTime`にしてあるので、死亡確定と同時に`Time.timeScale=0`にしても死亡アニメーションだけは止まらずに再生される。**ステージクリアも同じ方式へ変更済み**（§9-0「クリア条件」参照）。
 - **安全策（`WatchdogEffectEnd`）**: Animation Eventが何らかの理由（Clip/Animatorの設定漏れなど）で発火しなかった場合に永久に発動不可のまま固まらないよう、`Update()`で「経過時間が Clip の長さ＋0.5秒を超えたら強制的に`EndBusy`」という保険を追加（通常はここに来る前にAnimation Event側で片付く）。**Dead状態にはこの保険は適用していない**（そもそも`_busy`と無関係で、失敗確定後は`MainActionController`ごと無効化されるため）。
-- **本番のスプライトアニメーション素材、6Clipすべてに導入済み（2026-09-21）**: `Idle`(1フレーム)/`Move`(3フレーム)/`Jump`(1フレーム)/`Dash`(2フレーム)/`Attack`(8フレーム)/`Dead`(1フレーム、今後追加予定)。`m_Sprite`を差し替える`PPtrCurve`として実装されており、`get_animation_clip`の`bindings`一覧には出てこない（floatカーブのみを列挙するツールのため）ので、内容を確認する際は`.anim`ファイルの生YAML（`m_PPtrCurves`）を直接読む必要がある。**Unityのアニメーションウィンドウでクリップの長さを広げると、既存のAnimation Eventの時刻も自動的に動くことがある**（実際にAttack/Dashの各イベントの時刻がスプライト導入後にずれていた）。実装時に置いていた仮の時刻（前隙0.15秒/後隙0.35秒など）は本番素材の尺に合わせて必要ならユーザー側で調整が必要（コード側はイベント名だけを見ているので時刻はいつでも自由に動かしてよい）。
+- **本番のスプライトアニメーション素材、6Clipすべてに導入済み**: `Idle`(1フレーム)/`Move`(3フレーム)/`Jump`(1フレーム)/`Dash`(2フレーム)/`Attack`(8フレーム)/`Dead`(1フレーム、今後追加予定)。`m_Sprite`を差し替える`PPtrCurve`として実装されており、`get_animation_clip`の`bindings`一覧には出てこない（floatカーブのみを列挙するツールのため）ので、内容を確認する際は`.anim`ファイルの生YAML（`m_PPtrCurves`）を直接読む必要がある。**Unityのアニメーションウィンドウでクリップの長さを広げると、既存のAnimation Eventの時刻も自動的に動くことがある**（実際にAttack/Dashの各イベントの時刻がスプライト導入後にずれていた）。実装時に置いていた仮の時刻（前隙0.15秒/後隙0.35秒など）は本番素材の尺に合わせて必要ならユーザー側で調整が必要（コード側はイベント名だけを見ているので時刻はいつでも自由に動かしてよい）。
   - **ハマったポイント**: 空のAnimationClip（カーブが1つも無い状態）は`AnimationClip.length`が信頼できない（`AnimationUtility.SetAnimationClipSettings`で`stopTime`を明示的に設定しても反映されないことがある）。仮素材として「見た目に影響しないダミーカーブ＋Animation Event」を使う場合は、カーブを完全にゼロにしないこと。本番のスプライトカーブが入っていれば、それ自体が長さを正しく決定する。
-  - **キャラクターの位置ずれ修正（2026-09-22、Sprite Pivot）**: `Idle`/`Move`/`Jump`/`Dash`は縦長（256×512px）のシートで、キャラクターの位置がおおむね統一されている（コンテンツ中心はどれもpivot換算で概ね x≈0.50, y≈0.45〜0.47）。一方`Attack`（512×256px、横長）と`Dead`（512×256px）はキャラクターがシート内で偏った位置に描かれており、デフォルトのpivot（0.5, 0.5 = シートの幾何中心）のままだと、他の状態からAttack/Deadへ切り替わった瞬間にキャラクターの見た目の位置がずれる（当たり判定＝Colliderの位置は`Transform`基準で変わらないため、「食らい判定と見た目が一致しない」という形で問題になる）。**原因はイラスト側の統一忘れであり、直すにはPhotoshop等での描き直しは不要**——各スプライトの**Pivot（Sprite Editorでの基準点）をキャラクターの実際の位置に合わせてズラすだけ**で解決できる。
+  - **キャラクターの位置ずれ修正（Sprite Pivot）**: `Idle`/`Move`/`Jump`/`Dash`は縦長（256×512px）のシートで、キャラクターの位置がおおむね統一されている（コンテンツ中心はどれもpivot換算で概ね x≈0.50, y≈0.45〜0.47）。一方`Attack`（512×256px、横長）と`Dead`（512×256px）はキャラクターがシート内で偏った位置に描かれており、デフォルトのpivot（0.5, 0.5 = シートの幾何中心）のままだと、他の状態からAttack/Deadへ切り替わった瞬間にキャラクターの見た目の位置がずれる（当たり判定＝Colliderの位置は`Transform`基準で変わらないため、「食らい判定と見た目が一致しない」という形で問題になる）。**原因はイラスト側の統一忘れであり、直すにはPhotoshop等での描き直しは不要**——各スプライトの**Pivot（Sprite Editorでの基準点）をキャラクターの実際の位置に合わせてズラすだけ**で解決できる。
     - 各PNGの実ピクセルデータを`Texture2D.GetPixels`で読み、α>0の範囲（＝キャラクターの実際の描画範囲）のバウンディングボックス中心を算出して判定（`isReadable`を一時的にtrueにして計測後、元の設定に戻した）。Attackは剣を振るエフェクト（黄色い軌跡）が一部のフレームでバウンディングボックスを大きく右に広げてしまう（＝そのフレームだけ計測結果が歪む）ため、エフェクトの影響が少ない最初の2フレーム（振りかぶり前）の計測値を採用した（`attackX≈0.25, attackY≈0.50`）。Deadは1フレームのみで、素直に計測値を採用（`deadX≈0.533, deadY≈0.498`）。
     - 実装は`UnityEditor.U2D.Sprites.SpriteDataProviderFactories`（新しいSprite Editor用データプロバイダAPI）経由。**`TextureImporter.spritesheet`（旧APIのSpriteMetaData[]）で`alignment`/`pivot`を書き換えても、このUnityバージョンでは`.meta`の実データ（`spriteSheet.sprites[].alignment`/`.pivot`）に反映されなかった**（要`SaveAndReimport`しても無反応）。新APIなら正しく反映される。`alignment`を`SpriteAlignment.Custom`（9）にしないと`pivot`の値自体が無視される点にも注意。
     - Attackの8フレーム全部に**同じ**pivot値を一律適用（フレームごとに実測値を使うと、エフェクトで歪んだフレームに引っ張られてキャラクター本体が逆にガクガク動いてしまうため）。Playで、Idle→Attack切り替え時・剣を振るフレーム（エフェクトが右に伸びる）でもキャラクター本体の画面上の位置がほぼ変わらないことをスクリーンショットで確認済み。
-- Playで、Dash/Attack/Jumpそれぞれについて「発動→Animator側の状態遷移→効果終了（Animation Event or 着地）→`IsReady`復帰→Animatorが`Idle`に戻る」の一連の流れと、Attack中にDashへコンボした場合に攻撃判定が強制的に閉じることを確認済み（**ダッシュ後半の後方入力での即時終了は2026-09-23に仕様ごと廃止したため、この項目はもう存在しない**）。上記のTransform curveバグ修正後、実際に`PlayerController.FixedUpdate`を複数回呼んで座標が正しく進むこと、状態ごとに`SpriteRenderer.color`が意図した色になることも確認済み。死亡時のフリーズ→死亡アニメーション（UnscaledTime）→Animation Eventでのパネル表示、致死ダメージでノックバックが発生しないことも確認済み。
+- Playで、Dash/Attack/Jumpそれぞれについて「発動→Animator側の状態遷移→効果終了（Animation Event or 着地）→`IsReady`復帰→Animatorが`Idle`に戻る」の一連の流れと、Attack中にDashへコンボした場合に攻撃判定が強制的に閉じることを確認済み（**ダッシュ後半の後方入力での即時終了は仕様ごと廃止したため、この項目はもう存在しない**）。上記のTransform curveバグ修正後、実際に`PlayerController.FixedUpdate`を複数回呼んで座標が正しく進むこと、状態ごとに`SpriteRenderer.color`が意図した色になることも確認済み。死亡時のフリーズ→死亡アニメーション（UnscaledTime）→Animation Eventでのパネル表示、致死ダメージでノックバックが発生しないことも確認済み。
 
 ---
 
@@ -168,11 +168,11 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 - 無敵は `_dashInvTimeLeft` という**専用タイマー**で管理（発動時に `dashClip.length` ぶんセット。ダッシュの移動処理とは独立して毎 `FixedUpdate` 減少）。
 - `IsInvincible = _dashInvTimeLeft > 0`。
 - ダッシュ → ジャンプのコンボでジャンプに移っても（`InterruptDashMovement` は `_dashInvTimeLeft` に触れない）、無敵は**通常のダッシュ効果時間ぶん継続**。その間の左右入力は移動に反映されるが無敵は切れない。
-- **無敵が早期に切れることは無い（2026-09-23、後方入力キャンセル廃止に伴い変更）**: 以前は「ダッシュ効果時間の後半に後方入力をする」と即座に無敵解除できたが、この仕様自体を廃止したため（§2-3参照）、現在は入力方向によらず**効果時間が満了するまで必ず無敵が継続する**。
+- **無敵が早期に切れることは無い（後方入力キャンセル廃止に伴い変更）**: 以前は「ダッシュ効果時間の後半に後方入力をする」と即座に無敵解除できたが、この仕様自体を廃止したため（§2-3参照）、現在は入力方向によらず**効果時間が満了するまで必ず無敵が継続する**。
 
-### 3-3. コンボ受付猶予 = クールタイム（2026-09-21、旧仕様から反転）
+### 3-3. コンボ受付猶予 = クールタイム（旧仕様から反転）
 
-以前は「受付猶予とクールタイムは別物」（`comboGraceTime` という独立パラメータ）だったが、2026-09-21 の仕様変更で**両者は同じもの**になった。単発で終わらせてもコンボにしても次に動けるタイミングが一致するように、という意図的な変更。詳細は §2-4。
+以前は「受付猶予とクールタイムは別物」（`comboGraceTime` という独立パラメータ）だったが、仕様変更で**両者は同じもの**になった。単発で終わらせてもコンボにしても次に動けるタイミングが一致するように、という意図的な変更。詳細は §2-4。
 
 ### 3-4. 落下しない猶予 と コヨーテタイム は別々の窓（2 つの独立パラメータ）
 
@@ -184,7 +184,7 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 - `IsGrounded` 自体はスティッキーにしていない（すると `UpdateJumpCooldown` の離陸・着地検出が壊れる）。
 - `gravityScale` はダッシュ非制御中、`PlayerController` が毎フレーム権威を持って書き戻す（元の値は `_baseGravityScale` を `Awake` で取得）。ダッシュ終了時に一瞬だけ古い値が残ることがあるが次フレームで自己修正。
 
-### 3-5. 崖・段差のわずかな引っかかり救済（ledge assist、2026-09-24追加）
+### 3-5. 崖・段差のわずかな引っかかり救済（ledge assist）
 
 わずかに高さが足りずジャンプで乗り越えられない段差・崖にストレスなく登れるようにする救済措置。`PlayerController.ApplyLedgeAssist()`、`FixedUpdate()`の冒頭（接地判定の直後、ダッシュによる`OverridesMovement`の早期returnより**前**）で毎フレーム呼ぶ。
 
@@ -195,8 +195,8 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 - **条件3の判定方法**: 当たり判定を「下から`(1-0.9)=10%`の帯」と「残り90%の帯」に分け、進行方向のすぐ前方（`ledgeAssistProbeDistance`、既定0.08、分だけ張り出す）でそれぞれ独立に`Physics2D.OverlapBox`判定する。**下の帯だけが`groundLayer`にブロックされていて、上の帯は完全にクリア**なら「あと少しで乗り越えられる段差」と確定する（崖の正確な高さを先に求めなくても、この2回のオーバーラップ判定だけで90%条件を直接判定できる）。背より高い壁（上の帯もブロックされる）は対象外なので誤爆しない。
 - **引き上げ方法**: 条件が揃ったら、進行方向のすぐ前・当たり判定の上端あたりから下向きに`Physics2D.BoxCast`（幅は判定に使ったのと同じ`ledgeAssistProbeDistance`）を飛ばし、段差の正確な表面Y座標を割り出す。`Rigidbody2D.position`のYを、当たり判定の底がその表面ぴったり（＋`ledgeAssistSkin`の余白）に乗る位置まで**直接**補正する。差分は当たり判定の高さの10%以内なので、瞬間補正でも「段差をひょいと登った」ように見える想定（テレポートではなく、あくまで位置の微調整）。
   - **実装時の落とし穴**: 表面Yを求めるのに最初は単純な`Physics2D.Raycast`（1本のレイ）を使っていたが、判定に使った帯の境界ぎりぎり（タイルの境界など）だとレイが対象を1本分だけ空振りすることがあり、判定（オーバーラップ）は成立しているのに引き上げが起こらないというズレが実機テストで発覚した。判定と同じ幅の`BoxCast`に変更して解消。
-- **ダッシュ中も対象**（ユーザー指定、2026-09-24。ダッシュの終了を待たずその場で引き上げる）。ダッシュ中は`MainActionController`が`_rb.linearVelocity`を直接制御していて`_moveInput`とは無関係の向きに進むため、条件1の判定を`_moveInput`ではなく実際の横速度`_rb.linearVelocity.x`の符号で行うのはこのため。位置(Y)だけを補正する処理なので、ダッシュ側の速度制御とは競合しない。
-- **一方通行の足場（`OneWayPlatform`）も対象**（ユーザー指定、2026-09-24）。このプロジェクトには一方通行専用のレイヤーが無く通常の`Ground`と同じレイヤーを使っているため、既存の`groundLayer`をそのまま使うだけで自然にそうなる。既存の`OneWayPlatform.cs`側の未解決の縁引っかかりバグ（§後述／メモリ参照）とは別のコード（`PlayerController`側の新規メソッド、`OneWayPlatform.cs`は無変更）なので、直接の干渉はない。
+- **ダッシュ中も対象**（ユーザー指定。ダッシュの終了を待たずその場で引き上げる）。ダッシュ中は`MainActionController`が`_rb.linearVelocity`を直接制御していて`_moveInput`とは無関係の向きに進むため、条件1の判定を`_moveInput`ではなく実際の横速度`_rb.linearVelocity.x`の符号で行うのはこのため。位置(Y)だけを補正する処理なので、ダッシュ側の速度制御とは競合しない。
+- **一方通行の足場（`OneWayPlatform`）も対象**（ユーザー指定）。このプロジェクトには一方通行専用のレイヤーが無く通常の`Ground`と同じレイヤーを使っているため、既存の`groundLayer`をそのまま使うだけで自然にそうなる。既存の`OneWayPlatform.cs`側の未解決の縁引っかかりバグ（§後述／メモリ参照）とは別のコード（`PlayerController`側の新規メソッド、`OneWayPlatform.cs`は無変更）なので、直接の干渉はない。
 - ノックバック中（`_knockbackTimeLeft > 0`）は対象外（外部から与えられた速度を尊重する）。
 - 新規パラメータ（インスペクターで調整可）: `ledgeAssistMinAboveFraction`（0.9）、`ledgeAssistProbeDistance`（0.08）、`ledgeAssistSkin`（0.02）。
 
@@ -227,7 +227,7 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 
 ## 6. 敵（`Enemy` + `EnemyPatrol` + `EnemyHealthBar`）
 
-敵キャラは3種類（Enemy1/Enemy2/Enemy3）を計画中（2026-09-13、企画側の仕様確定）。**Enemy1・Enemy2・Enemy3すべて実装済み**（2026-09-16、Enemy3=ラスボスとしてStage5に配置）。
+敵キャラは3種類（Enemy1/Enemy2/Enemy3）を計画中（企画側の仕様確定）。**Enemy1・Enemy2・Enemy3すべて実装済み**（Enemy3=ラスボスとしてStage5に配置）。
 
 ### 6-0. 共通の`Enemy`コンポーネント（`Assets/Scripts/Enemy.cs`）
 
@@ -238,45 +238,45 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
   - `PlayerHealth.TakeDamage(contactDamage=1)` → 実際に入ったら `PlayerController.ApplyKnockback`（敵の反対方向へ `knockbackSpeed`=8、上向き `knockbackUpSpeed`=4、`knockbackDuration`=0.25 秒）。
 - 攻撃を受ける経路は `AttackHitbox`（トリガー）側の `OnTriggerEnter2D` → `Enemy.TakeDamage`。敵コライダーが非トリガーでも、当たった相手（AttackHitbox）がトリガーなのでトリガー通知は届く。
 - 弾（`Bullet.cs`、Enemy2/Enemy3共通）も同じ考え方で実装（実体コライダー + ダッシュ中IgnoreCollision + AttackHitboxのトリガーで即破壊）。ただし弾には体力の概念が無く、`AttackHitbox`に触れたら`DestroyByAttack()`で無条件消滅する（`AttackHitbox.TryHit`は`Enemy`が見つからなければ`Bullet`を探して破壊する、という順で処理）。
-- **ステージクリアの新経路（2026-09-13追加）**: `Enemy`に`clearStageOnDeath`（既定false）を追加。trueの敵は`Die()`時に`StageManager.Clear()`を直接呼ぶ。Goalオブジェクトが無いステージ（Stage4/5想定）のボス撃破クリア用。
+- **ステージクリアの新経路**: `Enemy`に`clearStageOnDeath`（既定false）を追加。trueの敵は`Die()`時に`StageManager.Clear()`を直接呼ぶ。Goalオブジェクトが無いステージ（Stage4/5想定）のボス撃破クリア用。
 
 ### 6-1. Enemy1（実装済み） — 単純な左右パトロール
 
-- スクリプト: `Enemy`（共通） + `EnemyPatrol`。**2026-09-13 に `Enemy.prefab` → `Enemy1.prefab` へリネーム**（既存のプレハブが元々このEnemy1仕様と完全一致していたため、新規実装ではなくリネームのみで対応。`EnemyBoss.prefab` はこの `Enemy1.prefab` の Prefab Variant のままGUID経由でリンク維持）。
+- スクリプト: `Enemy`（共通） + `EnemyPatrol`。**`Enemy.prefab` → `Enemy1.prefab` へリネーム**（既存のプレハブが元々このEnemy1仕様と完全一致していたため、新規実装ではなくリネームのみで対応。`EnemyBoss.prefab` はこの `Enemy1.prefab` の Prefab Variant のままGUID経由でリンク維持）。
 - `EnemyPatrol`: `Rigidbody` を使わず transform を直接動かしてスポーン地点中心に左右往復（`speed` ゆっくりめ既定1.5、`range` 片側距離既定3。共にインスペクターから調整可）。進行方向に `flipX`。
 - 接触ダメージ・攻撃一撃死・ジャンプで飛び越え・ダッシュですり抜け、は6-0の共通挙動そのまま（`maxHealth=1`, `contactDamage=1`, プレイヤー`attackDamage=1`で一致）。
-- **2026-09-14**: `DialoguePlayer.IsPlaying`（ストーリー再生中）は`EnemyPatrol.Update()`が早期returnし、一切移動しない（理不尽な行動を防ぐため）。
+- `DialoguePlayer.IsPlaying`（ストーリー再生中）は`EnemyPatrol.Update()`が早期returnし、一切移動しない（理不尽な行動を防ぐため）。
 
-### 6-2. Enemy2（実装済み、2026-09-13）— 据え置き砲台
+### 6-2. Enemy2（実装済み）— 据え置き砲台
 
 - スクリプト: `Enemy`（共通、`EnemyPatrol`は付けない＝移動しない） + `EnemyShooter`（発射のみ担当）。プレハブ: `Assets/Prefabs/Enemy2.prefab`（紫色のSpriteRendererでEnemy1と区別）。
-  - **バグ修正（2026-09-14）**: プレハブ作成時にスプライト未割り当ての状態で`BoxCollider2D`を追加したため`size=(0,0)`になっており、プレイヤーの攻撃（AttackHitbox）が一切当たらなかった。`(1,1)`に修正済み（Stage3/Stage4のインスタンス側でコライダーを上書きしていなかったため、プレハブ修正だけで両方に反映された）。
-- `EnemyShooter`: `fireInterval`秒ごとに`Bullet.prefab`を`firePoint`（未設定なら自身の位置）から発射。`homingOnFire`（既定true）がtrueなら発射位置からプレイヤー方向へのベクトルを発射時に一度だけ計算しその方向へ直進。falseなら**上下は狙わず、プレイヤーが左右どちらにいるかだけを見て`Vector2.left`/`Vector2.right`へ水平に発射**（2026-09-14修正。以前はプレイヤーの位置によらず常に`transform.right`固定で右にしか飛ばなかったバグがあった）。プレイヤーが見つからない場合のみ`transform.right`にフォールバック。`bulletSpeed`・`fireInterval`・`homingOnFire`はいずれもインスペクターから調整可。
-  - **狙う座標＝`HomingTarget`（2026-09-22追加）**: `Bullet.cs`の継続ホーミング（§6-3参照）と同じ理由・同じ方式で、`homingOnFire`時の発射方向計算も`player.transform.Find("HomingTarget")`で見つけたTransformを狙うように変更（無ければ`player.transform`にフォールバック）。左右のみ発射する`homingOnFire=false`時の左右判定にも同じ`HomingTarget`の座標を使う。Play検証済み（Stage3、`Fire()`が生成する弾の速度方向が`HomingTarget`方向と一致し、プレイヤー本体方向とは異なることを確認）。
-- `Bullet.cs`: `Configure(direction, speed, damage)`で方向・速度・威力を受け取り、毎フレーム`transform.position`を直進させる。**当たり判定はトリガー**（`Awake()`で`isTrigger = true`を強制。2026-09-17に非トリガーから変更、理由は下記バグ修正参照）。プレイヤー本体に触れるとダメージ（既定1）+ 弾自身は消滅、ダッシュ中は`Physics2D.IgnoreCollision`ですり抜け（Enemyと同じFixedUpdateパターン。トリガーでも`IgnoreCollision`は効く）、Ground レイヤーのコライダーに触れると消滅、`maxLifetime`（既定6秒）経過でも自動消滅（画面外に飛び続けて残留するのを防止。仕様上の要求ではなく安全策として追加）。**2026-09-17**: この時間経過による自動消滅は**追尾弾（`homingTurnSpeed > 0`）には適用しない**よう`Start()`で分岐した。追尾弾は「プレイヤーに命中／地面に接触／ボスが攻撃を受ける」のいずれかが起こるまで永久に飛び続ける仕様のため（Enemy2の直進弾・Enemy3の②放射弾は従来通り`maxLifetime`で消える）。
-  - **一連のバグ修正（2026-09-17、地面すり抜け→トリガー化で最終解決）**: 「地面に接触しても消えず、そのまま地面の中を飛んでいく」という不具合をユーザーが発見（デバッグログで`HandleCollision`自体が呼ばれていないことまで特定してもらった）。当初の原因は`Bullet`に`Rigidbody2D`が一切付いていなかったこと。**非トリガーの物理衝突**はUnityのPhysics2Dでは`Rigidbody2D`の`BodyType`の組み合わせで判定の有無が決まり、`Dynamic`が絡まない組み合わせ（Static-Static, Static-Kinematic, Kinematic-Kinematic）は衝突イベントが一切発生しない。`Rigidbody2D`が無いコライダーは実質Staticとして扱われるため、地面（`Static`）と弾（Rigidbody2D無し＝実質Static）の組み合わせでは`OnCollisionEnter2D`/`Stay2D`が発火しなかった（プレイヤーへの命中は、プレイヤー側が`Dynamic`のため正常に動いていた）。
+  - **バグ修正**: プレハブ作成時にスプライト未割り当ての状態で`BoxCollider2D`を追加したため`size=(0,0)`になっており、プレイヤーの攻撃（AttackHitbox）が一切当たらなかった。`(1,1)`に修正済み（Stage3/Stage4のインスタンス側でコライダーを上書きしていなかったため、プレハブ修正だけで両方に反映された）。
+- `EnemyShooter`: `fireInterval`秒ごとに`Bullet.prefab`を`firePoint`（未設定なら自身の位置）から発射。`homingOnFire`（既定true）がtrueなら発射位置からプレイヤー方向へのベクトルを発射時に一度だけ計算しその方向へ直進。falseなら**上下は狙わず、プレイヤーが左右どちらにいるかだけを見て`Vector2.left`/`Vector2.right`へ水平に発射**（以前はプレイヤーの位置によらず常に`transform.right`固定で右にしか飛ばなかったバグがあった）。プレイヤーが見つからない場合のみ`transform.right`にフォールバック。`bulletSpeed`・`fireInterval`・`homingOnFire`はいずれもインスペクターから調整可。
+  - **狙う座標＝`HomingTarget`**: `Bullet.cs`の継続ホーミング（§6-3参照）と同じ理由・同じ方式で、`homingOnFire`時の発射方向計算も`player.transform.Find("HomingTarget")`で見つけたTransformを狙うように変更（無ければ`player.transform`にフォールバック）。左右のみ発射する`homingOnFire=false`時の左右判定にも同じ`HomingTarget`の座標を使う。Play検証済み（Stage3、`Fire()`が生成する弾の速度方向が`HomingTarget`方向と一致し、プレイヤー本体方向とは異なることを確認）。
+- `Bullet.cs`: `Configure(direction, speed, damage)`で方向・速度・威力を受け取り、毎フレーム`transform.position`を直進させる。**当たり判定はトリガー**（`Awake()`で`isTrigger = true`を強制。非トリガーから変更、理由は下記バグ修正参照）。プレイヤー本体に触れるとダメージ（既定1）+ 弾自身は消滅、ダッシュ中は`Physics2D.IgnoreCollision`ですり抜け（Enemyと同じFixedUpdateパターン。トリガーでも`IgnoreCollision`は効く）、Ground レイヤーのコライダーに触れると消滅、`maxLifetime`（既定6秒）経過でも自動消滅（画面外に飛び続けて残留するのを防止。仕様上の要求ではなく安全策として追加）。この時間経過による自動消滅は**追尾弾（`homingTurnSpeed > 0`）には適用しない**よう`Start()`で分岐した。追尾弾は「プレイヤーに命中／地面に接触／ボスが攻撃を受ける」のいずれかが起こるまで永久に飛び続ける仕様のため（Enemy2の直進弾・Enemy3の②放射弾は従来通り`maxLifetime`で消える）。
+  - **一連のバグ修正（地面すり抜け→トリガー化で最終解決）**: 「地面に接触しても消えず、そのまま地面の中を飛んでいく」という不具合をユーザーが発見（デバッグログで`HandleCollision`自体が呼ばれていないことまで特定してもらった）。当初の原因は`Bullet`に`Rigidbody2D`が一切付いていなかったこと。**非トリガーの物理衝突**はUnityのPhysics2Dでは`Rigidbody2D`の`BodyType`の組み合わせで判定の有無が決まり、`Dynamic`が絡まない組み合わせ（Static-Static, Static-Kinematic, Kinematic-Kinematic）は衝突イベントが一切発生しない。`Rigidbody2D`が無いコライダーは実質Staticとして扱われるため、地面（`Static`）と弾（Rigidbody2D無し＝実質Static）の組み合わせでは`OnCollisionEnter2D`/`Stay2D`が発火しなかった（プレイヤーへの命中は、プレイヤー側が`Dynamic`のため正常に動いていた）。
     - 1回目の修正で`Rigidbody2D`（Body Type = Kinematic）を追加したが、**Kinematic vs Staticも衝突判定が発生しない組み合わせ**であるため、これでも直っていなかった（ユーザーが実機で確認して発覚）。
     - 2回目の修正で`Rigidbody2D`を**Dynamic**（`gravityScale=0`）に変更し、移動も`linearVelocity`経由にしたところ、今度は「発射直後、弾が生成された位置から動かなくなる」という新しい不具合が発生。原因は、弾が発射元の敵自身の位置（＝当たり判定が重なった状態）で生成されるため、Dynamic化によって**発射元自身の当たり判定と物理的に衝突**してしまっていたこと（発射元の敵は`Rigidbody2D`が無い＝実質Staticで、Dynamic vs Staticは衝突判定される組み合わせのため）。
     - **3回目の修正（採用・最終形）**: ユーザーの指摘により、そもそも弾は「プレイヤーを物理的に押し返す必要が無く、接触の検知だけできればよい」ため、**`isTrigger = true`にする**のが正しい解決だったと判明。トリガー判定は「どちらか一方がトリガーで、どちらかの側に`Rigidbody2D`があればよい」という、非トリガーの物理衝突よりずっと緩いルールで発生するため、`BodyType`の組み合わせを一切気にする必要が無くなる。`transform.position`直接書き換えの単純な移動方法に戻し、`OnCollisionEnter2D`/`Stay2D`を`OnTriggerEnter2D`/`Stay2D`に変更。発射元との衝突が問題にならなくなったため、2回目の修正で追加した`IgnoreCollisionWithShooter`は不要になり削除（`HandleTrigger`内の「`Enemy`に触れたら何もせず貫通する」という分岐だけで、発射元を含むあらゆる敵をすり抜けるようになる）。
-    - **`Rigidbody2D`の要否について（2026-09-17、ユーザーが実機で最終確認）**: 一旦`Bullet.prefab`から`Rigidbody2D`を削除したが、それだと地面接触の判定が働かず、弾が地面をすり抜けたままだった（ユーザーが発見）。トリガー判定の「どちらかの側に`Rigidbody2D`があればよい」という条件を満たすため、**`Bullet.prefab`に`Rigidbody2D`（Body Type = Kinematic）を付け直す必要がある**とユーザーが判断し、実際に付け直したことで正しく動作するようになった。それ以外（`isTrigger = true`、`transform.position`直接移動、`IgnoreCollisionWithShooter`を使わない構成）はそのままで問題なし。
+    - **`Rigidbody2D`の要否について（ユーザーが実機で最終確認）**: 一旦`Bullet.prefab`から`Rigidbody2D`を削除したが、それだと地面接触の判定が働かず、弾が地面をすり抜けたままだった（ユーザーが発見）。トリガー判定の「どちらかの側に`Rigidbody2D`があればよい」という条件を満たすため、**`Bullet.prefab`に`Rigidbody2D`（Body Type = Kinematic）を付け直す必要がある**とユーザーが判断し、実際に付け直したことで正しく動作するようになった。それ以外（`isTrigger = true`、`transform.position`直接移動、`IgnoreCollisionWithShooter`を使わない構成）はそのままで問題なし。
 - 敵本体（`Enemy`側）の接触ダメージ／攻撃一撃死／ジャンプ飛び越え／ダッシュすり抜けは6-0の共通挙動そのまま。
-- **2026-09-14**: `EnemyShooter`は`DialoguePlayer.IsPlaying`中はタイマーの加算ごと止まる（ストーリー中は発射しない）。また`SpriteRenderer.isVisible`（＝いずれかのカメラに映っているか、Unity標準のカリング判定）が false のときは発射をスキップする（画面外からの理不尽な弾を防ぐ）。どちらもタイマー自体は発射のたびに0にリセットされる通常のロジックのままなので、条件を満たさない間は単に「その回の発射を見送る」だけで、条件が揃った次の周期でまた判定される。
+- `EnemyShooter`は`DialoguePlayer.IsPlaying`中はタイマーの加算ごと止まる（ストーリー中は発射しない）。また`SpriteRenderer.isVisible`（＝いずれかのカメラに映っているか、Unity標準のカリング判定）が false のときは発射をスキップする（画面外からの理不尽な弾を防ぐ）。どちらもタイマー自体は発射のたびに0にリセットされる通常のロジックのままなので、条件を満たさない間は単に「その回の発射を見送る」だけで、条件が揃った次の周期でまた判定される。
 
-### 6-3. Enemy3（実装済み、2026-09-16）— 3行動のラスボス
+### 6-3. Enemy3（実装済み）— 3行動のラスボス
 
 - スクリプト: `Enemy`（共通、`EnemyPatrol`は付けない） + `Enemy3AI`（移動＋発射の状態機械）。プレハブ: `Assets/Prefabs/Enemy3.prefab`（`EnemyBoss.prefab`の構造を流用して作成＝`HealthBar`子をそのまま持つ。`maxHealth=8`、`contactDamage=1`、`clearStageOnDeath=true`。SpriteRendererは黒に近い暗赤 `(0.15, 0.05, 0.08)` でEnemy1/2と区別）。
 - `Enemy3AI`の状態機械（`State` enum: `Retreating` / `CoolingDown` / `WaitingForHomingBullet`）:
-  - **①離脱移動（`Retreating`）**: `moveSpeed`でプレイヤーと反対方向へ移動。プレイヤーとの距離が`retreatDistance`（既定5）以上になったら終了。**2026-09-17、ユーザー修正**: `SpriteRenderer.isVisible`（画面外）判定は`UpdateRetreating()`の一番最初で行うよう変更（画面外にいる間は移動そのものも一切行わない。以前は距離判定の後、発射の可否だけを画面外判定していたため、画面外にいる間もずっと移動し続け、ボスが気づかないうちに遠くまで移動してしまう不具合があった）。画面外の間は移動も攻撃選択もせず、その場で待機する。visibleに戻ったら再開し、距離条件を満たしていれば`radialChance`（既定0.5、**2026-09-17追加、インスペクターで調整可**）の確率で②、残りの確率で③を発動する（以前はコード中に`0.5f`を直接埋め込んでいた）。
-  - **初回行動の遅延（`FirstActionWait`、2026-09-18追加）**: ステージ開始直後は既にプレイヤーと十分離れている（＝離脱移動の見た目が発生しないままいきなり②③が選ばれる）ため、画面に映った瞬間に攻撃されると難しすぎるという理由で救済を追加。**一番最初の行動選択（②③どちらを行うかの抽選）だけ**、選択した瞬間には発射せず、`firstActionDelay`（既定3秒、インスペクターで調整可）だけ`FirstActionWait`状態で待ってから実際に発射する（`_firstActionDone`フラグで最初の1回だけに限定。2回目以降の行動には遅延を適用しない）。Playで、1回目のUpdateで行動が選択されて`FirstActionWait`に入り、タイマー経過後に実際に弾が発射される（`FireRadial`/`FireHoming`が呼ばれ、`WaitingForHomingBullet`等へ正しく遷移する）ことを確認済み。
+  - **①離脱移動（`Retreating`）**: `moveSpeed`でプレイヤーと反対方向へ移動。プレイヤーとの距離が`retreatDistance`（既定5）以上になったら終了。**ユーザー修正**: `SpriteRenderer.isVisible`（画面外）判定は`UpdateRetreating()`の一番最初で行うよう変更（画面外にいる間は移動そのものも一切行わない。以前は距離判定の後、発射の可否だけを画面外判定していたため、画面外にいる間もずっと移動し続け、ボスが気づかないうちに遠くまで移動してしまう不具合があった）。画面外の間は移動も攻撃選択もせず、その場で待機する。visibleに戻ったら再開し、距離条件を満たしていれば`radialChance`（既定0.5、**、インスペクターで調整可**）の確率で②、残りの確率で③を発動する（以前はコード中に`0.5f`を直接埋め込んでいた）。
+  - **初回行動の遅延（`FirstActionWait`）**: ステージ開始直後は既にプレイヤーと十分離れている（＝離脱移動の見た目が発生しないままいきなり②③が選ばれる）ため、画面に映った瞬間に攻撃されると難しすぎるという理由で救済を追加。**一番最初の行動選択（②③どちらを行うかの抽選）だけ**、選択した瞬間には発射せず、`firstActionDelay`（既定3秒、インスペクターで調整可）だけ`FirstActionWait`状態で待ってから実際に発射する（`_firstActionDone`フラグで最初の1回だけに限定。2回目以降の行動には遅延を適用しない）。Playで、1回目のUpdateで行動が選択されて`FirstActionWait`に入り、タイマー経過後に実際に弾が発射される（`FireRadial`/`FireHoming`が呼ばれ、`WaitingForHomingBullet`等へ正しく遷移する）ことを確認済み。
   - **②放射弾**: `radialBulletCount`（既定8）個の弾を、`360°/個数`で均等な角度に同時発射（ホーミング無し、`Bullet.Configure`のhomingパラメータ省略＝0のまま）。発射した瞬間に`radialCooldown`（既定3秒）の`CoolingDown`へ。
   - **③追尾弾（`WaitingForHomingBullet`）**: 発射直後のプレイヤー方向へ`Bullet`を1発発射し、`Bullet.Configure`の第4引数`homingTurnSpeed`（既定90度/秒＝ホーミングの強度）を渡して継続追尾を有効化。発射した弾への参照を保持し、それが破壊される（`== null`になる）まで`WaitingForHomingBullet`のまま何もしない。破壊された瞬間に`homingCooldown`（既定3秒）の`CoolingDown`へ移行する（弾が生きている間はクールタイムが進まないという仕様通り）。
-    - **2026-09-16追加**: ボス自身がプレイヤーの攻撃を受けた瞬間、追尾弾を発射中であれば**その弾を問答無用で消滅させ、即座にクールタイムへ移行する**。`Enemy.cs`に`public event Action OnDamaged`を追加し（`TakeDamage`で体力が実際に減るたびに発火）、`Enemy3AI`がこれを購読して`_state == WaitingForHomingBullet`のときだけ弾を`Destroy`してクールタイムへ切り替える。それ以外の状態（離脱移動中・クールタイム中）で攻撃を受けても、この処理は何もしない（ダメージ自体は6-0の通常経路でそのまま入る）。
-    - **2026-09-17**: 追尾弾は`Bullet.maxLifetime`による時間経過での自動消滅の対象から外した。**「プレイヤーに命中／地面に接触／ボスが攻撃を受ける」の3つのいずれかが起こるまで永久に飛び続ける**仕様（`Bullet.Start()`で`homingTurnSpeed > 0`のときは`Destroy(gameObject, maxLifetime)`を呼ばないよう分岐）。
+    - ボス自身がプレイヤーの攻撃を受けた瞬間、追尾弾を発射中であれば**その弾を問答無用で消滅させ、即座にクールタイムへ移行する**。`Enemy.cs`に`public event Action OnDamaged`を追加し（`TakeDamage`で体力が実際に減るたびに発火）、`Enemy3AI`がこれを購読して`_state == WaitingForHomingBullet`のときだけ弾を`Destroy`してクールタイムへ切り替える。それ以外の状態（離脱移動中・クールタイム中）で攻撃を受けても、この処理は何もしない（ダメージ自体は6-0の通常経路でそのまま入る）。
+    - 追尾弾は`Bullet.maxLifetime`による時間経過での自動消滅の対象から外した。**「プレイヤーに命中／地面に接触／ボスが攻撃を受ける」の3つのいずれかが起こるまで永久に飛び続ける**仕様（`Bullet.Start()`で`homingTurnSpeed > 0`のときは`Destroy(gameObject, maxLifetime)`を呼ばないよう分岐）。
   - **`CoolingDown`**: タイマーが0になったら`Retreating`へ戻り、①からループする。
   - `DialoguePlayer.IsPlaying`中は`Update()`が早期returnし、状態機械ごと完全に停止する（Enemy1/2と同じ理不尽防止ルール）。
-- **`Bullet.cs`の拡張（2026-09-16）**: `Configure(direction, speed, damage, homingTurnSpeedDegPerSec = 0)`に第4引数を追加。0（既定、Enemy2はこのまま）なら従来通り発射時の方向に直進するだけ。0より大きいと、`Update()`毎に`Vector3.RotateTowards`で現在の進行方向をプレイヤー方向へ最大`homingTurnSpeedDegPerSec`度/秒だけ回転させ続ける「継続ホーミング」になる（＝仕様の「ホーミングし続ける弾」「ホーミングの強度」に対応）。Enemy2の弾は第4引数を渡さないため影響を受けない。
-  - **狙う座標＝`HomingTarget`（2026-09-22追加）**: 以前は`_playerCollider.transform.position`（プレイヤー本体の当たり判定用Transform）をそのまま狙っていたが、本番のちびキャラ用イラストは頭身の関係でバウンディングボックス中心が頭寄りになり、追尾弾が頭のあたりを狙うように見えてしまっていた（Sprite Pivot自体は攻撃/死亡のアニメーション用に正しく調整済みで、それを崩さずに直したかった）。対処として、Playerの子に`HomingTarget`という空のGameObjectを追加し（見た目の心臓のあたりに配置。位置はユーザーがSceneビューで微調整する想定、コード側では関知しない）、`Bullet.cs`は`p.transform.Find("HomingTarget")`で見つけてそれを狙うように変更（無ければ今まで通りプレイヤー本体`p.transform`にフォールバック）。Collider・Pivot・当たり判定には一切影響しない、純粋に「狙う座標」だけを差し替える方式。
-    - **一度きりの発射時ホーミングにも同じ修正が必要だった（2026-09-22）**: 上記は`Bullet.cs`の継続ホーミング（`homingTurnSpeed > 0`、Enemy3の追尾弾が飛行中に向きを補正し続ける処理）にのみ適用されていたが、**「発射の瞬間だけ一度狙って、その後は直進」という一度きりホーミングは別経路**でプレイヤー本体を直接狙っており、直っていなかった。該当箇所は2つ：`EnemyShooter.Fire()`（Enemy2の`homingOnFire`、上記6-2参照）と`Enemy3AI.FireHoming()`（ボスの追尾弾自体の発射瞬間の初期方向）。どちらも同じ`Find("HomingTarget")`パターンで狙う座標を`HomingTarget`に変更。Play検証済み（Stage5、`Enemy3AI.FireHoming()`が生成する弾の初速方向が`HomingTarget`方向と一致することを確認）。
+- **`Bullet.cs`の拡張**: `Configure(direction, speed, damage, homingTurnSpeedDegPerSec = 0)`に第4引数を追加。0（既定、Enemy2はこのまま）なら従来通り発射時の方向に直進するだけ。0より大きいと、`Update()`毎に`Vector3.RotateTowards`で現在の進行方向をプレイヤー方向へ最大`homingTurnSpeedDegPerSec`度/秒だけ回転させ続ける「継続ホーミング」になる（＝仕様の「ホーミングし続ける弾」「ホーミングの強度」に対応）。Enemy2の弾は第4引数を渡さないため影響を受けない。
+  - **狙う座標＝`HomingTarget`**: 以前は`_playerCollider.transform.position`（プレイヤー本体の当たり判定用Transform）をそのまま狙っていたが、本番のちびキャラ用イラストは頭身の関係でバウンディングボックス中心が頭寄りになり、追尾弾が頭のあたりを狙うように見えてしまっていた（Sprite Pivot自体は攻撃/死亡のアニメーション用に正しく調整済みで、それを崩さずに直したかった）。対処として、Playerの子に`HomingTarget`という空のGameObjectを追加し（見た目の心臓のあたりに配置。位置はユーザーがSceneビューで微調整する想定、コード側では関知しない）、`Bullet.cs`は`p.transform.Find("HomingTarget")`で見つけてそれを狙うように変更（無ければ今まで通りプレイヤー本体`p.transform`にフォールバック）。Collider・Pivot・当たり判定には一切影響しない、純粋に「狙う座標」だけを差し替える方式。
+    - **一度きりの発射時ホーミングにも同じ修正が必要だった**: 上記は`Bullet.cs`の継続ホーミング（`homingTurnSpeed > 0`、Enemy3の追尾弾が飛行中に向きを補正し続ける処理）にのみ適用されていたが、**「発射の瞬間だけ一度狙って、その後は直進」という一度きりホーミングは別経路**でプレイヤー本体を直接狙っており、直っていなかった。該当箇所は2つ：`EnemyShooter.Fire()`（Enemy2の`homingOnFire`、上記6-2参照）と`Enemy3AI.FireHoming()`（ボスの追尾弾自体の発射瞬間の初期方向）。どちらも同じ`Find("HomingTarget")`パターンで狙う座標を`HomingTarget`に変更。Play検証済み（Stage5、`Enemy3AI.FireHoming()`が生成する弾の初速方向が`HomingTarget`方向と一致することを確認）。
 - 弾は地面/壁（壁は未実装）に当たると消滅する。既存の`Bullet.cs`の地面判定・攻撃での即破壊・ダッシュすり抜けをそのまま利用（6-0参照）。
 - 敵本体の接触ダメージ／攻撃1発＝1ダメージ（一撃死ではない）／ジャンプ飛び越え／ダッシュすり抜けは6-0の共通挙動そのまま。頭上体力バーは`EnemyHealthBar`（`EnemyBoss.prefab`と同じ仕組み）。
 - Play で検証済み: 放射弾は指定個数ぶん均等な8方向（45度間隔）に飛ぶこと、追尾弾は実際にプレイヤー方向へ`RotateTowards`で旋回すること、体力0でボスを倒すと`clearStageOnDeath`経由でクリアパネルが表示される（`Time.timeScale=0`になる）ことを確認。
@@ -286,33 +286,33 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 
 ## 7. ステージ要素
 
-- **地面（Tilemap, 2026-09-09）**: 各ステージシーンに `Grid`（cell size 1×1）＋子 `Ground`（layer=Ground）。`Ground` に `Tilemap` / `TilemapRenderer`（sortingOrder -10）/ `Rigidbody2D`(Static) / `TilemapCollider2D`（`compositeOperation = Merge`）/ `CompositeCollider2D`（`geometryType = Polygons`）/ **`TilemapColliderBootstrap`**（後述）。タイル 1 個 = 1 ワールドユニット。
+- **地面（Tilemap）**: 各ステージシーンに `Grid`（cell size 1×1）＋子 `Ground`（layer=Ground）。`Ground` に `Tilemap` / `TilemapRenderer`（sortingOrder -10）/ `Rigidbody2D`(Static) / `TilemapCollider2D`（`compositeOperation = Merge`）/ `CompositeCollider2D`（`geometryType = Polygons`）/ **`TilemapColliderBootstrap`**（後述）。タイル 1 個 = 1 ワールドユニット。
   - **`TilemapColliderBootstrap`（`Ground` に付ける・必須）**: eval で `SetTile` して作った Tilemap は Play 開始時にコライダー形状を生成せず（`CompositeCollider2D.pathCount = 0` のまま＝**地面がすり抜けて落下する**）、`Awake` でタイルを一括で貼り直して（`GetTilesBlock` → `ClearAllTiles` → `SetTilesBlock` → `ProcessTilemapChanges` → `GenerateGeometry`）形状の再生成を促す。これが無いと 5 シーンとも地面に当たり判定が付かない。通常のタイルパレットで塗ったマップなら不要。
   - タイルアセット: `Assets/Art/Tiles/GroundTile.asset`（`UnityEngine.Tilemaps.Tile`、`colliderType = Grid`、sprite = `Assets/Art/GroundTile.png`）。仮素材。**最終的に GroundTile.png を 90×90px の本番絵で上書きし、PPU を 90 に保てば 1 セル = 1 ユニットのまま差し替わる**（`Assets/Art/GroundTile.png` の現状: 90×90 の茶色ベタ＋縁＋斑点、Sprite / Single / PPU 90 / Point / 無圧縮 / FullRect / pivot Center）。
   - **塗り範囲**: 天面 y=-2（＝セル行 y=-3 が一番上、そこから y=-8 まで 6 行）。
-    - **Stage1, Stage3**（2026-09-11、Stage3 も Stage1 と同一構成に変更）: x セル [-19,7) と [10,30) を塗り、x セル 7〜9 を空にして **落とし穴（x≈7〜10、幅 3）**。`CompositeCollider2D.pathCount = 2`（左右で分離）。
+    - **Stage1, Stage3**（Stage3 も Stage1 と同一構成に変更）: x セル [-19,7) と [10,30) を塗り、x セル 7〜9 を空にして **落とし穴（x≈7〜10、幅 3）**。`CompositeCollider2D.pathCount = 2`（左右で分離）。
     - **Stage2, Stage4, Stage5**: x セル [-19,27) を連続で塗り、落とし穴なし。`pathCount = 1`。
   - `PlayerController.IsGrounded` は `CompositeCollider2D` を `Physics2D.OverlapBox` で検出できる（Play で確認済み: Stage1 は左地面/穴/右地面、Stage2〜5 は連続、天面 y=-2）。
-  - **タイルパレット（`Assets/Tilemaps/Palettes/GroundPalette.prefab`, 2026-09-11）**: `Window > 2D > Tile Palette` で開いて手作業編集するための Unity 標準パレット。`GroundTile` と高台の 6 タイル（下記）を収録済み。使い方: シーンを開く → Tile Palette ウィンドウで `GroundPalette` を選択 → Active Tilemap がそのシーンの対象 Tilemap（`Grid/Ground` または `Grid/HighGround`）になっていることを確認 → Paint/Erase/Box Fill 等でシーンビュー上を直接編集 → Ctrl+S で保存。当たり判定は Play 開始時に `TilemapColliderBootstrap` が自動で作り直すので、手で塗っても特別な後処理は不要。
-- **一方通行の高台＝HighGround（Tilemap 版, 2026-09-11）**: `Grid` の子 `HighGround`（`Ground` と同じ Grid・同じ 1×1 セル。現在 Stage1 に1基（2026-09-22追加、ジャンプチュートリアル用、§9-3参照）、Stage3 に1基、Stage4 に2基。Stage1 の旧 GameObject 版（チュートリアル化以前の別物）は削除済み、Stage2/5 はもともと無し）。**「高台」の英訳が"high ground"であるため、2026-09-16にGameObject・アセット名を`Platform`系から`HighGround`系へ統一した**（経緯は §9-1 Stage4 参照）。
+  - **タイルパレット（`Assets/Tilemaps/Palettes/GroundPalette.prefab`）**: `Window > 2D > Tile Palette` で開いて手作業編集するための Unity 標準パレット。`GroundTile` と高台の 6 タイル（下記）を収録済み。使い方: シーンを開く → Tile Palette ウィンドウで `GroundPalette` を選択 → Active Tilemap がそのシーンの対象 Tilemap（`Grid/Ground` または `Grid/HighGround`）になっていることを確認 → Paint/Erase/Box Fill 等でシーンビュー上を直接編集 → Ctrl+S で保存。当たり判定は Play 開始時に `TilemapColliderBootstrap` が自動で作り直すので、手で塗っても特別な後処理は不要。
+- **一方通行の高台＝HighGround（Tilemap 版）**: `Grid` の子 `HighGround`（`Ground` と同じ Grid・同じ 1×1 セル。現在 Stage1 に1基（ジャンプチュートリアル用、§9-3参照）、Stage3 に1基、Stage4 に2基。Stage1 の旧 GameObject 版（チュートリアル化以前の別物）は削除済み、Stage2/5 はもともと無し）。**「高台」の英訳が"high ground"であるため、GameObject・アセット名を`Platform`系から`HighGround`系へ統一した**（経緯は §9-1 Stage4 参照）。
   - **見た目**: 天面（乗れる面）3 種＋柱（乗れない・当たり判定も無い）3 種、計 6 枚のタイルで構成。実際の並びは天面 左/中央/右 の 3 マス＋その真下に柱 左/中央/右 の 3 マスの計 3×2 マス。柱は地面の天面（y=-2）にちょうど接し、「地面から生えた柱の上に台がある」見た目になる。左右は端用、中央は繰り返し用の想定（今は仮素材のため天面 3 種・柱 3 種はそれぞれほぼ同じ見た目で左右にわずかな縁のアクセントがある程度だが、本番素材に差し替えれば区別できるようになる設計）。
     - タイル: `Assets/Art/Tiles/HighGroundTopLeft` / `HighGroundTopCenter` / `HighGroundTopRight`（`colliderType = Grid`）、`HighGroundPillarLeft` / `HighGroundPillarCenter` / `HighGroundPillarRight`（`colliderType = None`）。元画像は `Assets/Art/HighGroundTop*.png` / `HighGroundPillar*.png`（90×90, PPU90 の仮素材。天面はオパーク、柱は半透明のグレー＝当たり判定が無いことを視覚的に示す仮の意匠）。
   - **当たり判定**: `HighGround` の `TilemapCollider2D`(`compositeOperation=Merge`) + `CompositeCollider2D` は `colliderType=None` の柱タイルからは形状を作らないため、**天面タイルだけが合成された 1 つの当たり判定**になる（柱部分は完全にすり抜け＝当たり判定自体が存在しない。天面部分は実体の当たり判定）。
   - 一方通行のロジックは `OneWayPlatform` コンポーネントをそのまま流用（`HighGround` GameObject に付ける）。下から上へは常にすり抜け。上から下へは抜けられない（着地できる）。
   - ただし **プレイヤーの横幅のうち `requiredOverlap`（0.5、インスペクター調整可）以上が天面に重なっている**ときだけ着地判定を有効化。端に少し引っかかっただけでは乗れない。
-  - 実装は `PlatformEffector2D` ではなく、毎 `FixedUpdate` で `Physics2D.IgnoreCollision(player, platform, !solid)` をトグル。`solid = 足が天面より上（`topTolerance` 0.05） && 下降中 && 重なり率 >= requiredOverlap`。単体 BoxCollider2D でも Tilemap の CompositeCollider2D でも動くよう、`Awake` は `CompositeCollider2D` を優先して `_col` に採用する（2026-09-11 追加）。
-  - **端の引っかかり不具合（2026-09-16、対応を試みたが未解決、コードは元に戻した）**: 高台の端ギリギリで降りるときに一瞬引っかかる不具合をユーザーが報告。以下2案を実装しては撤回した。
+  - 実装は `PlatformEffector2D` ではなく、毎 `FixedUpdate` で `Physics2D.IgnoreCollision(player, platform, !solid)` をトグル。`solid = 足が天面より上（`topTolerance` 0.05） && 下降中 && 重なり率 >= requiredOverlap`。単体 BoxCollider2D でも Tilemap の CompositeCollider2D でも動くよう、`Awake` は `CompositeCollider2D` を優先して `_col` に採用する。
+  - **端の引っかかり不具合（対応を試みたが未解決、コードは元に戻した）**: 高台の端ギリギリで降りるときに一瞬引っかかる不具合をユーザーが報告。以下2案を実装しては撤回した。
     1. 乗る条件（`requiredOverlap`）と外れる条件（より小さい`releaseOverlap`）を分けるヒステリシス方式 → Playでの確認では意図通りの状態遷移をしていたが、実際のゲームプレイでは解消しなかった。
     2. 「横に外れる／沈み込みすぎて離れたら、他のGroundレイヤーの何かに触れるまで完全に乗れなくする」ロック方式（ジャンプでその場を離れるだけの場合は対象外にする分岐つき） → こちらも解消しなかった。
-    - **2026-09-16、ユーザーの指示で`OneWayPlatform.cs`は直前のコミット（`0341de48`）の状態へ`git checkout`で復元済み**（＝上記いずれの変更も残っていない、元の単一閾値のみのロジック）。この不具合自体は未解決のまま。次に着手するときは、上記2案がどちらも効かなかったという前提から検討し直す必要がある（詳細はメモリの`tilemap-platform-oneway`参照）。
+    - **ユーザーの指示で`OneWayPlatform.cs`は直前のコミット（`0341de48`）の状態へ`git checkout`で復元済み**（＝上記いずれの変更も残っていない、元の単一閾値のみのロジック）。この不具合自体は未解決のまま。次に着手するときは、上記2案がどちらも効かなかったという前提から検討し直す必要がある（詳細はメモリの`tilemap-platform-oneway`参照）。
   - `overlapX = min(右端どうし) - max(左端どうし)`、重なり率 = `overlapX / プレイヤー横幅`。ソース内に具体例つきの長いコメントあり。
   - Play で確認済み: `CompositeCollider2D.pathCount=1`（天面3マス分が1つに合成、bounds が天面3マス分の範囲と一致）、柱範囲は `OverlapBox` で完全に無反応、着地条件を満たすと `IgnoreCollision` が解除されソリッドになる（横に外れる／下から上昇中は再びすり抜け）ことを確認。
 
-  ### HighGround（高台）の使い方ガイド（他プランナー向け、2026-09-16）
+  ### HighGround（高台）の使い方ガイド（他プランナー向け）
 
   **① 既存のHighGroundの高さ・形を調整したいだけの場合**
   シーンを開く → `Window > 2D > Tile Palette` で `GroundPalette` を選択 → Active Tilemap を調整したい`HighGround`（or `HighGround2`など）に切り替える → あとは`Ground`と全く同じ感覚で、Paint/Eraseでシーンビュー上を直接編集するだけでよい。**プレハブなどを意識する必要は無い。**
-  **ただし「調整」は、あくまで今ある1つの塊（ひとつながりのタイル）の形・高さを変えることを指す。** 同じTilemapの離れた場所に別の塊を新しく描き足すのは②の「新しい高台」に該当する（2026-09-16、テストシーンで実際にこの混同が起きた。注意点も参照）。
+  **ただし「調整」は、あくまで今ある1つの塊（ひとつながりのタイル）の形・高さを変えることを指す。** 同じTilemapの離れた場所に別の塊を新しく描き足すのは②の「新しい高台」に該当する（テストシーンで実際にこの混同が起きた。注意点も参照）。
 
   **② 全く新しい、独立した高台を追加したい場合**
   既存のどのHighGroundとも接触・隣接しない位置に新しい高台を作るときは、**専用の新しいTilemap GameObjectが必要**（理由は下記「注意点」参照）。`Assets/Prefabs/HighGroundTilemap.prefab`（当たり判定などの設定を済ませた空のTilemap）を`Grid`の子としてシーンにドラッグ＆ドロップし、分かりやすい名前（`HighGround3`など）に変える → Tile Paletteでそれをアクティブにして①と同じようにペイントする。この最初の1回だけ開発側（Claude）に頼んでもよい。
@@ -320,11 +320,11 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
   **注意点**
   - **天面（乗れる部分）と柱（乗れない部分）は必ずセットで使う必要は無い**。柱タイルは`colliderType = None`＝当たり判定を一切持たない、純粋に見た目だけのパーツ（「地面から生えている」ように見せるための飾り）。**天面タイルだけを単独で使っても、一方通行の機能としては完全に正常に動作する**（見た目が宙に浮いて見えるだけで、機能面の問題は無い）。逆に柱タイルだけを天面無しで使うことも可能（その場合はただの、乗れない・すり抜けるだけの飾りになる）。
   - **左・中央・右のタイルに機能的な違いは無い**（天面同士、柱同士でそれぞれ`colliderType`は完全に同じ）。差は見た目だけで、タイルセットとしての繋がりを綺麗に見せるための区別（左右は端、中央は繰り返し用）。今は仮素材でほぼ見分けが付かないが、**どれをどこに置いても当たり判定は変わらない**ので、動作確認中は気にせず好きなものを使ってよい。
-  - **高台1基＝Tilemap 1つを厳守**。**性質の異なる（＝離れた場所にある）高台を同じTilemapに同居させない**こと。`OneWayPlatform`はTilemap全体の当たり判定の外接矩形を基準に着地判定を計算しているため、1つのTilemapに複数の離れた高台を混在させると、この範囲が全部をまたぐ巨大な範囲になり、判定が壊れて常にすり抜けるようになる（2026-09-16にStage4で実際に発生した不具合）。
-  - **高台タイルは`Ground`（普通の地面用Tilemap）には絶対に描かない**こと。`Ground`には`OneWayPlatform`が付いていないため、一方通行にならず、ただの通常ブロックになってしまう（2026-09-14・2026-09-16に実際に発生した不具合）。Tile Paletteで作業する際は、必ず「Active Tilemap」がどのGameObjectを指しているか確認すること。
+  - **高台1基＝Tilemap 1つを厳守**。**性質の異なる（＝離れた場所にある）高台を同じTilemapに同居させない**こと。`OneWayPlatform`はTilemap全体の当たり判定の外接矩形を基準に着地判定を計算しているため、1つのTilemapに複数の離れた高台を混在させると、この範囲が全部をまたぐ巨大な範囲になり、判定が壊れて常にすり抜けるようになる（Stage4で実際に発生した不具合）。
+  - **高台タイルは`Ground`（普通の地面用Tilemap）には絶対に描かない**こと。`Ground`には`OneWayPlatform`が付いていないため、一方通行にならず、ただの通常ブロックになってしまう（・実際に発生した不具合）。Tile Paletteで作業する際は、必ず「Active Tilemap」がどのGameObjectを指しているか確認すること。
   - コンポーネント名は`OneWayPlatform`のまま（GameObject名の`HighGround`とは一致しない）。Inspectorで見たときに戸惑わないよう、この対応関係も共有しておくとよい。
 
-- **カメラ**（`CameraFollow`, Main Camera）: `Mathf.SmoothDamp`（`smoothTime` 0.15）で追従。**2026-09-13 に `followHorizontal`/`followVertical`（インスペクターのbool）を追加**し、横方向・縦方向を個別にオン/オフできるようにした（既定は横=true・縦=false＝これまで通りの横スクロール）。オフにした方向は`Start()`時点の位置で固定。Stage1〜3・5は既定のまま（横のみ）、**Stage4のみ横=false・縦=true**（縦スクロール、詳細は§9-1）。ortho size 6、位置 (0,-0.5,-10)（Stage4は別途§9-1参照）。
+- **カメラ**（`CameraFollow`, Main Camera）: `Mathf.SmoothDamp`（`smoothTime` 0.15）で追従。**`followHorizontal`/`followVertical`（インスペクターのbool）を追加**し、横方向・縦方向を個別にオン/オフできるようにした（既定は横=true・縦=false＝これまで通りの横スクロール）。オフにした方向は`Start()`時点の位置で固定。Stage1〜3・5は既定のまま（横のみ）、**Stage4のみ横=false・縦=true**（縦スクロール、詳細は§9-1）。ortho size 6、位置 (0,-0.5,-10)（Stage4は別途§9-1参照）。
 - **レイヤー**: user layer 8 = "Ground"。`Grid/Ground`（Tilemap）/ `Grid/HighGround`（Tilemap, Stage3 のみ）に設定。`Enemy` はわざと外している（敵の上に乗ってもジャンプが回復しないように）。
 
 ---
@@ -332,13 +332,13 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 ## 8. デバッグ機能（`PlayerDebugBars`, Player/DebugBars）
 
 プレイヤー頭上にワールド空間のゲージ 2 本（左端固定で伸縮）+ 数値ラベル。
-**開発者用**（2026-09-08）: `Awake` で `!DeveloperSettings.Active` なら `DebugBars` GameObject ごと `SetActive(false)`。＝ エディタ内で `developerMode` が true のときだけ表示。ビルドでは常に非表示（`CooldownBufferZone` も生成されない）。
+**開発者用**: `Awake` で `!DeveloperSettings.Active` なら `DebugBars` GameObject ごと `SetActive(false)`。＝ エディタ内で `developerMode` が true のときだけ表示。ビルドでは常に非表示（`CooldownBufferZone` も生成されない）。
 
-- **COMBO バー（シアン）**: バー本体（`SetFill`）の伸縮は `MainActionController.ComboGraceFraction01`（0..1の割合）で駆動。**2026-09-21**：`_comboStep==1`の間、`CooldownFraction01`と同じ値を返すだけになった（コンボ受付時間＝クールタイムなので、§2-4参照）。
+- **COMBO バー（シアン）**: バー本体（`SetFill`）の伸縮は `MainActionController.ComboGraceFraction01`（0..1の割合）で駆動。`_comboStep==1`の間、`CooldownFraction01`と同じ値を返すだけになった（コンボ受付時間＝クールタイムなので、§2-4参照）。
 - **CD バー（オレンジ）**: バー本体の伸縮は `MainActionController.CooldownFraction01`（0..1の割合）。「これが残っている」かつ「COMBO バーが空」= アクション実行不可。
   - ダッシュ / 攻撃 → 発動からの経過時間 / （`dashClip`または`attackClip`の長さ）。
-  - ジャンプ → 着地ベースで時間が不定なため、busy の間は常に`1`（満タン）のまま。着地した瞬間に`0`。**2026-09-21**：以前あった`jumpAirCooldownCap`基準の近似減少は、滞空上限の撤廃に伴い廃止。
-- **ラベルの数字（2026-09-20変更）**: 割合（0.00〜1.00）ではなく秒数表示。`MainActionController.ComboGraceRemainingSeconds`（受付中でなければ0）/ `CooldownRemainingSeconds`を使う。**ジャンプ中は残り秒数そのものが不明なため、`CooldownRemainingSeconds`は負の値（-1）を番兵として返し、ラベルは`"--"`と表示する**（2026-09-21、`jumpAirCooldownCap`廃止に伴う変更）。バー本体の伸縮（割合ベース）は数字表示と別ロジック。
+  - ジャンプ → 着地ベースで時間が不定なため、busy の間は常に`1`（満タン）のまま。着地した瞬間に`0`。以前あった`jumpAirCooldownCap`基準の近似減少は、滞空上限の撤廃に伴い廃止。
+- **ラベルの数字**: 割合（0.00〜1.00）ではなく秒数表示。`MainActionController.ComboGraceRemainingSeconds`（受付中でなければ0）/ `CooldownRemainingSeconds`を使う。**ジャンプ中は残り秒数そのものが不明なため、`CooldownRemainingSeconds`は負の値（-1）を番兵として返し、ラベルは`"--"`と表示する**（`jumpAirCooldownCap`廃止に伴う変更）。バー本体の伸縮（割合ベース）は数字表示と別ロジック。
 - **先行入力ゾーン**（CD バーの空側の端に重ねた色付き区間）: 幅 = `MainActionController.InputBufferZoneFraction01`（最小 `minBufferZoneWidthFrac` = 4%）。`cooldownFill` の SpriteRenderer を複製したスプライトを**実行時に自動生成**（`CooldownBufferZone`、sortingOrder = fill+1。シーン編集不要）。
   - 受付前は半透明シアン（`bufferZoneIdleColor`）、**実際に受付中（`InInputBufferZone`）は明るい緑**（`bufferZoneActiveColor`）。CD ラベルに `BUF` を付す。
   - CD バーの先端がこの色付き区間に入っている ≒ 先行入力できる、という見た目。ジャンプは §2-6 のとおり区間位置は目安（受付判定は着地予測）。
@@ -347,43 +347,43 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 
 ## 9. 画面の流れ / シーン構成
 
-### 9-0. ゲームの流れ（最小実装、2026-09-06 / プロローグ追加 2026-09-07）
+### 9-0. ゲームの流れ（最小実装 / プロローグ追加）
 
 `Title` →（Game Start）→ `Prologue`（プロローグ会話）→ `StageSelect` →（Stage 1〜5）→ ステージ（初回のみ開始会話）→（クリア / 失敗）→ 結果画面 → 各ボタンで遷移。
 
 - **遷移はすべて `GameFlow`（static クラス）→ `SceneTransition.Go(シーン名)`**。`CurrentStageIndex` だけ static で保持（「次のステージへ」「もう一度」に使う）。
-- **フェード遷移（`SceneTransition`, 2026-09-08）**: **どのシーン遷移でも**「暗転 → 読み込み → 明転」を行う。実行時に自動生成（`DontDestroyOnLoad`）、全面真っ黒 Image の alpha を上下させるだけ（上下左右の動きなし）。`sortingOrder 32760`（会話・結果画面より前面）、`raycastTarget=true` で演出中はマウスも遮断。
-  - 時間は `Assets/Resources/SceneTransitionSettings.asset` で調整：`fadeOutSeconds`(0.5) / `fadeInSeconds`(0.5) / `postFadeInLockSeconds`(**0.25**、2026-09-12 に 0.5→0.25 へ半減)。`Time.unscaledDeltaTime` 基準（結果画面など `timeScale=0` から遷移しても動く）。
-  - **明転（フェードイン）のヒッチ対策（2026-09-08）**: シーンロード直後は 1 フレームの delta が大きく荒れるため、そのままだと明転が 1〜2 フレームで終わって「いきなり明るくなる」ように見える。対策として ①ロード後に 2 フレーム捨ててから明転開始 ②`Fade` の 1 フレームあたりの進行量に上限（`max(1/60, duration*0.15)` 秒）を設ける。
-  - 演出中は `SceneTransition.Transitioning == true` → `InputLock.InputAllowed` が常に false（＝すべての入力を無効化）。明転しきったあと `InputLock.LockFor(postFadeInLockSeconds)` を呼び、**さらに 0.25 秒**入力を止める（連打対策。2026-09-12 に 0.5→0.25 へ半減）。合計：暗転 0.5 ＋ 読み込み ＋ 明転 0.5 ＋ 0.25。
-  - **暗転中は `Time.timeScale = 0`（2026-09-08）**: 暗転が始まってから `LoadSceneAsync` 完了までは遷移元シーンを完全停止させる。これが無いと、クリアパネルのボタンを押してから遷移するまでの短い間だけ通常進行に戻り、`CameraFollow` の追従（`SmoothDamp`）が再開して「プレイヤーは操作していないのにカメラだけ少し動く」違和感が出る。読み込み後に `timeScale = 1` に戻す（開始会話があれば `StageManager` が再度 0 にする）。フェード自体は `Time.unscaledDeltaTime` なので timeScale 0 でも進む。
-  - **ステージクリア / 失敗のパネル表示はシーン遷移ではないのでフェードしない**。代わりに結果パネルの `MenuNavigation.inputLockDuration` で連打対策をしている（**2026-09-12 に 1.0→0.5 秒へ半減**、現在は他画面と同じ 0.5 秒）。この間はキーボードに加え `GraphicRaycaster` を無効化してマウスクリックも止める。
-- **ステージの並び・シーン名は `StageSet`（ScriptableObject, `Assets/Resources/StageSet.asset`, 2026-09-06）に外出し**。インスペクターで `stages[]`（`displayName` + `sceneName`）を編集する。`GameFlow` が `Resources.Load<StageSet>("StageSet")` で読む（コード内にシーン名を書かない）。**ステージ追加はコード変更不要** → ①シーン作成＋Build Settings 追加 ②`StageSet.stages` に要素追加 ③StageSelect にボタン追加＋`StageSelectMenu.stageButtons` に同 index で割当。`StageSelectMenu` は `displayName` があればボタンのラベル（子 `Text`）へ反映する。
-- **現在 5 ステージ**（2026-09-07 に 3 → 5 へ拡張、企画どおり）。`StageSet` に Stage1〜Stage5 を登録。
+- **フェード遷移（`SceneTransition`）**: **どのシーン遷移でも**「暗転 → 読み込み → 明転」を行う。実行時に自動生成（`DontDestroyOnLoad`）、全面真っ黒 Image の alpha を上下させるだけ（上下左右の動きなし）。`sortingOrder 32760`（会話・結果画面より前面）、`raycastTarget=true` で演出中はマウスも遮断。
+  - 時間は `Assets/Resources/SceneTransitionSettings.asset` で調整：`fadeOutSeconds`(0.5) / `fadeInSeconds`(0.5) / `postFadeInLockSeconds`(**0.25**、 0.5→0.25 へ半減)。`Time.unscaledDeltaTime` 基準（結果画面など `timeScale=0` から遷移しても動く）。
+  - **明転（フェードイン）のヒッチ対策**: シーンロード直後は 1 フレームの delta が大きく荒れるため、そのままだと明転が 1〜2 フレームで終わって「いきなり明るくなる」ように見える。対策として ①ロード後に 2 フレーム捨ててから明転開始 ②`Fade` の 1 フレームあたりの進行量に上限（`max(1/60, duration*0.15)` 秒）を設ける。
+  - 演出中は `SceneTransition.Transitioning == true` → `InputLock.InputAllowed` が常に false（＝すべての入力を無効化）。明転しきったあと `InputLock.LockFor(postFadeInLockSeconds)` を呼び、**さらに 0.25 秒**入力を止める（連打対策。0.5→0.25 へ半減）。合計：暗転 0.5 ＋ 読み込み ＋ 明転 0.5 ＋ 0.25。
+  - **暗転中は `Time.timeScale = 0`**: 暗転が始まってから `LoadSceneAsync` 完了までは遷移元シーンを完全停止させる。これが無いと、クリアパネルのボタンを押してから遷移するまでの短い間だけ通常進行に戻り、`CameraFollow` の追従（`SmoothDamp`）が再開して「プレイヤーは操作していないのにカメラだけ少し動く」違和感が出る。読み込み後に `timeScale = 1` に戻す（開始会話があれば `StageManager` が再度 0 にする）。フェード自体は `Time.unscaledDeltaTime` なので timeScale 0 でも進む。
+  - **ステージクリア / 失敗のパネル表示はシーン遷移ではないのでフェードしない**。代わりに結果パネルの `MenuNavigation.inputLockDuration` で連打対策をしている（**1.0→0.5 秒へ半減**、現在は他画面と同じ 0.5 秒）。この間はキーボードに加え `GraphicRaycaster` を無効化してマウスクリックも止める。
+- **ステージの並び・シーン名は `StageSet`（ScriptableObject, `Assets/Resources/StageSet.asset`）に外出し**。インスペクターで `stages[]`（`displayName` + `sceneName`）を編集する。`GameFlow` が `Resources.Load<StageSet>("StageSet")` で読む（コード内にシーン名を書かない）。**ステージ追加はコード変更不要** → ①シーン作成＋Build Settings 追加 ②`StageSet.stages` に要素追加 ③StageSelect にボタン追加＋`StageSelectMenu.stageButtons` に同 index で割当。`StageSelectMenu` は `displayName` があればボタンのラベル（子 `Text`）へ反映する。
+- **現在 5 ステージ**（3 → 5 へ拡張、企画どおり）。`StageSet` に Stage1〜Stage5 を登録。
 - **ビルド設定のシーン順**: `[0] Title, [1] Prologue, [2] StageSelect, [3] Stage1, [4] Stage2, [5] Stage3, [6] Stage4, [7] Stage5`（`SampleScene` は `Stage1.unity` にリネーム済み）。※シーンは名前でロードするので順番自体は動作に影響しない。
-- **Title**（`Assets/Scenes/Title.unity`）: Camera + EventSystem + Canvas（"勇者しばりちゃん" タイトル + "Game Start" ボタン）+ `TitleMenu`。ボタン `onClick` → `TitleMenu.OnStartClicked()` → `GameFlow.StartGame()`（Prologue シーンが Build Settings に無ければ StageSelect へ直行するフォールバックつき）。**タイトルの `Text`（"勇者しばりちゃん"）はシーンに直接置かれた唯一の日本語 UI**（他はすべて `DialoguePlayer` が実行時生成）で、§9-2 の日本語フォント対応時に見落としていた（`m_Font` がビルトインの Arial のまま）。2026-09-11 に `NotoSansJP-Regular` を明示的に割り当てて修正済み。**シーンに直接置いた Text に日本語を入れる場合は、フォントを手動で `NotoSansJP-Regular` に差し替える必要がある**（`DialoguePlayer` 経由なら自動）。
-- **Prologue**（`Assets/Scenes/Prologue.unity`, 2026-09-07）: Camera + `DialoguePlayer`（会話 UI は実行時生成）+ `PrologueRunner`。`PrologueRunner` が `StageSet.prologue` を再生し、読み終わると `GameFlow.GoStageSelect()`。会話が空なら即 StageSelect へ。
+- **Title**（`Assets/Scenes/Title.unity`）: Camera + EventSystem + Canvas（"勇者しばりちゃん" タイトル + "Game Start" ボタン）+ `TitleMenu`。ボタン `onClick` → `TitleMenu.OnStartClicked()` → `GameFlow.StartGame()`（Prologue シーンが Build Settings に無ければ StageSelect へ直行するフォールバックつき）。**タイトルの `Text`（"勇者しばりちゃん"）はシーンに直接置かれた唯一の日本語 UI**（他はすべて `DialoguePlayer` が実行時生成）で、§9-2 の日本語フォント対応時に見落としていた（`m_Font` がビルトインの Arial のまま）。`NotoSansJP-Regular` を明示的に割り当てて修正済み。**シーンに直接置いた Text に日本語を入れる場合は、フォントを手動で `NotoSansJP-Regular` に差し替える必要がある**（`DialoguePlayer` 経由なら自動）。
+- **Prologue**（`Assets/Scenes/Prologue.unity`）: Camera + `DialoguePlayer`（会話 UI は実行時生成）+ `PrologueRunner`。`PrologueRunner` が `StageSet.prologue` を再生し、読み終わると `GameFlow.GoStageSelect()`。会話が空なら即 StageSelect へ。
 - **StageSelect**（`StageSelect.unity`）: Camera + EventSystem + Canvas（"SELECT STAGE" 見出し + `Stage1Btn`〜`Stage5Btn` + `BackButton`）+ `StageSelectMenu` + `MenuNavigation` + `DevStageClearToggles` + `DevStorySeenToggles` + `DevProgressResetButton`。各ステージボタン `onClick` → `StageSelectMenu.LoadStage(i)`（i=0..4, 永続 int リスナー）。
-  - **ステージボタンの並び（2026-09-08 変更）**: **横一列**。`Stage{i}Btn` は anchor/pivot (0.5,0.5)・**230×230 の正方形**・`anchoredPosition = ((i-2) * 280, -60)`（中心そろえ・間隔 280px）。ラベルは fontSize 34。以前は 560×100 の縦 5 段だった。
-  - **`BackButton`（2026-09-07）**: 画面**左下**（anchor (0,0), pivot (0.5,0.5), anchoredPos (190,80) ＝左端・下端から 40px, 300×80、Stage ボタンと同スタイル）。`onClick` → `StageSelectMenu.BackToTitle()` → `GameFlow.GoTitle()`。`MenuNavigation` のカーソル対象（ステージ行の下、リセットボタンの下）。
-  - **`DevProgressResetButton`（開発者用, 2026-09-08）**: `BackButton` の少し上（`gapAboveBackButton` 16px, 300×60, 暗赤）に実行時生成する「Reset story & clear」ボタン。押すと `GameFlow.ResetStageProgress()`（全ステージのクリアフラグ＋ステージ開始会話の既読を false。**プロローグ既読は残す**）＋ 画面上の全チェックボックス（`DevStageClearToggles.ResetAll()` / `DevStorySeenToggles.ResetAll()`）の見た目もリセット ＋ `RefreshLocks()`。表示条件は `DeveloperSettings.Active`。生成後 `MenuNavigation.AddButton()` で**カーソル対象に登録**（ステージ行の下、`BackButton` の上）。
-- **ステージ解放（2026-09-06）**: 最初は Stage1 のみ。あるステージをクリアすると次が解放される。
+  - **ステージボタンの並び**: **横一列**。`Stage{i}Btn` は anchor/pivot (0.5,0.5)・**230×230 の正方形**・`anchoredPosition = ((i-2) * 280, -60)`（中心そろえ・間隔 280px）。ラベルは fontSize 34。以前は 560×100 の縦 5 段だった。
+  - **`BackButton`**: 画面**左下**（anchor (0,0), pivot (0.5,0.5), anchoredPos (190,80) ＝左端・下端から 40px, 300×80、Stage ボタンと同スタイル）。`onClick` → `StageSelectMenu.BackToTitle()` → `GameFlow.GoTitle()`。`MenuNavigation` のカーソル対象（ステージ行の下、リセットボタンの下）。
+  - **`DevProgressResetButton`（開発者用）**: `BackButton` の少し上（`gapAboveBackButton` 16px, 300×60, 暗赤）に実行時生成する「Reset story & clear」ボタン。押すと `GameFlow.ResetStageProgress()`（全ステージのクリアフラグ＋ステージ開始会話の既読を false。**プロローグ既読は残す**）＋ 画面上の全チェックボックス（`DevStageClearToggles.ResetAll()` / `DevStorySeenToggles.ResetAll()`）の見た目もリセット ＋ `RefreshLocks()`。表示条件は `DeveloperSettings.Active`。生成後 `MenuNavigation.AddButton()` で**カーソル対象に登録**（ステージ行の下、`BackButton` の上）。
+- **ステージ解放**: 最初は Stage1 のみ。あるステージをクリアすると次が解放される。
   - クリア状況は**ステージごとの bool**（`GameFlow`、`PlayerPrefs` キー `RandomGame.ClearedStagesMask` にビットマスクで保存＝アプリ再起動後も維持）。`IsStageCleared(i)` / `SetStageCleared(i,b)` / `MarkStageCleared(i)`（= Set true。クリア時 `StageManager.Clear()` から呼ぶ）/ `ResetProgress()`（テスト用に全消去）。
   - **解放判定**: `IsStageUnlocked(i)` = `i==0 || IsStageCleared(i-1)`。`UnlockedStageIndex` は「連続して解放されている最大 index」（表示・カーソル初期位置の目安、派生値）。
   - `GameFlow.LoadStage` はロック中の index を無視する（多重防御）。
   - `StageSelectMenu`（`stageButtons[]` を index 順に割当、`StageButtons` で公開）が `Start`/`RefreshLocks()` で未解放ステージのボタンを `interactable = false` にする（今は Unity 既定のグレーアウト表示のみ）。
-- **開発者用クリア状況トグル（`DevStageClearToggles`, StageSelect/Canvas, 2026-09-06）**: 各ステージボタンの左隣に、実行時生成のチェックボックス（uGUI `Toggle`）を5つ出す。列の一番上に "clear" ラベル1つ（2026-09-07、`DevStorySeenToggles` と同方式）。
+- **開発者用クリア状況トグル（`DevStageClearToggles`, StageSelect/Canvas）**: 各ステージボタンの左隣に、実行時生成のチェックボックス（uGUI `Toggle`）を5つ出す。列の一番上に "clear" ラベル1つ（`DevStorySeenToggles` と同方式）。
   - チェック = そのステージがクリア済み（`GameFlow.SetStageCleared`）。クリア済みステージは自動でチェック済み。開発者が自由に付け外しでき、変更で即 `RefreshLocks()`。
   - 「Stage1 と 3 だけチェック」のような非現実的状態も許容（整合はとらない。トグルは `IsStageCleared` を素直に反映、ボタン解放は `IsStageUnlocked` ルール由来なので、その場合 Stage3 は「チェック済みだがロック」になる）。
-  - **表示条件は `DeveloperSettings.Active`** ＝「エディタ内 かつ `Assets/Resources/DeveloperSettings.asset` の `developerMode == true`」（2026-09-08：ScriptableObject 化。インスペクターでその 1 アセットの bool を切り替えるだけ、再コンパイル不要）。エディタ外ビルドでは値に関係なく常に無効（`Active` が `#if UNITY_EDITOR` ガード）。開発者用3コンポーネント（`DevStageClearToggles` / `DevStorySeenToggles` / `DevProgressResetButton`）はこの1スイッチだけに従う。プレイヤーがクリア状況を書き換える経路はここだけ。
-- **ビルド版の初回起動リセット（`FreshBuildGuard`, 2026-09-07、2026-09-22に`Debug.isDebugBuild`直結方式へ再設計）**: エディタ**外**のビルドで、起動時（`RuntimeInitializeOnLoadMethod` / `BeforeSceneLoad`）に**Development Buildのときだけ**スタンプ文字列を `PlayerPrefs` キー `RandomGame.BuildStamp` と照合し、違えば `GameFlow.ResetProgress()` ＋記録し直す。**エディタ内は無効**（`#if UNITY_EDITOR`）。unityroom（WebGL）想定＝PlayerPrefs はブラウザの IndexedDB にページ URL 単位で保存。
-  - **設計方針（2026-09-22）**: 以前は`FreshBuildGuard.Policy`という独立した`const`（`OnEveryBuild`/`OnTokenChange`/`Disabled`の3択→一度`AlwaysReset`/`NeverReset`の2択へ簡素化）を手動でリリース前に切り替える方式だったが、**「切り替え忘れたまま配布すると既存プレイヤーの進行状況ごと全消去してしまう」事故が構造的に起こり得た**（確認ダイアログはあったが、それでも押し進めればビルドできてしまい「絶対に消えない」保証にはならなかった）。これを無くすため、**切り替える定数自体を廃止し、`Debug.isDebugBuild`（Unity標準のランタイムプロパティ、Development Buildなら`true`）に直結**させた:
+  - **表示条件は `DeveloperSettings.Active`** ＝「エディタ内 かつ `Assets/Resources/DeveloperSettings.asset` の `developerMode == true`」（：ScriptableObject 化。インスペクターでその 1 アセットの bool を切り替えるだけ、再コンパイル不要）。エディタ外ビルドでは値に関係なく常に無効（`Active` が `#if UNITY_EDITOR` ガード）。開発者用3コンポーネント（`DevStageClearToggles` / `DevStorySeenToggles` / `DevProgressResetButton`）はこの1スイッチだけに従う。プレイヤーがクリア状況を書き換える経路はここだけ。
+- **ビルド版の初回起動リセット（`FreshBuildGuard`、`Debug.isDebugBuild`直結方式へ再設計）**: エディタ**外**のビルドで、起動時（`RuntimeInitializeOnLoadMethod` / `BeforeSceneLoad`）に**Development Buildのときだけ**スタンプ文字列を `PlayerPrefs` キー `RandomGame.BuildStamp` と照合し、違えば `GameFlow.ResetProgress()` ＋記録し直す。**エディタ内は無効**（`#if UNITY_EDITOR`）。unityroom（WebGL）想定＝PlayerPrefs はブラウザの IndexedDB にページ URL 単位で保存。
+  - **設計方針**: 以前は`FreshBuildGuard.Policy`という独立した`const`（`OnEveryBuild`/`OnTokenChange`/`Disabled`の3択→一度`AlwaysReset`/`NeverReset`の2択へ簡素化）を手動でリリース前に切り替える方式だったが、**「切り替え忘れたまま配布すると既存プレイヤーの進行状況ごと全消去してしまう」事故が構造的に起こり得た**（確認ダイアログはあったが、それでも押し進めればビルドできてしまい「絶対に消えない」保証にはならなかった）。これを無くすため、**切り替える定数自体を廃止し、`Debug.isDebugBuild`（Unity標準のランタイムプロパティ、Development Buildなら`true`）に直結**させた:
     - Development Build（`Debug.isDebugBuild == true`）: スタンプ＝`"build:" + Application.buildGUID`（buildGUIDは毎ビルド自動採番）と前回のスタンプを比較し、違えばリセット。ビルドし直すたびに毎回リセットされる（開発用）。
     - それ以外の通常ビルド（`Debug.isDebugBuild == false`）: **一切リセットしない**。配布して上書きアップデートしても、既にプレイ済みのプレイヤーの進行状況は絶対に消えない（切り替える人間の判断が介在しないため、消し忘れという事故が原理的に起こらない）。
-  - **ビルド前の確認ダイアログ（`FreshBuildGuardBuildCheck.cs`）は2026-09-22に削除済み**: 通常ビルドが無条件で安全になったため、リリース前の確認自体が不要になった。
+  - **ビルド前の確認ダイアログ（`FreshBuildGuardBuildCheck.cs`）は削除済み**: 通常ビルドが無条件で安全になったため、リリース前の確認自体が不要になった。
   - **エディタのPlayとの混入について**: エディタPlay中のPlayerPrefsは、実際のビルド版とは物理的に別のストレージ（Windowsならレジストリキーが別、WebGLならそもそもブラウザ側の別ストレージ）に保存されるため、この機構の有無に関係なく構造的に混ざりようがない。
 - **ボタンの `onClick` はすべて永続 UnityEvent リスナー**（Inspector に表示される。`UnityEventTools.AddPersistentListener` で設定済み）。結果画面の各ボタンも同様に `StageManager` の `OnNextStage`/`OnRetry`/`OnStageSelect` を指す。EventSystem は `InputSystemUIInputModule` + `Assets/InputSystem_Actions.inputactions`。
-- **Stage1（2026-09-22、チュートリアルステージ化）**: 地面は x セル [-19,7) ＋ [10,30)（落とし穴 x≈7〜10 あり、変更なし）。**開始時に使えるアクションは Dash のみ**（`allowedActions`は変更なしで従来どおり）で、道中でアイテムを拾うたびにアクションが1つずつ解放されていき、同時にそのアクションの使い方を教えるヒントが画面上部に表示される、スプラトゥーン系チュートリアル形式の構成に作り替えた。詳細な仕組みは §9-3「チュートリアルシステム」参照。レイアウト（x座標）:
+- **Stage1（チュートリアルステージ化）**: 地面は x セル [-19,7) ＋ [10,30)（落とし穴 x≈7〜10 あり、変更なし）。**開始時に使えるアクションは Dash のみ**（`allowedActions`は変更なしで従来どおり）で、道中でアイテムを拾うたびにアクションが1つずつ解放されていき、同時にそのアクションの使い方を教えるヒントが画面上部に表示される、スプラトゥーン系チュートリアル形式の構成に作り替えた。詳細な仕組みは §9-3「チュートリアルシステム」参照。レイアウト（x座標）:
   - `Enemy1`（@x≈-4、`EnemyPatrol`を無効化して静止）に子`ProximityZone`（`TutorialHint(DashPastEnemy)`、近接判定用Collider 6×3）＝「ダッシュで敵をかわす」
   - 落とし穴（x≈7〜9）に `PitMarker`（見た目は`SpriteRenderer`の色アルファ0でユーザーが非表示化、近接判定用の`BoxCollider2D`＋`TutorialHint(DashOverPit)`を付与、@x8）→ 対岸に `PitLandingZone`（到達判定用Collider、@x10.5）＝「ダッシュで落とし穴を飛び越える」
   - `AttackUnlockItem`（@x12、`ActionUnlockPickup(Attack)`）→ `Enemy1_B`（@x≈15、`EnemyPatrol`を無効化して静止）に子`ProximityZone`（`TutorialHint(AttackEnemy)`）＝「攻撃で敵をやっつける」
@@ -391,29 +391,29 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
   - `Goal`（@x28、変更なし）
   - Goal（@x28）は HP2以上の敵（ボス扱い）が生存しているとゴール不可（`Goal.AnyBossAlive()`）という既存仕様があるため、**Stage1に一撃で倒せないボスを置いてはいけない**（従来からの制限、変更なし）。
   - **意図的に強制していない点**: 複数アクションが解放された後は、ダッシュで攻撃チュートリアルの敵を素通りするなど、後の項目を別のアクションで“スキップ”すること自体は物理的に可能（ヒントが未達成のまま残るだけで、ステージ進行は妨げない）。強制ゲートが必要になった場合は今後の課題。
-- **Stage2（2026-09-13、Stage1と同一構成化。2026-09-22、使用可能アクションのみ更新）**: 地面・敵配置は Stage1 と同じ（x セル [-19,7)＋[10,30)、`Enemy1`を@x≈-4,@x≈15の2体、Goal@x28、Stage1のチュートリアル用オブジェクトは追加していない）。詳細なレベルデザインは別プランナーが今後担当する前提の暫定構成。`stageSeed`は22222のまま。**`allowedActions`を`Dash`+`Attack`の2種類から`Jump`+`Dash`+`Attack`の全3種類に変更**（Stage1のチュートリアルでアクションを段階解放する仕様に合わせ、ステージ2以降は最初から全アクション・コンボ有効という構成に統一するため。`disableCombos`は元々false、`stageSeed`も変更なし）。**ステージ2でコンボの練習をさせる軽めのチュートリアルは今回のスコープ外**（要望はあったが、別途レベルデザインが必要なため未着手）。
-- **Stage3（2026-09-11、地形・敵配置を Stage1 と同一化 → 高台を Tilemap 版へ置き換え → 2026-09-13、敵をEnemy1+Enemy2に変更）**: 地面 Tilemap は Stage1 と同じ x セル [-19,7) ＋ [10,30)（落とし穴あり）。高台は **Tilemap 版の `Grid/HighGround`**（x セル 2,3,4・天面行 y=-1、直下に柱行 y=-2）（詳細は §7「一方通行の高台」）。敵は `Enemy1`（HP1 @x≈-4）と `Enemy2`（据え置き砲台 @x≈15、旧`Enemy_Boss`から置き換え）。`Goal`（@x25）・`stageSeed`（33333）は変更なし。
-- **Stage4（2026-09-13、縦スクロールステージとして再構築）**: **Goal オブジェクトは無い**。地面 Tilemap（`Grid/Ground`）を、下部の床（xセル-5〜5, yセル-8〜-4）＋そこから上へ2ユニット間隔で交互に積んだ1マス厚の足場6段（surface y=0,2,4,6,8,10。タイル行はそれぞれの1つ下）に作り直した（プレイヤーの最大ジャンプ高さ ≈2.45 なので2ユニット間隔なら届く）。`Player`初期位置は`(0,-1.5,0)`に変更（横方向はカメラが追従しないため、床の中央に合わせた）。`Main Camera`は`CameraFollow.followHorizontal=false / followVertical=true`（x=0固定・y追従）、初期位置`(0,-1.5,-10)`。敵は`Enemy1`(@-3,2.5)・`Enemy2`(@-3,6.5)・**ボス`Enemy1_Boss`**(@0,10.5、一番上の足場)を配置。ボスは`Enemy1`プレハブのインスタンスに、シーン側オーバーライドで`Enemy.maxHealth=3`・`Enemy.clearStageOnDeath=true`を設定したもの（`EnemyPatrol`はそのまま残しているので足場の幅ぴったりで往復する）。**まだ地形・敵配置ともに「縦スクロールが正しく動くかを試すための簡易版」であり、正式なレベルデザインではない。** ボスを倒すと`Enemy.Die()`から`StageManager.Clear()`が直接呼ばれてクリアになる（Goalに触れた場合と同じ扱い）。
-  - **2026-09-14、高台（一方通行）を1セット追加**: ユーザーが自分でジャンプ力調整のために高台を試そうとしたが、`Grid/Ground`（`OneWayPlatform`が付いていない普通の地面Tilemap）に直接タイルを描いてしまい機能しなかった（天面が下から通り抜けられない＝一方通行ではなくただの全方向ブロックになっていた）ため、Stage3と同じ構造の`Grid/HighGround`（Tilemap + TilemapRenderer(order -9) + Rigidbody2D(Static) + TilemapCollider2D(Merge) + CompositeCollider2D(Polygons) + TilemapColliderBootstrap + OneWayPlatform、layer=Ground）を新規作成し、タイルをそちらへ移設して修正。位置は天面 x=2,3,4 / y=-2（左右で正しく左/中央/右のアセットを使うよう修正）、柱 x=2,3,4 / y=-3。**一方通行の高台を機能させるには、タイルの colliderType 設定だけでなく、必ず`OneWayPlatform`付きの専用Tilemap GameObjectに置く必要がある**（既存の`Grid/Ground`に描いても一方通行にはならない）。
-  - **2026-09-16、ユーザーが高台をさらに2セット追加→2つとも機能せず、再修正**: 症状は「右側の低い高台が完全にただのブロックになる」「左側の高い高台が全方向すり抜けてしまう」の2つ。原因はそれぞれ別:
+- **Stage2（Stage1と同一構成化。使用可能アクションのみ更新）**: 地面・敵配置は Stage1 と同じ（x セル [-19,7)＋[10,30)、`Enemy1`を@x≈-4,@x≈15の2体、Goal@x28、Stage1のチュートリアル用オブジェクトは追加していない）。詳細なレベルデザインは別プランナーが今後担当する前提の暫定構成。`stageSeed`は22222のまま。**`allowedActions`を`Dash`+`Attack`の2種類から`Jump`+`Dash`+`Attack`の全3種類に変更**（Stage1のチュートリアルでアクションを段階解放する仕様に合わせ、ステージ2以降は最初から全アクション・コンボ有効という構成に統一するため。`disableCombos`は元々false、`stageSeed`も変更なし）。**ステージ2でコンボの練習をさせる軽めのチュートリアルは今回のスコープ外**（要望はあったが、別途レベルデザインが必要なため未着手）。
+- **Stage3（地形・敵配置を Stage1 と同一化 → 高台を Tilemap 版へ置き換え → 敵をEnemy1+Enemy2に変更）**: 地面 Tilemap は Stage1 と同じ x セル [-19,7) ＋ [10,30)（落とし穴あり）。高台は **Tilemap 版の `Grid/HighGround`**（x セル 2,3,4・天面行 y=-1、直下に柱行 y=-2）（詳細は §7「一方通行の高台」）。敵は `Enemy1`（HP1 @x≈-4）と `Enemy2`（据え置き砲台 @x≈15、旧`Enemy_Boss`から置き換え）。`Goal`（@x25）・`stageSeed`（33333）は変更なし。
+- **Stage4（縦スクロールステージとして再構築）**: **Goal オブジェクトは無い**。地面 Tilemap（`Grid/Ground`）を、下部の床（xセル-5〜5, yセル-8〜-4）＋そこから上へ2ユニット間隔で交互に積んだ1マス厚の足場6段（surface y=0,2,4,6,8,10。タイル行はそれぞれの1つ下）に作り直した（プレイヤーの最大ジャンプ高さ ≈2.45 なので2ユニット間隔なら届く）。`Player`初期位置は`(0,-1.5,0)`に変更（横方向はカメラが追従しないため、床の中央に合わせた）。`Main Camera`は`CameraFollow.followHorizontal=false / followVertical=true`（x=0固定・y追従）、初期位置`(0,-1.5,-10)`。敵は`Enemy1`(@-3,2.5)・`Enemy2`(@-3,6.5)・**ボス`Enemy1_Boss`**(@0,10.5、一番上の足場)を配置。ボスは`Enemy1`プレハブのインスタンスに、シーン側オーバーライドで`Enemy.maxHealth=3`・`Enemy.clearStageOnDeath=true`を設定したもの（`EnemyPatrol`はそのまま残しているので足場の幅ぴったりで往復する）。**まだ地形・敵配置ともに「縦スクロールが正しく動くかを試すための簡易版」であり、正式なレベルデザインではない。** ボスを倒すと`Enemy.Die()`から`StageManager.Clear()`が直接呼ばれてクリアになる（Goalに触れた場合と同じ扱い）。
+  - **高台（一方通行）を1セット追加**: ユーザーが自分でジャンプ力調整のために高台を試そうとしたが、`Grid/Ground`（`OneWayPlatform`が付いていない普通の地面Tilemap）に直接タイルを描いてしまい機能しなかった（天面が下から通り抜けられない＝一方通行ではなくただの全方向ブロックになっていた）ため、Stage3と同じ構造の`Grid/HighGround`（Tilemap + TilemapRenderer(order -9) + Rigidbody2D(Static) + TilemapCollider2D(Merge) + CompositeCollider2D(Polygons) + TilemapColliderBootstrap + OneWayPlatform、layer=Ground）を新規作成し、タイルをそちらへ移設して修正。位置は天面 x=2,3,4 / y=-2（左右で正しく左/中央/右のアセットを使うよう修正）、柱 x=2,3,4 / y=-3。**一方通行の高台を機能させるには、タイルの colliderType 設定だけでなく、必ず`OneWayPlatform`付きの専用Tilemap GameObjectに置く必要がある**（既存の`Grid/Ground`に描いても一方通行にはならない）。
+  - **ユーザーが高台をさらに2セット追加→2つとも機能せず、再修正**: 症状は「右側の低い高台が完全にただのブロックになる」「左側の高い高台が全方向すり抜けてしまう」の2つ。原因はそれぞれ別:
     1. 右側: `Grid/HighGround`にある既存の正しい高台（x=2-4,y=-2/-3）と**全く同じ座標に**`Grid/Ground`側にも`HighGroundTopCenter`タイルが重ねて置かれていた（Active Tilemapを`Ground`のまま塗ってしまったミス）。`Ground`側の当たり判定は`OneWayPlatform`の管理外＝常に実体のままなので、`HighGround`側がすり抜け設定にしても`Ground`側で必ずブロックされていた。該当タイルを`Ground`から削除して解決。
     2. 左側: 新しく足された高台（x=-4〜-2の柱+天面、および真ん中の`GroundTile`の島 x=2-4,y=2）が、**全部既存の`Grid/HighGround`という1つのTilemapに同居**してしまっていた。`OneWayPlatform`は自分の`_col.bounds`（合成コライダー全体の外接矩形）を基準に重なり率を計算するため、離れた複数の高台が1つのTilemapに混在すると bounds が全部をまたぐ巨大な範囲になり、判定が破綻して常にすり抜けになっていた（GAME_SPEC既知の制限どおり）。
     - **修正**: `Grid/HighGround`（低い方、x=2-4）はそのまま。左側の高台を`Grid/HighGround2`（柱 x=-4〜-2 y=-3〜-1 + 天面 y=0）という**独立したTilemap**に分割。真ん中の`GroundTile`の島（x=2-4,y=2）は一方通行にする意図が無い普通の地面なので`Grid/Ground`へ移設。天面のみ・柱なしで空中に浮いていた`PlatformTallUpper`（y=4）は、ユーザーが「適当に置いただけ」と確認したため削除済み。Play で残った高台がそれぞれ個別に`pathCount=1`・独立したboundsになっていること、`HighGround2`で「上に乗って下降中はソリッド」「柱の中を上昇中はすり抜け」を確認済み。
-    - **命名の整理（2026-09-16）**: 「高台」の英訳が"high ground"であることから、`Platform`という名前を使っていたGameObject・アセット群をすべて`HighGround`系の名前へ統一（`Grid/Platform`→`Grid/HighGround`、`PlatformTop*`/`PlatformPillar*`タイル→`HighGroundTop*`/`HighGroundPillar*`、プレハブ→`HighGroundTilemap.prefab`）。スクリプト名`OneWayPlatform.cs`自体は当たり判定の挙動を表す技術的な名前として変更していない（GameObject名とコンポーネント名が一致しなくなる点は他プランナーへの説明で明記が必要）。
-    - **高台を追加する際の運用（2026-09-16、ユーザー方針）**: `HighGroundTilemap.prefab`は「毎回使うもの」ではなく、**新しく独立した高台を1つ増やす最初の1回だけ**使う（あるいは開発側が用意する）もの。一度その専用Tilemapがシーンに存在すれば、以後はTile Paletteで`Ground`と全く同じ感覚で直接ペイント/消去して高さ・形を調整してよい（詳細な使い方ガイドは別途、他プランナー向けに整理）。
-- **Stage5（2026-09-16、ラスボス戦として最小構成）**: 地面はそれまでの連続Tilemapのまま変更なし。**Goalオブジェクトは削除済み**（Stage4と同じくボス撃破でクリア）。`Enemy3`（ラスボス、詳細は§6-3）を地面中央付近 `(4, -1.5)` に配置。`Player`(@x-10)はそのまま。まだ「地面があってプレイヤーとラスボスがいるだけ」の最小構成で、正式なレベルデザインではない。
-- **使用可能アクション（`StageSet.stages[i].allowedActions`, 2026-09-09）**: Stage1 = `Dash` のみ（開始時の初期値。`disableCombos` も明示的に on）／ Stage2〜5 = `Jump`+`Dash`+`Attack` 全3種類（2026-09-22、Stage2を2種類→3種類に修正）。`StageSet.asset` で編集。**Stage1はこの初期値に加えて、プレイ中にアイテムを拾うたびに`MainActionQueue.UnlockAction()`で動的に追加されていく**（詳細は §9-3「チュートリアルシステム」）。
+    - **命名の整理**: 「高台」の英訳が"high ground"であることから、`Platform`という名前を使っていたGameObject・アセット群をすべて`HighGround`系の名前へ統一（`Grid/Platform`→`Grid/HighGround`、`PlatformTop*`/`PlatformPillar*`タイル→`HighGroundTop*`/`HighGroundPillar*`、プレハブ→`HighGroundTilemap.prefab`）。スクリプト名`OneWayPlatform.cs`自体は当たり判定の挙動を表す技術的な名前として変更していない（GameObject名とコンポーネント名が一致しなくなる点は他プランナーへの説明で明記が必要）。
+    - **高台を追加する際の運用（ユーザー方針）**: `HighGroundTilemap.prefab`は「毎回使うもの」ではなく、**新しく独立した高台を1つ増やす最初の1回だけ**使う（あるいは開発側が用意する）もの。一度その専用Tilemapがシーンに存在すれば、以後はTile Paletteで`Ground`と全く同じ感覚で直接ペイント/消去して高さ・形を調整してよい（詳細な使い方ガイドは別途、他プランナー向けに整理）。
+- **Stage5（ラスボス戦として最小構成）**: 地面はそれまでの連続Tilemapのまま変更なし。**Goalオブジェクトは削除済み**（Stage4と同じくボス撃破でクリア）。`Enemy3`（ラスボス、詳細は§6-3）を地面中央付近 `(4, -1.5)` に配置。`Player`(@x-10)はそのまま。まだ「地面があってプレイヤーとラスボスがいるだけ」の最小構成で、正式なレベルデザインではない。
+- **使用可能アクション（`StageSet.stages[i].allowedActions`）**: Stage1 = `Dash` のみ（開始時の初期値。`disableCombos` も明示的に on）／ Stage2〜5 = `Jump`+`Dash`+`Attack` 全3種類（Stage2を2種類→3種類に修正）。`StageSet.asset` で編集。**Stage1はこの初期値に加えて、プレイ中にアイテムを拾うたびに`MainActionQueue.UnlockAction()`で動的に追加されていく**（詳細は §9-3「チュートリアルシステム」）。
 - **結果画面**は各ステージシーン内の `StageFlow/ResultCanvas`（`ClearPanel` / `FailPanel`、`sortingOrder 100`、通常は非アクティブ）。`StageManager` が表示と遷移を管理。
   - 表示中は `Time.timeScale = 0`、`PlayerController` / `MainActionController` を無効化。
   - **「もう一度」= シーンの再読み込み**なので、アクションの並びも含めて完全初期化される（＝リトライで同じ並びになる仕様を自動で満たす）。
   - クリア画面: `Next Stage`（次が無ければ非表示 → 実質 Stage Select）/ `Retry` / `Stage Select`。
   - 失敗画面: `Retry` / `Stage Select`。
 - **クリア条件**: `Goal`（ステージ右端のトリガー）にプレイヤー本体が触れる。ただし `Enemy` で `MaxHealth >= 2`（＝ボス）が生存中は無効。または`Enemy.clearStageOnDeath`（ボス撃破で即クリアの敵）。**どちらの経路も最終的に`StageManager.Clear()`1箇所に集約される**（`Goal.cs`／`Enemy.Die()`のどちらから呼ばれても同じ）ため、クリア条件がステージによって「ゴールに触れる」か「特定の敵を倒す」かで違っても、クリア時の演出フローは完全に共通。
-  - **クリアアニメーションを挟む（2026-09-23、体力0での失敗と同じ方式）**: `Clear()`が呼ばれた瞬間、**即座に**`_ended=true`にしつつ`_playerMainAction.PlayClearAnimation()`（`Animator`の`Clear`トリガーを発火）→`FreezeGameplay()`→`Time.timeScale=0`にするが、**パネルはまだ出さない**。`Player_Clear.anim`（プレースホルダー、ループなし・1周のみ、長さ1秒）の末尾に仕込んだAnimation Event（`"ShowClearPanel"`）が発火した瞬間に`HandlePlayerAnimationEvent()`が`clearPanel`を表示する。`Animator.updateMode=UnscaledTime`のおかげで`Time.timeScale=0`でも再生され続けるのは死亡アニメーションと同じ。`MainActionController.PlayClearAnimation()`が`animator.SetTrigger("Clear")`を呼ぶだけの薄いラッパー。Animator Controller側は`AnyState→Clear`（トリガー条件、duration 0.05、Deadと同じ形）を追加、`Clear`state自体に出口の遷移は無い（Deadと同じく終端state。ステージはこの後リロードされるだけなので後始末は不要）。
+  - **クリアアニメーションを挟む（体力0での失敗と同じ方式）**: `Clear()`が呼ばれた瞬間、**即座に**`_ended=true`にしつつ`_playerMainAction.PlayClearAnimation()`（`Animator`の`Clear`トリガーを発火）→`FreezeGameplay()`→`Time.timeScale=0`にするが、**パネルはまだ出さない**。`Player_Clear.anim`（プレースホルダー、ループなし・1周のみ、長さ1秒）の末尾に仕込んだAnimation Event（`"ShowClearPanel"`）が発火した瞬間に`HandlePlayerAnimationEvent()`が`clearPanel`を表示する。`Animator.updateMode=UnscaledTime`のおかげで`Time.timeScale=0`でも再生され続けるのは死亡アニメーションと同じ。`MainActionController.PlayClearAnimation()`が`animator.SetTrigger("Clear")`を呼ぶだけの薄いラッパー。Animator Controller側は`AnyState→Clear`（トリガー条件、duration 0.05、Deadと同じ形）を追加、`Clear`state自体に出口の遷移は無い（Deadと同じく終端state。ステージはこの後リロードされるだけなので後始末は不要）。
 - **失敗条件**: `PlayerHealth.OnDied`（体力 0、1 回だけ発火）または `StageManager` の `player.y < killY`（既定 -12）。
-  - **体力0の場合だけ死亡アニメーションを挟む（2026-09-21。クリアも2026-09-23に同様の方式になったため、即座にパネルを出すのは落下死だけ）**: 落下死は今まで通り即座にパネルを表示する。体力0の場合は`StageManager.HandlePlayerHpDied()`（`Fail()`とは別メソッド）が呼ばれ、**即座に**`_ended=true`＋`FreezeGameplay()`＋`Time.timeScale=0`にするが、**パネルはまだ出さない**。Playerの`Animator`だけは`updateMode=UnscaledTime`（2026-09-21変更、既定のNormalから変更）にしてあるので、`Time.timeScale=0`でも死亡アニメーション（`Dead`状態）は止まらずに再生され続ける（他の全オブジェクトは`Time.deltaTime`ベースなので今まで通り完全停止）。死亡アニメーションのClip側に仕込んだAnimation Event（`AnimationEventRelay`経由、`"ShowFailPanel"`）が発火した瞬間に`StageManager.HandlePlayerAnimationEvent()`が`failPanel`を表示する。§2-7も参照。
-  - **致死ダメージにはノックバック無し（2026-09-21）**: `Enemy.TryTouchPlayer`で`health.TakeDamage()`後、`health.Health <= 0`（＝やられた瞬間）ならその場でreturnし、`ApplyKnockback`を呼ばない。それ以外のダメージ（体力が残る場合）は今まで通りノックバックする。
-- **キーボード操作（`MenuNavigation`, 2026-09-06 / 2D 化 2026-09-08）**: メニュー系 UI をキーボードでも操作可能。
+  - **体力0の場合だけ死亡アニメーションを挟む（クリアも同様の方式になったため、即座にパネルを出すのは落下死だけ）**: 落下死は今まで通り即座にパネルを表示する。体力0の場合は`StageManager.HandlePlayerHpDied()`（`Fail()`とは別メソッド）が呼ばれ、**即座に**`_ended=true`＋`FreezeGameplay()`＋`Time.timeScale=0`にするが、**パネルはまだ出さない**。Playerの`Animator`だけは`updateMode=UnscaledTime`（既定のNormalから変更）にしてあるので、`Time.timeScale=0`でも死亡アニメーション（`Dead`状態）は止まらずに再生され続ける（他の全オブジェクトは`Time.deltaTime`ベースなので今まで通り完全停止）。死亡アニメーションのClip側に仕込んだAnimation Event（`AnimationEventRelay`経由、`"ShowFailPanel"`）が発火した瞬間に`StageManager.HandlePlayerAnimationEvent()`が`failPanel`を表示する。§2-7も参照。
+  - **致死ダメージにはノックバック無し**: `Enemy.TryTouchPlayer`で`health.TakeDamage()`後、`health.Health <= 0`（＝やられた瞬間）ならその場でreturnし、`ApplyKnockback`を呼ばない。それ以外のダメージ（体力が残る場合）は今まで通りノックバックする。
+- **キーボード操作（`MenuNavigation` / 2D 化）**: メニュー系 UI をキーボードでも操作可能。
   - 付いている場所: `Title/Canvas`、`StageSelect/Canvas`、各ステージの `StageFlow/ResultCanvas/ClearPanel` と `FailPanel`（パネルに付けてあるので、そのパネルが表示された瞬間だけ働く）。対象ボタンは子から階層順で自動収集。実行時生成ボタンは `AddButton()` で追加（`DevProgressResetButton` が使用）。
   - **カーソル移動は画面位置ベースの 2D**（`ButtonCenter` = `transform.position`、ScreenSpaceOverlay なので画面ピクセル）:
     - **W / ↑・S / ↓** → 上/下にあるボタンのうち最も近いもの（ユークリッド距離）。進行方向に候補が無ければ**反対の端の行へラップ**（その行の中で x が現在に一番近いもの）。
@@ -421,18 +421,18 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
     - ＝ ステージ 1〜5（横一列）は A/D で左右ループ。縦は「ステージ行 ⇔ リセット ⇔ タイトルに戻る」で、上端／下端もループする（ステージから ↑ で「タイトルに戻る」へ、「タイトルに戻る」から ↓ でステージ行へ）。非表示/無効ボタンはスキップ。
   - **スペース / Enter** で決定（`Button.onClick.Invoke()`）。
   - **初期カーソル位置**: `SetInitialFocus(Button)` で明示指定があればそれ（`StageSelectMenu` が「今挑戦できる一番先のステージ」＝`GameFlow.UnlockedStageIndex` のボタンを渡す）。無ければ `initialCursor` enum：`FirstUsable`（既定。Title / 結果画面）。実際の確定は Update 側（`OnEnable` 時点では他スクリプトの `Start` 未実行のことがあるため）。
-  - **マウスホバー**：**マウスを実際に動かしたときだけ**カーソルに反映（`OnEnable` で現在のマウス位置を基準として覚え、そこから 2px 以上動くまでホバー無効）。シーン遷移直後や結果パネル表示直後にマウスが据え置かれているだけでは、初期カーソル位置が上書きされない（2026-09-08 修正。例：ステージ2クリア→ステージ選択でカーソルはステージ3のまま、マウスがステージ1上にあっても動かさない限り動かない）。
-  - **入力ロック（`InputLock`, 2026-09-08 / 対象を決定系のみに限定 2026-09-12、§16）**：`OnEnable` に `InputLock.LockFor(inputLockDuration)` を呼び、その間は**決定**（Space/Enter/テンキー Enter・マウスクリック＝`HandleSubmit()` と `GraphicRaycaster`）だけを無視する。`InputLock.InputAllowed` = `!SceneTransition.Transitioning && Time.unscaledTime >= 解除時刻`。`Time.unscaledTime` 基準。**カーソル移動（`HandleKeyboardNav()`・マウスホバー）はこの猶予タイマー中でも常に反映される**（以前は移動も含めて全部止めていたため、「下矢印キーでカーソルを動かしたい」という意図した操作までブロックしてしまう問題があった。決定だけを対象にすることで解消）。ただし `SceneTransition` の**フェード演出中**（`InputLock.NavigationAllowed` = `!SceneTransition.Transitioning` が false の間）はカーソル移動・マウスホバーも含めて完全にブロックする（フェード中はまだ画面が見えていないため。猶予タイマーの対象外＝常時受付、とは別の話）。さらに、フェードが終わった後にカーソル移動が実際に成立した（＝そのパネルで意味のある操作だった）瞬間に `InputLock.Unlock()` を呼び、**決定のロックも即座に解除する**（キー操作で動かし始めた時点で「連打の勢い」ではなく「意図した操作」と判断できるため）。**ロックが明けたら決定も通常どおり**（意図的な連打はそのまま通す）。
-    - シーン遷移では `SceneTransition` が「暗転〜明転〜さらに 0.25 秒」を管理するので `OnEnable` の `LockFor` は実質冗長（害はない）。**結果パネル**（`ClearPanel` / `FailPanel`）はシーン遷移ではないので、この `LockFor` が効く時間（`inputLockDuration`）が本番。2026-09-12 に 1.0→0.5 秒へ半減し、現在は他画面の `MenuNavigation` と同じ 0.5 秒。
+  - **マウスホバー**：**マウスを実際に動かしたときだけ**カーソルに反映（`OnEnable` で現在のマウス位置を基準として覚え、そこから 2px 以上動くまでホバー無効）。シーン遷移直後や結果パネル表示直後にマウスが据え置かれているだけでは、初期カーソル位置が上書きされない（例：ステージ2クリア→ステージ選択でカーソルはステージ3のまま、マウスがステージ1上にあっても動かさない限り動かない）。
+  - **入力ロック（`InputLock` / 対象を決定系のみに限定 §16）**：`OnEnable` に `InputLock.LockFor(inputLockDuration)` を呼び、その間は**決定**（Space/Enter/テンキー Enter・マウスクリック＝`HandleSubmit()` と `GraphicRaycaster`）だけを無視する。`InputLock.InputAllowed` = `!SceneTransition.Transitioning && Time.unscaledTime >= 解除時刻`。`Time.unscaledTime` 基準。**カーソル移動（`HandleKeyboardNav()`・マウスホバー）はこの猶予タイマー中でも常に反映される**（以前は移動も含めて全部止めていたため、「下矢印キーでカーソルを動かしたい」という意図した操作までブロックしてしまう問題があった。決定だけを対象にすることで解消）。ただし `SceneTransition` の**フェード演出中**（`InputLock.NavigationAllowed` = `!SceneTransition.Transitioning` が false の間）はカーソル移動・マウスホバーも含めて完全にブロックする（フェード中はまだ画面が見えていないため。猶予タイマーの対象外＝常時受付、とは別の話）。さらに、フェードが終わった後にカーソル移動が実際に成立した（＝そのパネルで意味のある操作だった）瞬間に `InputLock.Unlock()` を呼び、**決定のロックも即座に解除する**（キー操作で動かし始めた時点で「連打の勢い」ではなく「意図した操作」と判断できるため）。**ロックが明けたら決定も通常どおり**（意図的な連打はそのまま通す）。
+    - シーン遷移では `SceneTransition` が「暗転〜明転〜さらに 0.25 秒」を管理するので `OnEnable` の `LockFor` は実質冗長（害はない）。**結果パネル**（`ClearPanel` / `FailPanel`）はシーン遷移ではないので、この `LockFor` が効く時間（`inputLockDuration`）が本番。1.0→0.5 秒へ半減し、現在は他画面の `MenuNavigation` と同じ 0.5 秒。
   - 選択中（キーボードカーソル or マウスホバー）のボタンに**色付きの枠**（`SelectionFrame`、実行時生成の黄色い矩形を背面に置き、`framePadding`(8px) ぶんはみ出させて枠に見せる）。
-    - 枠の位置合わせ（2026-09-07 修正）: 枠は常に pivot (0.5,0.5) にし、ボタンの pivot が中心でなくても `sizeDelta*(0.5 - pivot)` で矩形中心へ補正して合わせる。以前はボタンの pivot をそのままコピーしていたため、中心 pivot でないボタン（左下配置の BackButton など）で枠が片側に寄っていた。中心 pivot のボタンでは補正 0 で従来と同じ。
+    - 枠の位置合わせ: 枠は常に pivot (0.5,0.5) にし、ボタンの pivot が中心でなくても `sizeDelta*(0.5 - pivot)` で矩形中心へ補正して合わせる。以前はボタンの pivot をそのままコピーしていたため、中心 pivot でないボタン（左下配置の BackButton など）で枠が片側に寄っていた。中心 pivot のボタンでは補正 0 で従来と同じ。
   - `EventSystem`/`InputSystemUIInputModule` の自動ナビゲーションとは二重処理にならないよう、対象ボタンの `Navigation.mode = None` にし、毎フレーム `EventSystem` の選択を解除している。マウスのクリック・ホバー着色はモジュール側のまま。
 - **将来メモ**: ステージ開始演出は §9-2 の開始会話で最小実装済み（`StageManager.Start` → 会話 → 操作解禁）。`GameFlow` は遷移のみ。メニュー UI テキストは日本語フォント未整備のため**英語**（会話本文は日本語。`Assets/Resources/Fonts/NotoSansJP-Regular.ttf` を埋め込んで表示、詳細は §9-2「日本語フォント」）。
 
-### 9-2. プロローグ / 会話システム（`DialogueSequence` + `DialoguePlayer`、2026-09-07）
+### 9-2. プロローグ / 会話システム（`DialogueSequence` + `DialoguePlayer`）
 
 **データ**: 会話 1 本 = `DialogueSequence`（ScriptableObject, `[CreateAssetMenu] RandomGame/Dialogue Sequence`, 置き場 `Assets/Dialogue/`）。分岐なしの一本道。現状は仮テキストで `Prologue` / `Stage1Intro`〜`Stage5Intro` の 6 本。
-- `pages[]`: 1 ページ = スペース / エンター 1 回で送る単位。`speaker`（空でナレーション）/ `text`（`[TextArea]`）/ `image`（`Sprite`, 任意。未指定なら直前の絵を継続）/ `layout`。
+- `pages[]`: 1 ページ = スペース / エンター 1 回で送る単位。`speaker`（`SpeakerId` enum、 string→enum へ変更。`Narrator` でナレーション）/ `text`（`[TextArea]`）/ `image`（`Sprite`, 任意。未指定なら直前の絵を継続）/ `layout`。表示名・アイコンは `speaker` 自体には持たせず、`SpeakerRegistry`（後述）で一括管理する。
 - `layout`: `CenteredOnBlack`（暗転＋中央テキスト＝プロローグ前半）/ `BottomTextbox`（暗転＋一枚絵＋下部ボックス＝プロローグ後半）/ `TopTextbox`（暗転なし＋上部ボックス＝ステージ開始会話）。
 - **一枚絵が未準備のうちは仮イラスト**を自動表示（`BottomTextbox` で `image` 未指定のとき。グレー面に「主人公」＝左下 /「ダンジョン」＝右 のラベル）。`Sprite` を割り当てれば置き換わる。
 - 割り当て先は `Assets/Resources/StageSet.asset`: 新フィールド `prologue`（全体で 1 本）と、各 `stages[i].intro`（ステージごと）。
@@ -440,19 +440,43 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 **再生**: `DialoguePlayer`（`Assets/Scripts/DialoguePlayer.cs`）。
 - UI（Canvas 含む）は**実行時に自分で生成**する。シーン側は空 GameObject にコンポーネントを付けるだけ。Canvas は `sortingOrder 200`（HUD / 結果画面より前面）。
 - `Play(DialogueSequence, System.Action onComplete)` で再生。**スペース / エンター / テンキー Enter / 画面のどこでも左クリック**で送り、最後まで読むと `onComplete`。内容が空なら即 `onComplete`。クリックは UI 経由ではなく `Mouse.current.leftButton` を直接読むので、テキストボックス上でも位置を問わず送れる（会話 UI の Image は `raycastTarget=false`）。
-- **入力ロック（`InputLock`, 2026-09-08）**: `Play()` の直後に `InputLock.LockFor(inputLockDuration)`（既定 **0.25 秒**、2026-09-12 に 0.5→0.25 へ半減）。その間は送り入力（Space/Enter/左クリック）を無視。プロローグ／開始会話へは `SceneTransition` 経由で入るので、実際には「暗転〜明転〜さらに 0.25 秒」ずっと送り入力は不可（`InputLock.InputAllowed` が `SceneTransition.Transitioning` も見るため）。明転後に会話が現れ、ロックが明ければ通常どおり送れる。ステージ開始会話は会話終了時（`StageManager.OnIntroFinished`）にも `LockFor(0.25)`（送り切った勢いでアクションが出ないように）。
+- **入力ロック（`InputLock`）**: `Play()` の直後に `InputLock.LockFor(inputLockDuration)`（既定 **0.25 秒**、 0.5→0.25 へ半減）。その間は送り入力（Space/Enter/左クリック）を無視。プロローグ／開始会話へは `SceneTransition` 経由で入るので、実際には「暗転〜明転〜さらに 0.25 秒」ずっと送り入力は不可（`InputLock.InputAllowed` が `SceneTransition.Transitioning` も見るため）。明転後に会話が現れ、ロックが明ければ通常どおり送れる。ステージ開始会話は会話終了時（`StageManager.OnIntroFinished`）にも `LockFor(0.25)`（送り切った勢いでアクションが出ないように）。
 - 再生中は静的 `DialoguePlayer.IsPlaying == true`。`PlayerController.Update` と `MainActionController.Update` は先頭でこれを見て**入力を無視**（スペースが会話送りに食われる／移動しない）。
-- **文字送り（タイプライター演出、2026-09-12。on/off・速さともに同日中にシーン単位→ページ単位へ変更）**: `DialogueSequence.Page.useTypewriterEffect`（`[SerializeField] bool`、**既定 true**）と `.typewriterCharsPerSecond`（`[SerializeField] float`、**既定 30**）が**ページ（テキスト）ごとに個別設定**できる。true のページは、本文（`_centerText` または `_bodyText`。**話者名は対象外で常に即時表示**）を先頭からそのページの速さ（1秒あたりの表示文字数）で1文字ずつ表示する（「こんにちは」→「こ」→「こん」→…）。
+- **文字送り（タイプライター演出。on/off・速さともに同日中にシーン単位→ページ単位へ変更）**: `DialogueSequence.Page.useTypewriterEffect`（`[SerializeField] bool`、**既定 true**）と `.typewriterCharsPerSecond`（`[SerializeField] float`、**既定 30**）が**ページ（テキスト）ごとに個別設定**できる。true のページは、本文（`_centerText` または `_bodyText`。**話者名は対象外で常に即時表示**）を先頭からそのページの速さ（1秒あたりの表示文字数）で1文字ずつ表示する（「こんにちは」→「こ」→「こん」→…）。
   - **表示し終わる前**に発動入力（Space/Enter/テンキー Enter/左クリック）があると、その入力は**残りを一気に表示するだけ**でページはまだ送らない（`CompleteTypewriter()`）。
   - **表示し終わった状態**での発動入力で、初めて次のページへ送る（`Advance()`）。＝1文字ずつ表示中は「1回目の入力で全文表示、2回目の入力で次へ」という2段階。
   - そのページの `useTypewriterEffect` が false なら、常に開始時点で全文表示済み（`IsFullyRevealed`）から始まるため、発動入力は毎回即ページ送りになる＝従来の一括表示（この場合 `typewriterCharsPerSecond` は無視される）。
   - アニメーションは `Time.unscaledDeltaTime` 基準で進む（ステージ開始会話は `StageManager` が `Time.timeScale=0` にするため、`Time.deltaTime` 基準だと文字が出てこなくなる）。
   - 実装は `_typewriterActive`/`_typewriterFullText`/`_typewriterElapsed`/`_typewriterTarget`（アニメーション対象の `Text`）/`_typewriterCharsPerSecond`（そのページの速さを保持）で状態管理。`SetPageText(Text target, string fullText, bool useTypewriter, float charsPerSecond)` が `Render()` から `p.useTypewriterEffect`/`p.typewriterCharsPerSecond` を渡して呼ばれる。リッチテキストタグ（`<color=...>` 等）を本文に含めた場合、単純な文字数カットのため表示途中でタグが割れる可能性がある（現状のダイアログデータはプレーンテキストのみなので未対応・未検証）。
   - **インスペクターでの設定場所**: **`Assets/Dialogue/*.asset`（各 `DialogueSequence`）の `pages[]` 内、ページごとの `Use Typewriter Effect` / `Typewriter Chars Per Second`**（例: `Stage1Intro.asset` を選択 → `Pages` を展開 → 各要素の中。`DialoguePlayer` 側にはこれらの設定は無い）。**既存の `.asset` は再保存していなくても、この bool/float フィールドは新規追加分も含めて全ページ既定値（true / 30）で読み込まれることを確認済み**（Prologue / Stage1Intro で検証）。
-  - **`CenteredOnBlack` の中央表示ブレ対策（2026-09-12）**: `_centerText` は元々 `TextAnchor.MiddleCenter` で、文字送り中に文字数が増えるたびに中央揃えの基準がズレて左右にブレて見えていた。対策として `LayoutCenteredText(string)` を新設：ページ描画時にまず確保領域（画面の 12%〜88%）の実横幅を測り、`Text.preferredWidth` で全文の必要横幅を求め、`Mathf.Min` で確保領域幅にクランプ（収まらない＝改行が要る場合は確保領域いっぱいにフォールバック）。その横幅ぶんだけ確保領域の中央に来るよう `offsetMin`/`offsetMax` で領域自体を狭め、揃えを `TextAnchor.MiddleLeft` に変更した上でその固定された左端から文字を生やす。全文表示時にちょうど元の中央位置へ収まるため、見た目を変えずに文字送り中のブレだけを解消できる。`useTypewriterEffect=false` のページでも同じ計算を通すが、この場合は最初から全文表示のため実害はない（計算結果のボックス幅＝全文の幅になり、Left と Center が一致する）。
-  - **フェード演出中はアニメーションを止める（2026-09-12）**: プロローグ／ステージ開始会話は `Start()` から即座に `Play()` されるため、シーン遷移の暗転〜明転（`SceneTransition.Transitioning`）の間に文字送りが進んでしまい、明転して画面が見えたときには既に全文表示済み、という問題があった。対策として `UpdateTypewriter()` の先頭で `if (SceneTransition.Transitioning) return;`（経過時間を進めない＝待機）を追加。明転が完了して `Transitioning` が false になった瞬間から文字送りが始まるため、プレイヤーは実際にアニメーションを見られる。Play で確認済み：`Transitioning=true` の間は3回 `Update()` を回しても `_typewriterElapsed`/表示テキストが変化しない。`Transitioning=false` にした瞬間から進み始める。
+  - **`CenteredOnBlack` の中央表示ブレ対策**: `_centerText` は元々 `TextAnchor.MiddleCenter` で、文字送り中に文字数が増えるたびに中央揃えの基準がズレて左右にブレて見えていた。対策として `LayoutCenteredText(string)` を新設：ページ描画時にまず確保領域（画面の 12%〜88%）の実横幅を測り、`Text.preferredWidth` で全文の必要横幅を求め、`Mathf.Min` で確保領域幅にクランプ（収まらない＝改行が要る場合は確保領域いっぱいにフォールバック）。その横幅ぶんだけ確保領域の中央に来るよう `offsetMin`/`offsetMax` で領域自体を狭め、揃えを `TextAnchor.MiddleLeft` に変更した上でその固定された左端から文字を生やす。全文表示時にちょうど元の中央位置へ収まるため、見た目を変えずに文字送り中のブレだけを解消できる。`useTypewriterEffect=false` のページでも同じ計算を通すが、この場合は最初から全文表示のため実害はない（計算結果のボックス幅＝全文の幅になり、Left と Center が一致する）。
+  - **フェード演出中はアニメーションを止める**: プロローグ／ステージ開始会話は `Start()` から即座に `Play()` されるため、シーン遷移の暗転〜明転（`SceneTransition.Transitioning`）の間に文字送りが進んでしまい、明転して画面が見えたときには既に全文表示済み、という問題があった。対策として `UpdateTypewriter()` の先頭で `if (SceneTransition.Transitioning) return;`（経過時間を進めない＝待機）を追加。明転が完了して `Transitioning` が false になった瞬間から文字送りが始まるため、プレイヤーは実際にアニメーションを見られる。Play で確認済み：`Transitioning=true` の間は3回 `Update()` を回しても `_typewriterElapsed`/表示テキストが変化しない。`Transitioning=false` にした瞬間から進み始める。
 
-**日本語フォント（2026-09-11）**: 会話本文は日本語だが、以前は `Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf")`（ビルトインの Arial 系、日本語グリフ無し）をそのまま使っていた。エディタ / Windows スタンドアロンでは欠けているグリフを **OS インストール済みフォントへフォールバック**して表示できていたが、**WebGL ビルド（unityroom）は OS フォントにアクセスできないため、そのフォールバックが効かず日本語が表示されない**という問題があった。
+**話者アイコン・名前欄**: テキストボックス**左上**にそのキャラクターのアイコンを表示し、**アイコンの真下**に話者名を表示する（スプラトゥーンのヒーローモード会話のようなレイアウト）。`speaker` が `Narrator`（ナレーション扱い）のページでは、名前欄・アイコンとも一切表示しない。
+
+- **`SpeakerId`（enum、`Assets/Scripts/SpeakerId.cs`）**: `Narrator` / `Hero` / `LastBoss`。**新しい話者は必ず末尾に追加すること**（`TutorialHintCategory`と同じ注意点。`enumValueIndex`でシリアライズされるため、途中に挿入すると既存データが全部ずれて壊れる）。
+- **`SpeakerRegistry`（ScriptableObject、`Assets/Scripts/SpeakerRegistry.cs`、実体は `Assets/Resources/SpeakerRegistry.asset` 1個だけ）**: `SpeakerId`ごとの表示名（`displayName`）とアイコン（`Sprite icon`）の対応表。**「誰がどのアイコンで喋るか」の設定はシステムの種類（ストーリー会話／チュートリアルヒント）によらず、この1箇所にまとめて一度だけ設定すればよい**（以前は`DialogueSequence.Page`ごとに`Sprite`を個別に割り当てる方式で、セリフを増やすたびに毎回アイコンを設定し直す必要があった）。`SpeakerRegistry.Get(SpeakerId)`（static）で参照する。`Resources.Load<SpeakerRegistry>("SpeakerRegistry")`で読むため、**ファイル名・置き場所（`Assets/Resources/`直下）とも固定**。
+  - 新しい話者を増やす手順: ①`SpeakerId`に新しい値を末尾追加 ②`SpeakerRegistry.asset`をインスペクターで選択し、`Profiles`配列に新しい要素（`Id`/`Display Name`/`Icon`）を追加。以上だけで、`DialogueSequence.Page.speaker`や`TutorialHint`の`speaker`ドロップダウンから選べるようになり、アイコンも自動で対応するものが出る。
+- `DialogueSequence.Page.speaker`は`SpeakerId`型（**インスペクターでドロップダウン選択するだけ**、`string`から変更。以前はテキストボックスに「勇者」等を毎回手入力していた）。既存の6つの会話アセット（`Prologue`/`Stage1〜5Intro`）は、変更前の文字列データ（`勇者`→`Hero`、`ラスボス`→`LastBoss`、空→`Narrator`）を元に`eval`で一括移行済み（ページ順は変えていないので、移行時に対応関係を取り違えるリスクは低い）。
+
+**見た目（箱・アイコン・名前欄・本文）を編集する場所は1箇所だけ：`Assets/Prefabs/UI/SpeakerTextBox.prefab`（`SpeakerTextBoxView.cs`）**
+
+当初はストーリー会話（`DialoguePlayer`）とチュートリアルヒント（`TutorialHintUI`）が、見た目が同じにも関わらずそれぞれ独自にアイコン位置等のフィールドを持っていて、直す場所が2箇所に分かれていた。ユーザーから「編集するべき箇所も一箇所に統一するべき」と明確な指摘を受け、見た目の部分（箱の背景・話者アイコン・名前欄・本文のテキストコンポーネント）を**共有の1つのプレハブ**へ切り出した。
+
+- **`SpeakerTextBoxView`（`Assets/Scripts/SpeakerTextBoxView.cs`）**: 見た目だけを持つ薄いビュー。`Background`(Image) / `SpeakerIcon`(Image) / `SpeakerName`(Text) / `Body`(Text) への参照を公開するだけで、文字送りやページ送りといった「振る舞い」は一切持たない。`SetSpeaker(profile)`（アイコン・名前欄の表示/非表示と内容を反映）、`GetBodyInset()`（アイコン・名前欄の**実際の**サイズ・位置から本文の左右マージンを計算するだけ。**話者の有無によらず常に同じ値を返す**——ユーザー指定。以前は「話者がいない＝ナレーション時だけ狭いマージン」にしていたが、その既定値が`DialoguePlayer`側30px・`TutorialHintUI`側20pxとシステムごとにバラバラになってしまい、しかも見た目が話者の有無で変わってしまっていたため、区別自体を廃止した）、`ApplyBodyInset()`（計算した余白を本文へ直接反映）を持つ。
+- **`DialoguePlayer`は`textBoxPrefab`フィールド（`SpeakerTextBoxView`型）でこのプレハブを参照し、`BuildUI()`内で`Instantiate()`する。`TutorialHintUI`は`HUD_Canvas`プレハブの`TutorialHint`GameObjectの子`SpeakerTextBox`として、同じプレハブのインスタンスを直接ネストして持つ**（`textBox`フィールドでそのインスタンスの`SpeakerTextBoxView`を参照）。どちらも見た目に関するフィールド（アイコンのサイズ・余白、名前欄のフォントサイズ・色、本文のフォントサイズ、箱の背景色など）を一切持たない——それらは全部`SpeakerTextBox.prefab`自身のGameObject階層（RectTransformのサイズ・位置、Text/Imageコンポーネントの値）そのものとして存在する。
+- **編集手順**: `Assets/Prefabs/UI/SpeakerTextBox.prefab`をダブルクリックして Prefab Mode で開く。**Prefab Mode はそのまま実際のレイアウトを描画するので、ゲームを実行しなくても見た目を目視で確認しながら編集できる**（Play不要）。
+  - アイコンの位置・サイズ → 子`SpeakerIcon`のRectTransform（Pos X/Y、Width/Height）を直接編集
+  - 名前欄の位置・サイズ・色・フォント → 子`SpeakerName`のRectTransform、および`Text`コンポーネントの`Font Size`/`Color`
+  - 本文のフォントサイズ・色 → 子`Body`の`Text`コンポーネント（余白＝`offsetMin`/`offsetMax`は実行時に`ApplyBodyInset`/`CenterTextHorizontally`が上書きするので、Prefab上でのBody自身の位置調整は主にプレビュー用）
+  - 箱の背景色 → ルート自身の`Image`コンポーネント
+  - 箱の大きさ・画面上の基準位置（Top/Bottomレイアウト用アンカーの既定値） → ルート自身のRectTransform
+- **`RectTransform`の見た目に合わせて、`SpeakerIconSize`/`SpeakerIconMargin`のようなペアのフィールド宣言順は「位置→サイズ」の順に統一**（Unity標準の`Rect Transform`インスペクターがPos→Width/Heightの順で並ぶことに合わせた、というユーザー指摘）。この統一の結果、そもそもアイコンの位置・サイズは`SpeakerTextBox.prefab`上のRectTransformの`Pos X/Y`→`Width/Height`（Unity標準の並び順そのもの）として直接編集する形になったため、C#側に同種のペアのフィールドはもう存在しない。
+- **`DialoguePlayer`固有の余白計算（中央揃えの文字送りブレ対策）**：`_centerText`（`CenteredOnBlack`）で先に解決していた「中央揃えのまま1文字ずつ表示すると基準がズレてブレる」問題への対策（`CenterTextHorizontally(Text target, float leftBound, float rightBound, string fullText)`）に、`textBox.GetBodyInset()`で得た余白（話者の有無によらず常に同じ値）をそのまま渡して本文にも適用している。`TutorialHintUI`側は文字送りが無く単純な表示なので、`textBox.ApplyBodyInset()`で直接反映するだけ。
+- **改行されずに収まる文字数の目安**：全角文字はおおよそ「フォントサイズ×文字数」ぶんの幅が必要（等幅ではないため多少前後する）。既定値（名前欄の幅180px・フォントサイズ20）なら全角**8〜9文字**程度まで折り返さずに収まることを実機で確認済み。
+- **プレースホルダーのアイコン素材**: `Assets/Art/Icons/SpeakerIcon_Hero.png`（赤い円）／`SpeakerIcon_Boss.png`（濃い藍色の円）をコードで生成（`Texture2D`にピクセル単位で円を描いて`EncodeToPNG`→`TextureImporter`でSprite化）。`SpeakerRegistry.asset`の`Hero`/`LastBoss`プロファイルに割り当て済み。`SpeakerTextBox.prefab`自体にも、Prefab Modeでのプレビューが空にならないよう仮の話者アイコン・名前・本文テキストをデフォルトで表示した状態で保存してある（実行時は`SetSpeaker()`/`Body.text`の代入で即座に上書きされるので、ゲームの見た目には影響しない）。
+
+**日本語フォント**: 会話本文は日本語だが、以前は `Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf")`（ビルトインの Arial 系、日本語グリフ無し）をそのまま使っていた。エディタ / Windows スタンドアロンでは欠けているグリフを **OS インストール済みフォントへフォールバック**して表示できていたが、**WebGL ビルド（unityroom）は OS フォントにアクセスできないため、そのフォールバックが効かず日本語が表示されない**という問題があった。
 - 対策: `Assets/Resources/Fonts/NotoSansJP-Regular.ttf` を追加し、`DialoguePlayer.Awake()` で `Resources.Load<Font>("Fonts/NotoSansJP-Regular")`（見つからなければビルトインへフォールバック）を使うようにした。`DialoguePlayer` が生成する全ての `Text`（`_centerText` / `_speakerText` / `_bodyText` / `_hintText` / 仮イラストの `主人公`・`ダンジョン`・`(仮イラスト)` ラベル）はこの `_font` を共有しているので、この 1 箇所の変更で会話まわりの日本語表示すべてに効く。`Text.dynamic` 方式（`TrueTypeFontImporter`: `fontRenderingMode=Smooth`, `fontTextureCase=Dynamic`, `includeFontData=True`）なので、フォントの実データがビルドに同梱され、OS に頼らず自前でグリフを描画する（WebGL でも動く）。
 - **文字セットは「常用漢字レベル」にサブセット化済み**（Google Fonts 配布の可変フォント `NotoSansJP[wght].ttf` から `fonttools varLib.instancer` で Regular(wght=400) の静的インスタンスを書き出し → `fonttools subset` で以下の文字だけに絞った）: ASCII 印字可能文字（0x20–0x7E）／CJK 記号・句読点（U+3000–303F）／ひらがな（U+3040–309F）／カタカナ（U+30A0–30FF）／全角英数・記号の一部（U+FF01–FF5E, U+FFE0–FFE5）／**常用漢字 2136 字**（[hoffmannjp/joyo-json](https://github.com/hoffmannjp/joyo-json) の `joyo_kanji.json` から取得）／その他少数の記号（¥ ° × ÷ – — …）。合計ユニーク文字数 2594、フォントファイルは **約960KB**（元の可変フォントは 9.5MB、静的 Regular 単体でも 5.8MB）。
 - **常用漢字に無い固有名詞用の漢字（人名・地名など難読字）は現状表示できない。** 会話テキストに常用漢字外の漢字を使う場合は、後述の手順でフォントを作り直して文字を追加する必要がある。ライセンスは SIL Open Font License 1.1（`Assets/Fonts/NotoSansJP-OFL-LICENSE.txt`、ビルドには含まれない参照用）。
@@ -465,16 +489,16 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 - 会話中は `Time.timeScale = 0`（プレイヤーも敵も停止）。読み終わると `OnIntroFinished()` で `MarkIntroSeen` → `timeScale = 1`。会話が無い / `DialoguePlayer` が居ないステージは即「既読」にしてスキップ。
 - `intro` が未設定のステージは会話なしで通常開始。
 
-**プロローグの既読フラグ**（2026-09-07）: `GameFlow.HasSeenPrologue` / `SetPrologueSeen(b)` / `MarkPrologueSeen()`（`PlayerPrefs` キー `RandomGame.SeenPrologue`、0/1）。
+**プロローグの既読フラグ**: `GameFlow.HasSeenPrologue` / `SetPrologueSeen(b)` / `MarkPrologueSeen()`（`PlayerPrefs` キー `RandomGame.SeenPrologue`、0/1）。
 - **既読ならプロローグをスキップ**: `GameFlow.StartGame()` は未読のときだけ `Prologue` シーンを読み込む（既読なら StageSelect へ直行）。`PrologueRunner` も冒頭で既読チェック（直接 Play 時の保険）。プロローグを最後まで読むと `MarkPrologueSeen()`。
 
-**開発者用の既読トグル（`DevStorySeenToggles`, 2026-09-07）**: `DevStageClearToggles`（クリア状況）と同じ流儀の実行時生成 `Toggle`。**表示条件は `DeveloperSettings.Active`**（エディタ内 かつ `Resources/DeveloperSettings.asset` の `developerMode`。`DevStageClearToggles` / `DevProgressResetButton` と共通）。`Start()` で `!DeveloperSettings.Active` なら自身を `enabled = false` にして何も生成しない。同じ階層に `StageSelectMenu` があるかで動作を自動判定:
+**開発者用の既読トグル（`DevStorySeenToggles`）**: `DevStageClearToggles`（クリア状況）と同じ流儀の実行時生成 `Toggle`。**表示条件は `DeveloperSettings.Active`**（エディタ内 かつ `Resources/DeveloperSettings.asset` の `developerMode`。`DevStageClearToggles` / `DevProgressResetButton` と共通）。`Start()` で `!DeveloperSettings.Active` なら自身を `enabled = false` にして何も生成しない。同じ階層に `StageSelectMenu` があるかで動作を自動判定:
 - **StageSelect/Canvas に付けたとき**: 各ステージボタンの左、クリア状況チェックの**更に左**（`stageExtraLeftGap` = 既定 72px）に「そのステージの開始会話を既読か」トグルを5つ。色は青系でクリアの緑と区別。`isOn` ⇄ `GameFlow.HasSeenIntro/SetIntroSeen`。
 - **Title/Canvas に付けたとき**: 「Game Start」ボタン（`prologueAnchorButton`）の左に「プロローグを既読か」トグル1つ。`isOn` ⇄ `GameFlow.HasSeenPrologue/SetPrologueSeen`。
-- **トグルの位置（2026-09-08、横並びレイアウト対応）**: `DevStageClearToggles` / `DevStorySeenToggles` はステージボタンの並びを自動判定（`IsHorizontalRow` = 隣り合うボタンの x 差 ≥ y 差）。
+- **トグルの位置（横並びレイアウト対応）**: `DevStageClearToggles` / `DevStorySeenToggles` はステージボタンの並びを自動判定（`IsHorizontalRow` = 隣り合うボタンの x 差 ≥ y 差）。
   - **横並び（現在）**: 各ステージボタンの**真上**に clear トグル、その更に上に story トグル（`stageExtraLeftGap` ぶん）。ラベル（"story"/"clear"）は先頭（Stage1）のトグルの**左**に1つずつ（右寄せ）。
   - 縦並び（旧）: ボタンの左に縦一列、ラベルは列の一番上。
-- **ラベル（2026-09-07〜）**: 各ボックスにキャプションを付けず、グループにつき1つだけ（`BuildGroupLabel`、`labelFontSize` 既定 24, bold）。Title の単独プロローグトグルはその上に "story"。
+- **ラベル**: 各ボックスにキャプションを付けず、グループにつき1つだけ（`BuildGroupLabel`、`labelFontSize` 既定 24, bold）。Title の単独プロローグトグルはその上に "story"。
 - `Toggle` なので `MenuNavigation` は拾わない（マウス専用のデバッグ UI）。
 
 ### 9-1. ステージ1 = `Assets/Scenes/Stage1.unity`（旧 `SampleScene.unity`）
@@ -486,15 +510,15 @@ Main Camera            [Camera, CameraFollow]  ortho size 6 @ (0,-0.5,-10)
 Global Light 2D
 Player（Prefab インスタンス） @ (-10,-1.5)  [SpriteRenderer(PlayerArrow), BoxCollider2D, Rigidbody2D(grav 3, PlayerNoFriction),
                                       PlayerController, MainActionQueue, MainActionController, PlayerHealth,
-                                      Animator(Player.controller), AnimationEventRelay]  ※Animator/AnimationEventRelayは2026-09-21追加、§2-7参照
+                                      Animator(Player.controller), AnimationEventRelay]  ※Animator/AnimationEventRelayは、§2-7参照
   AttackHitbox         [SpriteRenderer, BoxCollider2D(trigger), Rigidbody2D, AttackHitbox]  通常は非アクティブ
-  HomingTarget         （コンポーネント無し、Transformのみ。追尾弾の狙う座標。2026-09-22追加、§6-3参照）
+  HomingTarget         （コンポーネント無し、Transformのみ。追尾弾の狙う座標。§6-3参照）
   DebugBars            [PlayerDebugBars]
     ComboBar / CooldownBar  各 BG(SpriteRenderer) + Fill(SpriteRenderer) + Label(TextMesh)
 Enemy1（Prefab インスタンス, 旧名 Enemy_A） @ (-4,-1.5)  [SpriteRenderer, BoxCollider2D, Enemy(HP1), EnemyPatrol]
-Enemy1_B（Prefab インスタンス, 2026-09-13にEnemy_Bossから置き換え） @ (15,-1.5) [SpriteRenderer, BoxCollider2D, Enemy(HP1), EnemyPatrol]
+Enemy1_B（Prefab インスタンス, Enemy_Bossから置き換え） @ (15,-1.5) [SpriteRenderer, BoxCollider2D, Enemy(HP1), EnemyPatrol]
 HUD_Canvas（Prefab インスタンス） [Canvas, CanvasScaler, GraphicRaycaster]
-  ActionBar            [ActionBarUI] → Title(Text) + Slot0Border(Image, 2026-09-19追加、Slot0専用の発動可能枠) + Slot0..3 (Image + 子 Fill(Image, Filled/Vertical/Bottom, 2026-09-19追加) + 子 Label(Text))
+  ActionBar            [ActionBarUI] → Title(Text) + Slot0Border(Image, Slot0専用の発動可能枠) + Slot0..3 (Image + 子 Fill(Image, Filled/Vertical/Bottom) + 子 Label(Text))
   HealthPanel          [HealthUI] → HP0..2 (Image, 赤丸)
 StageFlow（Prefab インスタンス） [StageManager]
   ResultCanvas         [Canvas, CanvasScaler, GraphicRaycaster] → ClearPanel/FailPanel（各 [MenuNavigation] + Title + ボタン群）
@@ -504,44 +528,46 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
                                       TilemapCollider2D(compositeOperation Merge), CompositeCollider2D(Polygons),
                                       TilemapColliderBootstrap]
                                       天面 y=-2。Stage1 は落とし穴あり（pathCount 2）
-  HighGround           （2026-09-22追加、ジャンプチュートリアル用。高台=high ground。2026-09-16に`Platform`から改名）layer=Ground  [Tilemap, TilemapRenderer(order -9), Rigidbody2D(Static),
+  HighGround           （ジャンプチュートリアル用。高台=high ground。`Platform`から改名）layer=Ground  [Tilemap, TilemapRenderer(order -9), Rigidbody2D(Static),
                                       TilemapCollider2D(compositeOperation Merge), CompositeCollider2D(Polygons),
                                       TilemapColliderBootstrap, OneWayPlatform]
                                       天面セル x=22,23,24 / y=-1（colliderType Grid）、柱セル同 x / y=-2（colliderType None）
 ```
-（Stage1 に以前あった GameObject 版 `OneWayPlatform` は 2026-09-11 に削除済み。§7 参照）
+（Stage1 に以前あった GameObject 版 `OneWayPlatform` は削除済み。§7 参照）
 
 生成アセット（`Assets/Art/`）: `WhiteSquare.png`（32px, PPU32）、`PlayerArrow.png`（左右非対称の矢印）、`Circle.png`（体力アイコン）、`PlayerNoFriction.physicsMaterial2D`（摩擦 0）、`GroundTile.png`（90×90, PPU 90 の仮地面タイル。本番絵で上書き予定）、`Tiles/GroundTile.asset`（`Tile`, colliderType Grid）。
 
-### 9-3. チュートリアルシステム（Stage1、2026-09-22）
+### 9-3. チュートリアルシステム（Stage1）
 
 ストーリー表示（`DialoguePlayer`）とは完全に別系統。「Stage1では最初Dashしか使えず、道中のアイテムでアクションを1つずつ解放しながら、その場でスプラトゥーン系チュートリアル形式の操作説明を見せる」仕様。**毎回プレイのたびに表示される**（ストーリーの既読スキップと違い、`GameFlow`側に既読フラグは持たない）。
 
 - **`MainActionQueue`の動的解放（`UnlockAction()` / `IsUnlocked()` / `unlockMode`）**: `Awake()`で決まる初期抽選対象（`StageSet.allowedActions`、Stage1は`Dash`のみ）に対し、`UnlockAction(action)`が呼ばれるたびにアクションを追加していく。`unlockMode`は2種類（インスペクターで切替可、既定`Cumulative`）:
   - `Cumulative`（既定）: 追加式。一度解放したアクションはステージ内でずっと抽選対象に残る。
-  - `Exclusive`: 置き換え式。常に直近に解放した1種類だけが対象になる（ユーザーが将来検討中と明言した「同時に2種類以上解放されない」仕様向けの切替口。現時点ではまだ使っていない）。**Cumulativeと違い、こちらはアイテムを拾った瞬間に既に表示済みのスロット（`_slots`）も含めて即座に新しいアクション1色へ振り直す**（2026-09-22追加。「次から」ではなく「今すぐ」切り替わったことが見た目にもすぐ分かるようにするため）。なお、その瞬間まさに発動中（busy）のアクション自体には一切影響しない（`Consume()`された時点で`_slots`からは既に外れ`MainActionController._busy`側が独立して管理しているため）。Play検証済み：ダッシュ発動中（`IsDashing=true`）に別アクションを`Exclusive`で解放しても、ダッシュ自体は中断されず、キューだけが即座に切り替わることを確認。
+  - `Exclusive`: 置き換え式。常に直近に解放した1種類だけが対象になる（ユーザーが将来検討中と明言した「同時に2種類以上解放されない」仕様向けの切替口。現時点ではまだ使っていない）。**Cumulativeと違い、こちらはアイテムを拾った瞬間に既に表示済みのスロット（`_slots`）も含めて即座に新しいアクション1色へ振り直す**（「次から」ではなく「今すぐ」切り替わったことが見た目にもすぐ分かるようにするため）。なお、その瞬間まさに発動中（busy）のアクション自体には一切影響しない（`Consume()`された時点で`_slots`からは既に外れ`MainActionController._busy`側が独立して管理しているため）。Play検証済み：ダッシュ発動中（`IsDashing=true`）に別アクションを`Exclusive`で解放しても、ダッシュ自体は中断されず、キューだけが即座に切り替わることを確認。
   - `Cumulative`の場合、既に表示済みの手（`_slots`）はその場では変わらず、消費されて新しく抽選されるときから反映される（Exclusiveの即時振り直しとは異なる点に注意）。
   - `IsUnlocked(action)`は、あるアクションが現在抽選対象に含まれているかを返す（後述の`gateOnActionUnlock`用）。
 - **`ActionUnlockPickup`（Player/未使用アイテム用）**: `Collider2D`（トリガー化を`Awake`で強制）+ インスペクターで選ぶ`MainActionType action`。プレイヤー本体のコライダーが触れた瞬間（拾う操作は不要）に`MainActionQueue.UnlockAction(action)`を呼んで自身を`Destroy`する。
-- **`TutorialHintUI`（`HUD_Canvas`プレハブに追加）**: 画面上部の帯（背景`Image`半透明黒＋中央`Text`）。`RectTransform`は`anchorMin=(0.08,1)`/`anchorMax=(0.92,1)`/`pivot=(0.5,1)`/`anchoredPosition=(0,-340)`/`sizeDelta=(0,70)`（`DialoguePlayer`の会話ボックス「上部」レイアウトとの一貫性のため、横幅・開始高さを揃えつつ、既存の`ActionBar`/`HealthPanel`と重ならない位置まで下げてある）。シーン直置きの`Text`なので`Awake()`で明示的に`Resources.Load<Font>("Fonts/NotoSansJP-Regular")`をセットしている。表示/非表示は`GameObject.SetActive()`ではなく`CanvasGroup.alpha`で行う（`SetActive`だと非表示中は`FindAnyObjectByType<TutorialHintUI>()`で見つけられなくなり、他スクリプトの`Awake`実行順次第で参照解決に失敗する不具合が実際に起きたため、2026-09-22に修正）。`RequestShow(requester, text, distance)` / `RequestHide(requester)`のリクエスト方式：複数の`TutorialHint`が同時に表示を要求した場合は`distance`が一番小さい（プレイヤーに一番近い）ものだけを表示する。`HUD_Canvas`が共有プレハブのため、Stage2〜5にも同じUIが存在するが、対象となる`TutorialHint`が無いので常に非表示のまま実質無害。
+- **`TutorialHintUI`（`HUD_Canvas`プレハブに追加）**: 画面上部の帯。見た目本体は`Assets/Prefabs/UI/SpeakerTextBox.prefab`のインスタンス（子`SpeakerTextBox`）で、ストーリー会話（`DialoguePlayer`）と**完全に同じ見た目・同じ編集場所**を共有する（詳細は§9-2「見た目を編集する場所は1箇所だけ」参照）。`TutorialHint`自身のRectTransformは`anchorMin=(0.08,0.71)`/`anchorMax=(0.92,0.97)`（`DialoguePlayer`の`TopTextbox`会話ボックスと同じ正規化アンカー）で位置・大きさだけを決め、その中を`SpeakerTextBox`インスタンスが`Stretch`で埋める。本文（`SpeakerTextBoxView.Body`）の文字揃えだけは`Awake()`で`MiddleCenter`に設定（会話本文は`DialoguePlayer`側が文字送り用に`MiddleLeft`へ設定するため、システムごとに異なる）。表示/非表示は`GameObject.SetActive()`ではなく`CanvasGroup.alpha`で行う（`SetActive`だと非表示中は`FindAnyObjectByType<TutorialHintUI>()`で見つけられなくなり、他スクリプトの`Awake`実行順次第で参照解決に失敗する不具合が実際に起きたため、修正）。`RequestShow(requester, text, distance, speaker=SpeakerId.Narrator)` / `RequestHide(requester)`のリクエスト方式：複数の`TutorialHint`が同時に表示を要求した場合は`distance`が一番小さい（プレイヤーに一番近い）ものだけを表示する。`HUD_Canvas`が共有プレハブのため、Stage2〜5にも同じUIが存在するが、対象となる`TutorialHint`が無いので常に非表示のまま実質無害。
+  - **話者アイコン欄**: `TutorialHint.cs`に`SpeakerId speaker`（既定`Narrator`）フィールドがあり、`RequestShow()`へ渡す。`speaker`が`Narrator`（既定値、かつ既存の全`TutorialHint`インスタンスがこの状態）なら、アイコン・名前とも表示されない——ナレーション扱いのまま。表示名・アイコンは`DialoguePlayer`と全く同じ`SpeakerRegistry`から解決する（システムの種類によらず対応表は共通の1箇所）。`Refresh()`は`textBox.SetSpeaker(profile)` + `textBox.ApplyBodyInset()`を呼ぶだけで、アイコン・名前欄・本文余白の計算は全て`SpeakerTextBoxView`側に委譲している（§9-2参照）。将来、特定のキャラクターが喋っているような体のヒントを作りたくなった場合に、インスペクターで`speaker`を選ぶだけで使える。
+  - **ヒントとステージ内ストーリー（`TopTextbox`）の挙動の違い（見た目の箱は統一、中身の動きは意図的に別のまま）**: ストーリーは1文字ずつのタイプライター表示＋発動入力（Space/Enter/クリック）で全文表示→次ページへ送る、その間`DialoguePlayer.IsPlaying`で移動・メインアクションの入力を完全に止める。一方ヒントは**全文を一気に表示**（`RequestShow`が`label.text`へ直接代入するだけで文字送りの仕組み自体を持たない）、発動入力を押しても何も起こらない（ページ送りの概念が無い）、**表示中もプレイヤーの移動・アクションは通常通り操作できる**（`TutorialHintUI`は`InputLock`/`DialoguePlayer.IsPlaying`のどちらにも触れないため、何もしなくても元々この通りに動いていた）。レイアウト統一作業でもこの2点（文字送りの有無・操作可否）はどちらも変更していない。
 
-- **チュートリアル判定方式の全面刷新（2026-09-22）**: 当初は「対象が一度でも画面に映ったら表示開始、達成するまで表示し続ける」（カメラ`isVisible`ベース）だったが、ユーザーが実際に試遊した結果「対象に近づいている間だけ表示、離れたら消える」方式の方が扱いやすいと判断し、以下へ全面的に作り直した。**共通の理念**: そのアクションで攻略すべき対象（敵・地形）に近づいていて、かつそのヒントのカテゴリをまだ習得していなければ表示する。
+- **チュートリアル判定方式の全面刷新**: 当初は「対象が一度でも画面に映ったら表示開始、達成するまで表示し続ける」（カメラ`isVisible`ベース）だったが、ユーザーが実際に試遊した結果「対象に近づいている間だけ表示、離れたら消える」方式の方が扱いやすいと判断し、以下へ全面的に作り直した。**共通の理念**: そのアクションで攻略すべき対象（敵・地形）に近づいていて、かつそのヒントのカテゴリをまだ習得していなければ表示する。
 
-  - **`TutorialHintCategory`（enum）**: `DashPastEnemy` / `DashOverPit` / `JumpHighGround` / `ClimbLedge` / `AttackEnemy` / `JumpOverPit`（2026-09-22追加）の6種類。**新しい値は必ず enum の末尾に追加すること**（`category`フィールドは`enumValueIndex`＝宣言順インデックスでシリアライズされるため、途中に挿入すると既存のシーン/プレハブの割り当てが全部ずれて壊れる。実際に一度この間違いをして直した）。
+  - **`TutorialHintCategory`（enum）**: `DashPastEnemy` / `DashOverPit` / `JumpHighGround` / `ClimbLedge` / `AttackEnemy` / `JumpOverPit`の6種類。**新しい値は必ず enum の末尾に追加すること**（`category`フィールドは`enumValueIndex`＝宣言順インデックスでシリアライズされるため、途中に挿入すると既存のシーン/プレハブの割り当てが全部ずれて壊れる。実際に一度この間違いをして直した）。
   - **`TutorialProgress`（新規、ステージに1つ配置するマネージャー）**: `IsLearned(category)` / `MarkLearned(category)`。**達成状況はオブジェクト単位ではなくカテゴリ単位でグローバルに管理**する（例: 複数の敵に`DashPastEnemy`を割り当てていても、そのうちどれか1体ででも成功すれば、以後は全ての`DashPastEnemy`ヒントが二度と表示されない）。
   - **`TutorialHint`（新規、統合コンポーネント。1オブジェクトにつき必ず1種類のカテゴリだけを設定する）**: `[RequireComponent(Collider2D)]`。共通の流れ（`Update()`毎）: ①`CheckSuccess()`でカテゴリごとの達成条件を判定→達成していれば`TutorialProgress.MarkLearned()`。②未達成なら、自分のColliderがプレイヤーと`IsTouching()`（近接判定）かつ、そのカテゴリに必要なアクションが`MainActionQueue.IsUnlocked()`済みなら`TutorialHintUI.RequestShow()`、そうでなければ`RequestHide()`。カテゴリごとの達成条件・必要アクション:
     - `DashPastEnemy`（必要アクション: Dash）: `targetEnemy`（未設定なら`GetComponentInParent<Enemy>()`で自動解決＝敵の子オブジェクトとして配置する想定）に対し、プレイヤーのx座標が`targetEnemy.transform.position.x + passThroughMargin`を超えたら達成。
     - `DashOverPit` / `JumpOverPit` / `ClimbLedge`（必要アクション: Dash / Jump / Jump）: `landingZone`（対岸／段差の上に置く別のCollider2D）とプレイヤーが`IsTouching()`になったら達成。`DashOverPit`と`JumpOverPit`は必要アクションが違うだけで判定ロジックは完全に同一（同じ落とし穴に、ダッシュ用とジャンプ用それぞれの`TutorialHint`インスタンスを両方置いてよい。1オブジェクト=1カテゴリなので、対岸の`landingZone`は同じコライダーを2つのインスタンスで共有して構わない）。
-    - `JumpHighGround`（必要アクション: Jump）: プレイヤーの足元（`Collider2D.bounds.min.y`）から`groundLayer`のみを対象に下向きレイキャストし、`highGroundCollider`（高台の`CompositeCollider2D`）に当たったら達成……ではなく、**2026-09-22に条件を追加**: `hit.collider == highGroundCollider` かつ `hit.distance <= landedDistanceThreshold`（既定0.1）かつ `Rigidbody2D.linearVelocity.y <= 0`（上昇中でない）の3つが揃ったときだけ達成。単に「レイキャストが当たったか」だけだと、一方通行の高台を**下からすり抜けている最中**（`IgnoreCollision`は物理応答だけを止めるものでレイキャスト自体には影響しないため、真下からのレイキャストは普通に高台へ命中してしまう）に誤って「乗れた」と判定してしまう問題があったため。`raycastDistance`（1.5m）以内で当たっていても、着地とみなす距離閾値は別に`landedDistanceThreshold`で絞る。**`groundLayer`を指定しないとレイキャストがプレイヤー自身のColliderに当たってしまい判定できない不具合があった**ため必須（`PlayerController.IsGrounded`と同じ考え方）。
+    - `JumpHighGround`（必要アクション: Jump）: プレイヤーの足元（`Collider2D.bounds.min.y`）から`groundLayer`のみを対象に下向きレイキャストし、`highGroundCollider`（高台の`CompositeCollider2D`）に当たったら達成……ではなく、**条件を追加**: `hit.collider == highGroundCollider` かつ `hit.distance <= landedDistanceThreshold`（既定0.1）かつ `Rigidbody2D.linearVelocity.y <= 0`（上昇中でない）の3つが揃ったときだけ達成。単に「レイキャストが当たったか」だけだと、一方通行の高台を**下からすり抜けている最中**（`IgnoreCollision`は物理応答だけを止めるものでレイキャスト自体には影響しないため、真下からのレイキャストは普通に高台へ命中してしまう）に誤って「乗れた」と判定してしまう問題があったため。`raycastDistance`（1.5m）以内で当たっていても、着地とみなす距離閾値は別に`landedDistanceThreshold`で絞る。**`groundLayer`を指定しないとレイキャストがプレイヤー自身のColliderに当たってしまい判定できない不具合があった**ため必須（`PlayerController.IsGrounded`と同じ考え方）。
     - `AttackEnemy`（必要アクション: Attack）: `targetEnemy.OnDamaged`イベントを購読し、`Health <= 0`になった瞬間に達成。**`Update()`でのポーリング（`targetEnemy == null`監視）ではなくイベント購読にしている理由**: `TutorialHint`は敵の子オブジェクトとして配置するため、敵が`Destroy`された瞬間に自分自身も同時に破棄される。ポーリング方式だと判定するチャンスが無いまま消えてしまうため、`Destroy`より前に発火する`OnDamaged`イベントで判定する必要がある。
-  - **ダッシュ中かどうかは判定条件に含めない（2026-09-22、意図的）**: `DashPastEnemy`/`DashOverPit`の達成判定は`MainActionController.IsDashing`を見ない。Jumpが既に解放済みならジャンプだけでも同じ判定（x座標超え／対岸コライダー接触）を満たせてしまう可能性があるが、ユーザーが「仕様書のまま（入れなくてよい）」と明示的に選択したため。
+  - **ダッシュ中かどうかは判定条件に含めない（意図的）**: `DashPastEnemy`/`DashOverPit`の達成判定は`MainActionController.IsDashing`を見ない。Jumpが既に解放済みならジャンプだけでも同じ判定（x座標超え／対岸コライダー接触）を満たせてしまう可能性があるが、ユーザーが「仕様書のまま（入れなくてよい）」と明示的に選択したため。
   - **1オブジェクト=1ヒントの制約**: 同じ敵/地形に複数のカテゴリを同時に割り当てることは想定しない（`TutorialHint`はカテゴリのenumを1つだけ持つ設計そのものがこれを強制する）。複数の異なる対象（例: 別々の敵）にそれぞれ異なるヒントが割り当てられていて、それらに同時に近づいてしまった場合は、`TutorialHintUI`が判定用コライダー同士の距離が近い方を優先して表示する。**ただし、そもそものレベルデザインとして、そういう状況が起きないよう対象同士の間隔を空けておくことが望ましい**。
   - **段差（ClimbLedge）について**: 「高台」（`Grid/HighGround`、一方通行の`OneWayPlatform`）とは別カテゴリとして用意してあるが、**Stage1には現時点で配置していない**（今回のスコープはあくまで判定方式の刷新であり、新規コンテンツの追加は含まない）。将来置く場合は、普通の地面（`Ground`）を階段状に配置するだけでよく（一方通行にする必要は無い）、`landingZone`（段差の上に置く到達判定用Collider）を使う点は`DashOverPit`と同じ。
   - **既知の割り切り**: 複数アクションが解放された後、後の項目を別の手段で“スキップ”すること自体は防いでいない（例: ダッシュが使える状態のまま攻撃チュートリアルの敵を素通りできる）。ヒントが未達成のまま残るだけでステージ進行は妨げない。強制したい場合は今後の課題。
 
 - **`StageManager`の`softRetryOnFall`（既定false＝今まで通り）**: 落とし穴などで`killY`を下回った場合、通常は今まで通り`Fail()`（即失敗パネル→リトライ）。`softRetryOnFall`をtrue＋`softRetryPoint`を設定すると、失敗にせず`softRetryPoint`の位置へ瞬間移動させる（`transform.position`と`Rigidbody2D.position`の両方をセットし、速度も0にする）だけの「優しい」扱いに切り替えられる。**Stage1では現状オフのまま**（将来ステージ1だけ優しくする可能性に備えてインスペクターから切り替えられるようにしておきたい、というユーザーの布石。使う場合は`softRetryPoint`用のTransformをステージに置いて割り当てる必要がある）。
 
-  ### 9-3-1. チュートリアルの使い方ガイド（他プランナー向け、2026-09-22、プレハブ化に伴い全面更新）
+  ### 9-3-1. チュートリアルの使い方ガイド（他プランナー向け、プレハブ化に伴い全面更新）
 
   **全体の仕組み**: 「アイテムに触れる→アクション解放」と「対象に近づく→ヒント表示→達成条件を満たす→そのカテゴリのヒントが二度と出なくなる」がそれぞれ独立したオブジェクトになっており、**コードは一切触らずInspectorだけで調整できる**。関連オブジェクトは全て`Assets/Prefabs/Tutorial/`フォルダにプレハブ化済み（ユーザー作業）なので、新しく置くときは基本的にこのフォルダからシーンへドラッグ＆ドロップするだけでよい。
 
@@ -553,7 +579,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
   | `HintZone_Enemy_Dash` | 敵をダッシュですり抜けるヒント（`TutorialHint(DashPastEnemy)`）。**敵の子オブジェクトとして配置する** |
   | `HintZone_Enemy_Attack` | 敵を攻撃で倒すヒント（`TutorialHint(AttackEnemy)`）。**敵の子オブジェクトとして配置する** |
   | `HintZone_Pit_Dash` | 落とし穴をダッシュで飛び越えるヒント（`TutorialHint(DashOverPit)`） |
-  | `HintZone_Pit_Jump` | 落とし穴をジャンプで飛び越えるヒント（`TutorialHint(JumpOverPit)`、2026-09-22追加） |
+  | `HintZone_Pit_Jump` | 落とし穴をジャンプで飛び越えるヒント（`TutorialHint(JumpOverPit)`） |
   | `HintZone_Ledge_Jump` | 段差をジャンプで乗り越えるヒント（`TutorialHint(ClimbLedge)`） |
   | `HintZone_HighGround_Jump` | 高台にジャンプで乗るヒント（`TutorialHint(JumpHighGround)`） |
   | `ClearZone_Pit` / `ClearZone_Ledge` | 到達判定専用の空コライダー（スクリプト無し）。落とし穴の対岸・段差の上に置いて`Landing Zone`へ割り当てる |
@@ -589,49 +615,50 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 |---|---|---|
 | `MainActionType` | (enum) | Jump / Dash / Attack |
 | `MainActionQueue` | Player | アクションの並び（決定的・連続禁止）。`Peek` / `Consume` / `OnChanged`。`StageSet.allowedActions` があれば `lottery` を上書き |
-| `MainActionController` | Player | メインアクションの発動・クールタイム兼コンボ受付（`_busy`、§2-4）・先行入力・ダッシュ処理・無敵・アニメーション連携（§2-7）。発動入力はスペース / エンター / テンキー Enter / 左クリック（2026-09-12、会話送り・メニュー決定と統一）。会話中／画面切り替え直後は入力停止。`StageSet.disableCombos` のステージでは `_combosEnabled=false`（コンボ「受付」のみ無効、busyの長さ自体は変わらない） |
+| `MainActionController` | Player | メインアクションの発動・クールタイム兼コンボ受付（`_busy`、§2-4）・先行入力・ダッシュ処理・無敵・アニメーション連携（§2-7）。発動入力はスペース / エンター / テンキー Enter / 左クリック（会話送り・メニュー決定と統一）。会話中／画面切り替え直後は入力停止。`StageSet.disableCombos` のステージでは `_combosEnabled=false`（コンボ「受付」のみ無効、busyの長さ自体は変わらない） |
 | `PlayerController` | Player | 左右移動・向き・接地判定・コヨーテ/落下猶予・ノックバック受け・着地時間予測（`TryPredictLandingTime`）。会話中／画面切り替え直後（`InputLock`）は入力停止（§16-2） |
 | `PlayerHealth` | Player | 体力・被弾・無敵時間。`TakeDamage -> bool`、`OnHealthChanged`（死亡時に発火、`MainActionController`が購読して`Dead`アニメーションへ） |
 | `Animator` | Player | `Assets/Animations/Player.controller`（Idle/Move/Dash/Jump/Attack/Deadの6状態、§2-7） |
 | `AnimationEventRelay` | Player | Animation Event を C# イベントに中継する汎用コンポーネント（敵キャラにも使い回せる想定、§2-7） |
-| `AttackHitbox` | Player/AttackHitbox | 前方の一時的な攻撃判定（トリガー）。`Enemy`にヒットすればダメージ、`Bullet`にヒットすれば`DestroyByAttack()`で即消滅（2026-09-13）。`Rigidbody2D`付き（2026-09-19追加。プレイヤー静止中でも`OnTrigger`が確実に発火するようにするため。§2-3参照） |
+| `AttackHitbox` | Player/AttackHitbox | 前方の一時的な攻撃判定（トリガー）。`Enemy`にヒットすればダメージ、`Bullet`にヒットすれば`DestroyByAttack()`で即消滅。`Rigidbody2D`付き（プレイヤー静止中でも`OnTrigger`が確実に発火するようにするため。§2-3参照） |
 | `PlayerDebugBars` | Player/DebugBars | 頭上のデバッグゲージ 2 本。`Awake` で `!DeveloperSettings.Active` なら GameObject ごと非アクティブ（開発者用） |
-| `Enemy` | Enemy1, Enemy2, Enemy3, Enemy_Boss, Stage4のEnemy1_Boss | 体力・接触ダメージ + ノックバック・ダッシュ中すり抜け。ただし**致死ダメージ（やられる瞬間）はノックバック無し**（2026-09-21、`health.Health <= 0`ならreturn）。`clearStageOnDeath`（既定false、2026-09-13追加）trueなら`Die()`時に`StageManager.Clear()`を呼ぶ（Goal無しステージのボス用）。`OnDamaged`イベント（2026-09-16追加、`TakeDamage`で体力が減るたびに発火）を`Enemy3AI`が購読し、追尾弾発射中に被弾したら即座にクールタイムへ移行する処理に使用 |
-| `EnemyPatrol` | Enemy1, Enemy_Boss, Stage4のEnemy1_Boss | 左右往復（transform 直接移動）。**2026-09-14**: `DialoguePlayer.IsPlaying`中は移動しない |
-| `EnemyShooter` | Enemy2（2026-09-13追加） | 一定間隔で`Bullet`を発射。発射の瞬間だけプレイヤーへホーミングするオプション付き。**2026-09-14**: `SpriteRenderer.isVisible`が false（画面外）のときは発射しない、`DialoguePlayer.IsPlaying`中はタイマーごと停止（行動しない）、ホーミング無効時はプレイヤーがいる左右方向へ発射（以前は常に右固定になっていたバグを修正） |
-| `Bullet` | Enemy2/Enemy3の弾（2026-09-13追加） | 発射時に設定した方向へ直進する弾。`transform.position`直接移動、当たり判定は**トリガー**（2026-09-17に非トリガーから変更）。`Rigidbody2D`（Body Type = Kinematic）付き（トリガー判定の成立に必要。地面側にも`Rigidbody2D`があるが弾側にも付けておくことで確実にする）。プレイヤー接触ダメージ・ダッシュ中すり抜け・地面接触/攻撃で消滅・`maxLifetime`で自動消滅。**2026-09-16**: `Configure`に`homingTurnSpeedDegPerSec`（既定0）を追加、0より大きいと`Update()`毎に`RotateTowards`でプレイヤー方向へ継続的に旋回する追尾弾になる（Enemy3の③用、Enemy2は使わず従来通り）。**2026-09-17**: 追尾弾（`homingTurnSpeed > 0`）は`maxLifetime`による自動消滅の対象から除外。**2026-09-18**: 敵キャラに触れた場合、発射直後の`selfHitGraceTime`（既定0.2秒、発射元自身との重なり対策）を過ぎていれば`enemyDamage`（既定2）を与えて消滅する（それまでは常にすり抜けだった。追尾弾をラスボスへ誘導してヒットさせる攻略に対応）。
-  - **反転モード（2026-09-17追加）**: ダッシュで弾をすり抜けられた直後など、現在の速度ベクトルとプレイヤー方向のなす角が`reversalAngleThreshold`（C#側の既定値は170度。**`Bullet.prefab`ではユーザーが150度に変更済み**）を超えたときは、`RotateTowards`による回転ではなく、**速度ベクトルの大きさを`Vector2.MoveTowards`で直線的に減速→0→反対向きへ加速**させることで向きを変える（`_reversing`フラグで目標速度に達するまで維持）。理由: ほぼ180度の回転は回転軸の計算が数値的に不安定になり、回転の途中で地面/壁方向を意図せず向いてしまうことがあった。速度ベクトルを直線で繋ぐ方式なら、常に元の進行方向の延長線上を通るため横方向を向かない。反転にかかる速さは、`homingTurnSpeed`から自動計算される基準値（＝同じ`homingTurnSpeed`で180度回転するのと同じ時間で反転が完了する速さ）に、`reversalRateMultiplier`（既定1、インスペクターで調整可）を掛けたもの。Playで、なす角が閾値を超えた瞬間から速度のY成分（横方向）が終始0のまま、X成分だけが直線的に反転することを確認済み。
-  - **敵キャラへのヒット（2026-09-18追加）**: 追尾弾をラスボスへ誘導してヒットさせられるように、`HandleTrigger`で敵キャラ（`Enemy`）に触れた場合の扱いを変更。以前は敵キャラには一切反応せず常にすり抜けていたが、**発射から`selfHitGraceTime`（既定0.2秒）が経過していれば、`enemyDamage`（既定2、インスペクターで調整可）のダメージを与えて弾自身も消滅する**ようにした。猶予時間は、弾が発射元の敵自身の位置（＝重なった状態）で生成されるため、発射直後に発射元自身へ即座にヒットしてしまうのを防ぐためのもの（`_age`という経過時間カウンタで管理）。猶予時間内は今まで通り完全に無視する。Playで、猶予時間内は無反応・経過後はダメージが入って消滅することを確認済み。
-| `Enemy3AI` | Enemy3（2026-09-16追加） | ①離脱移動→②放射弾/③追尾弾を抽選→クールタイム→①…の状態機械。`DialoguePlayer.IsPlaying`中・画面外での発射禁止はEnemy1/2と同じルール。**2026-09-18**: 一番最初の行動選択だけ`firstActionDelay`秒`FirstActionWait`状態で待ってから発射（難易度緩和） |
+| `Enemy` | Enemy1, Enemy2, Enemy3, Enemy_Boss, Stage4のEnemy1_Boss | 体力・接触ダメージ + ノックバック・ダッシュ中すり抜け。ただし**致死ダメージ（やられる瞬間）はノックバック無し**（`health.Health <= 0`ならreturn）。`clearStageOnDeath`（既定false）trueなら`Die()`時に`StageManager.Clear()`を呼ぶ（Goal無しステージのボス用）。`OnDamaged`イベント（`TakeDamage`で体力が減るたびに発火）を`Enemy3AI`が購読し、追尾弾発射中に被弾したら即座にクールタイムへ移行する処理に使用 |
+| `EnemyPatrol` | Enemy1, Enemy_Boss, Stage4のEnemy1_Boss | 左右往復（transform 直接移動）。`DialoguePlayer.IsPlaying`中は移動しない |
+| `EnemyShooter` | Enemy2 | 一定間隔で`Bullet`を発射。発射の瞬間だけプレイヤーへホーミングするオプション付き。`SpriteRenderer.isVisible`が false（画面外）のときは発射しない、`DialoguePlayer.IsPlaying`中はタイマーごと停止（行動しない）、ホーミング無効時はプレイヤーがいる左右方向へ発射（以前は常に右固定になっていたバグを修正） |
+| `Bullet` | Enemy2/Enemy3の弾 | 発射時に設定した方向へ直進する弾。`transform.position`直接移動、当たり判定は**トリガー**（非トリガーから変更）。`Rigidbody2D`（Body Type = Kinematic）付き（トリガー判定の成立に必要。地面側にも`Rigidbody2D`があるが弾側にも付けておくことで確実にする）。プレイヤー接触ダメージ・ダッシュ中すり抜け・地面接触/攻撃で消滅・`maxLifetime`で自動消滅。`Configure`に`homingTurnSpeedDegPerSec`（既定0）を追加、0より大きいと`Update()`毎に`RotateTowards`でプレイヤー方向へ継続的に旋回する追尾弾になる（Enemy3の③用、Enemy2は使わず従来通り）。追尾弾（`homingTurnSpeed > 0`）は`maxLifetime`による自動消滅の対象から除外。敵キャラに触れた場合、発射直後の`selfHitGraceTime`（既定0.2秒、発射元自身との重なり対策）を過ぎていれば`enemyDamage`（既定2）を与えて消滅する（それまでは常にすり抜けだった。追尾弾をラスボスへ誘導してヒットさせる攻略に対応）。
+  - **反転モード**: ダッシュで弾をすり抜けられた直後など、現在の速度ベクトルとプレイヤー方向のなす角が`reversalAngleThreshold`（C#側の既定値は170度。**`Bullet.prefab`ではユーザーが150度に変更済み**）を超えたときは、`RotateTowards`による回転ではなく、**速度ベクトルの大きさを`Vector2.MoveTowards`で直線的に減速→0→反対向きへ加速**させることで向きを変える（`_reversing`フラグで目標速度に達するまで維持）。理由: ほぼ180度の回転は回転軸の計算が数値的に不安定になり、回転の途中で地面/壁方向を意図せず向いてしまうことがあった。速度ベクトルを直線で繋ぐ方式なら、常に元の進行方向の延長線上を通るため横方向を向かない。反転にかかる速さは、`homingTurnSpeed`から自動計算される基準値（＝同じ`homingTurnSpeed`で180度回転するのと同じ時間で反転が完了する速さ）に、`reversalRateMultiplier`（既定1、インスペクターで調整可）を掛けたもの。Playで、なす角が閾値を超えた瞬間から速度のY成分（横方向）が終始0のまま、X成分だけが直線的に反転することを確認済み。
+  - **敵キャラへのヒット**: 追尾弾をラスボスへ誘導してヒットさせられるように、`HandleTrigger`で敵キャラ（`Enemy`）に触れた場合の扱いを変更。以前は敵キャラには一切反応せず常にすり抜けていたが、**発射から`selfHitGraceTime`（既定0.2秒）が経過していれば、`enemyDamage`（既定2、インスペクターで調整可）のダメージを与えて弾自身も消滅する**ようにした。猶予時間は、弾が発射元の敵自身の位置（＝重なった状態）で生成されるため、発射直後に発射元自身へ即座にヒットしてしまうのを防ぐためのもの（`_age`という経過時間カウンタで管理）。猶予時間内は今まで通り完全に無視する。Playで、猶予時間内は無反応・経過後はダメージが入って消滅することを確認済み。
+| `Enemy3AI` | Enemy3 | ①離脱移動→②放射弾/③追尾弾を抽選→クールタイム→①…の状態機械。`DialoguePlayer.IsPlaying`中・画面外での発射禁止はEnemy1/2と同じルール。一番最初の行動選択だけ`firstActionDelay`秒`FirstActionWait`状態で待ってから発射（難易度緩和） |
 | `EnemyHealthBar` | Enemy_Boss/HealthBar, Enemy3/HealthBar | ボスの体力ゲージ + 数値 |
-| `ActionUnlockPickup` | Stage1の`AttackUnlockItem`/`JumpUnlockItem`（2026-09-22追加） | 触れるとメインアクションを1つ解放するアイテム。`MainActionQueue.UnlockAction()`を呼んで自身を`Destroy`（§9-3） |
-| `TutorialHintUI` | HUD_Canvas/TutorialHint（2026-09-22追加） | 画面上部のチュートリアルヒント表示。`RequestShow(requester,text,distance)`/`RequestHide`のリクエスト方式、距離最小のものを優先表示（§9-3） |
-| `TutorialHintCategory` | （enum、2026-09-22追加） | `DashPastEnemy`/`DashOverPit`/`JumpHighGround`/`ClimbLedge`/`AttackEnemy`/`JumpOverPit`（新規値は必ず末尾に追加） |
-| `TutorialProgress` | Stage1の`TutorialProgress`（2026-09-22追加） | カテゴリ単位でヒント習得済みかどうかを管理するマネージャー。`IsLearned`/`MarkLearned`（§9-3） |
-| `TutorialHint` | Stage1の各`ProximityZone`/`PitMarker`/`HighGroundZone`（2026-09-22、全面刷新） | 1オブジェクト=1カテゴリのチュートリアル判定。近接（Collider `IsTouching`）で表示/非表示、カテゴリごとの達成条件で`TutorialProgress`へ通知（§9-3） |
+| `ActionUnlockPickup` | Stage1の`AttackUnlockItem`/`JumpUnlockItem` | 触れるとメインアクションを1つ解放するアイテム。`MainActionQueue.UnlockAction()`を呼んで自身を`Destroy`（§9-3） |
+| `TutorialHintUI` | HUD_Canvas/TutorialHint | 画面上部のチュートリアルヒント表示。`RequestShow(requester,text,distance,speaker)`/`RequestHide`のリクエスト方式、距離最小のものを優先表示。見た目は`SpeakerTextBoxView`（§9-2）に委譲 |
+| `SpeakerTextBoxView` | `Assets/Prefabs/UI/SpeakerTextBox.prefab` | 話者アイコン・名前欄・本文を持つテキストボックスの見た目のみを担当。`DialoguePlayer`・`TutorialHintUI`が共有インスタンスとして使う唯一の編集場所（§9-2） |
+| `TutorialHintCategory` | （enum） | `DashPastEnemy`/`DashOverPit`/`JumpHighGround`/`ClimbLedge`/`AttackEnemy`/`JumpOverPit`（新規値は必ず末尾に追加） |
+| `TutorialProgress` | Stage1の`TutorialProgress` | カテゴリ単位でヒント習得済みかどうかを管理するマネージャー。`IsLearned`/`MarkLearned`（§9-3） |
+| `TutorialHint` | Stage1の各`ProximityZone`/`PitMarker`/`HighGroundZone`（全面刷新） | 1オブジェクト=1カテゴリのチュートリアル判定。近接（Collider `IsTouching`）で表示/非表示、カテゴリごとの達成条件で`TutorialProgress`へ通知（§9-3） |
 | `OneWayPlatform` | Stage3/`Grid/HighGround`（Tilemap の CompositeCollider2D） | 一方通行 + 重なり率での着地判定。単体 Collider2D でも Tilemap の CompositeCollider2D でも動く（`Awake` が CompositeCollider2D を優先） |
 | `TilemapColliderBootstrap` | 各ステージ `Grid/Ground` | `Awake` でタイルを貼り直し、`TilemapCollider2D`/`CompositeCollider2D` の形状を再生成させる（eval 生成 Tilemap が Play 開始時に当たり判定を持たない問題の対策）。§7 |
-| `CameraFollow` | Main Camera | 追従。`target`（Player の Transform）は未設定なら Tag=Player から自動取得（2026-09-12）。`followHorizontal`/`followVertical`（各既定true/false、2026-09-13追加）で横縦を個別にオン/オフでき、オフの方向は開始位置で固定（Stage4のみ縦追従に設定） |
-| `ActionBarUI` | HUD_Canvas/ActionBar | アクション先読み表示。`queue`（Player の MainActionQueue）は未設定なら Tag=Player から自動取得（2026-09-12）。`controller`（MainActionController）も同様に自動取得（2026-09-19追加）。クールタイム/コンボ受付の可視化については§2-2参照 |
-| `HealthUI` | HUD_Canvas/HealthPanel | 体力アイコン表示。`playerHealth`（Player の PlayerHealth）は未設定なら Tag=Player から自動取得（2026-09-12） |
+| `CameraFollow` | Main Camera | 追従。`target`（Player の Transform）は未設定なら Tag=Player から自動取得。`followHorizontal`/`followVertical`（各既定true/false）で横縦を個別にオン/オフでき、オフの方向は開始位置で固定（Stage4のみ縦追従に設定） |
+| `ActionBarUI` | HUD_Canvas/ActionBar | アクション先読み表示。`queue`（Player の MainActionQueue）は未設定なら Tag=Player から自動取得。`controller`（MainActionController）も同様に自動取得。クールタイム/コンボ受付の可視化については§2-2参照 |
+| `HealthUI` | HUD_Canvas/HealthPanel | 体力アイコン表示。`playerHealth`（Player の PlayerHealth）は未設定なら Tag=Player から自動取得 |
 | `StageSet` | ScriptableObject（`Assets/Resources/StageSet.asset`） | ステージの並び。`stages[]` = `displayName` + `sceneName` + `intro`（会話）+ `allowedActions`（そのステージの抽選対象）+ `disableCombos`。全体の `prologue`。`AllowedActionsAt`/`DisableCombosAt`/`IndexOfScene`。GameFlow が Resources.Load |
 | `GameFlow` | (static クラス) | 画面遷移（`SceneTransition.Go` 経由）+ ステージ解放 + 会話既読。`Stages`（StageSet）、`StageCount`、`StartGame`（未読ならPrologue経由）/`LoadStage`/`RetryStage`/`NextStage`/`GoStageSelect`/`GoTitle`、`CurrentStageIndex`、`ActiveStageIndex`（アクティブシーン名から StageSet index を解決）、クリア状況（`IsStageCleared`/`SetStageCleared`/`MarkStageCleared`、PlayerPrefs ビットマスク）、`IsStageUnlocked`/`UnlockedStageIndex`、ステージ会話既読（`HasSeenIntro`/`SetIntroSeen`/`MarkIntroSeen`、ビットマスク）、プロローグ既読（`HasSeenPrologue`/`SetPrologueSeen`/`MarkPrologueSeen`、0/1）、`ResetStageProgress`（クリア＋ステージ既読の2キー消去、プロローグは残す）、`ResetProgress`（3キー消去） |
 | `DeveloperSettings` | ScriptableObject（`Assets/Resources/DeveloperSettings.asset`） | 開発者機能の総合スイッチ。`developerMode` bool をインスペクター編集。静的 `Active` = エディタ内 かつ `developerMode`（`#if UNITY_EDITOR` ガード。ビルドでは常に false）。`DevStageClearToggles` / `DevStorySeenToggles` / `DevProgressResetButton` が従う |
-| `DialogueSequence` | ScriptableObject（`Assets/Dialogue/*.asset`） | 会話 1 本。`pages[]` = `speaker` + `text` + `image` + `layout` + `useTypewriterEffect`（既定 true）+ `typewriterCharsPerSecond`（既定 30）（2026-09-12 追加。ページごとに文字送り演出の on/off と速さ） |
-| `DialoguePlayer` | Prologue シーン, 各ステージシーン | 会話再生（UI は実行時生成）。`Play(seq, onComplete)`、静的 `IsPlaying`。送り＝Space/Enter/左クリック（画面任意位置）。`Play()` で `InputLock.LockFor(inputLockDuration=0.25)`（2026-09-12 に 0.5→0.25 へ半減）。日本語表示用に `Resources.Load<Font>("Fonts/NotoSansJP-Regular")` を使用（§9-2）。1文字ずつの文字送り演出（on/off・速さともにページ単位＝`DialogueSequence.Page.useTypewriterEffect`/`.typewriterCharsPerSecond`、2026-09-12、§9-2） |
+| `DialogueSequence` | ScriptableObject（`Assets/Dialogue/*.asset`） | 会話 1 本。`pages[]` = `speaker` + `text` + `image` + `layout` + `useTypewriterEffect`（既定 true）+ `typewriterCharsPerSecond`（既定 30）（ページごとに文字送り演出の on/off と速さ） |
+| `DialoguePlayer` | Prologue シーン, 各ステージシーン | 会話再生（UI は実行時生成）。`Play(seq, onComplete)`、静的 `IsPlaying`。送り＝Space/Enter/左クリック（画面任意位置）。`Play()` で `InputLock.LockFor(inputLockDuration=0.25)`（0.5→0.25 へ半減）。日本語表示用に `Resources.Load<Font>("Fonts/NotoSansJP-Regular")` を使用（§9-2）。1文字ずつの文字送り演出（on/off・速さともにページ単位＝`DialogueSequence.Page.useTypewriterEffect`/`.typewriterCharsPerSecond`、§9-2） |
 | `PrologueRunner` | Prologue シーン | `StageSet.prologue` を再生 → `GameFlow.GoStageSelect()` |
 | `TitleMenu` | Title/Canvas | `OnStartClicked()` → `GameFlow.StartGame()`（プロローグ経由でステージ選択）（ボタン onClick から） |
 | `StageSelectMenu` | StageSelect/Canvas | `LoadStage(int)` → `GameFlow.LoadStage(i)`、`BackToTitle()` → `GameFlow.GoTitle()`（左下 BackButton）。`Start` で `RefreshLocks()`（未解放ボタン無効化）＋ `MenuNavigation.SetInitialFocus`（初期カーソル＝一番先の解放ステージ）。`StageButtons` を公開 |
 | `DevStageClearToggles` | StageSelect/Canvas | 【開発者用】各ステージボタンにクリア状況チェックボックス＋"clear" ラベルを実行時生成。`public ResetAll()`。表示は `DeveloperSettings.Active` |
 | `DevStorySeenToggles` | StageSelect/Canvas ＋ Title/Canvas | 【開発者用】会話の既読トグル＋"story" ラベルを実行時生成。StageSelect＝各ステージの開始会話、Title＝プロローグ。`public ResetAll()`（StageSelect 側のみ実効）。表示は `DeveloperSettings.Active` |
 | `DevProgressResetButton` | StageSelect/Canvas | 【開発者用】BackButton の少し上に「Reset story & clear」ボタンを実行時生成し `MenuNavigation.AddButton` で登録。`GameFlow.ResetStageProgress()` ＋ 両トグルの `ResetAll()`。表示は `DeveloperSettings.Active` |
-| `FreshBuildGuard` | (static, `RuntimeInitializeOnLoadMethod`) | ビルド版のみ。**2026-09-22、`Debug.isDebugBuild`に直結**：Development Buildなら起動時に`GameFlow.ResetProgress()`、それ以外の通常ビルドは無条件で絶対にリセットしない（切り替える定数を廃止し、消し忘れ事故を構造的に排除）。エディタ内は無効 |
-| `StageManager` | 各ステージ/StageFlow | クリア/失敗判定・結果画面表示・結果ボタン処理・落下死判定（killY）・初回入場時の開始会話（`TryPlayIntro`, `Time.timeScale=0`）・ステージ開始時 / 会話終了時に `InputLock.LockFor(inputLockDuration=0.25)`（2026-09-12 に 0.5→0.25 へ半減）。体力0での失敗は`Fail()`とは別経路（`HandlePlayerHpDied`→死亡アニメーション→Animation Eventで`HandlePlayerAnimationEvent`がパネル表示、2026-09-21、§2-7）。**`Clear()`も2026-09-23に同様の方式へ変更**（`PlayClearAnimation()`→クリアアニメーション→Animation Eventでパネル表示）。落下死（killY）は既定`Fail()`だが、`softRetryOnFall`をtrue＋`softRetryPoint`を設定すると失敗にせず指定位置へ戻す「優しい」扱いに切り替えられる（2026-09-22追加、Stage1では既定オフ、§9-3） |
+| `FreshBuildGuard` | (static, `RuntimeInitializeOnLoadMethod`) | ビルド版のみ。**`Debug.isDebugBuild`に直結**：Development Buildなら起動時に`GameFlow.ResetProgress()`、それ以外の通常ビルドは無条件で絶対にリセットしない（切り替える定数を廃止し、消し忘れ事故を構造的に排除）。エディタ内は無効 |
+| `StageManager` | 各ステージ/StageFlow | クリア/失敗判定・結果画面表示・結果ボタン処理・落下死判定（killY）・初回入場時の開始会話（`TryPlayIntro`, `Time.timeScale=0`）・ステージ開始時 / 会話終了時に `InputLock.LockFor(inputLockDuration=0.25)`（0.5→0.25 へ半減）。体力0での失敗は`Fail()`とは別経路（`HandlePlayerHpDied`→死亡アニメーション→Animation Eventで`HandlePlayerAnimationEvent`がパネル表示、§2-7）。**`Clear()`も同様の方式へ変更**（`PlayClearAnimation()`→クリアアニメーション→Animation Eventでパネル表示）。落下死（killY）は既定`Fail()`だが、`softRetryOnFall`をtrue＋`softRetryPoint`を設定すると失敗にせず指定位置へ戻す「優しい」扱いに切り替えられる（Stage1では既定オフ、§9-3） |
 | `Goal` | 各ステージ/Goal | 右端トリガー。ボス全滅後にプレイヤーが触れると `StageManager.Clear()` |
-| `MenuNavigation` | Title/StageSelect の Canvas, 各ステージの ClearPanel/FailPanel | メニュー UI のキーボード操作。位置ベース 2D 移動（W/S=上下・最近傍＋端ループ、A/D=同じ行内＋端ループ）、Space/Enter で決定、選択枠の自動生成。マウスホバーは移動時のみ反映。`OnEnable` で `InputLock.LockFor(inputLockDuration)`（全画面共通 0.5s、2026-09-12 に結果パネルの 1.0s を統一）。カーソル移動・マウスホバーは `InputLock.NavigationAllowed`（フェード中だけ false）を見る、決定（`HandleSubmit()`/`GraphicRaycaster`）は `InputLock.InputAllowed`（フェード中 or 猶予中は false）を見る——猶予中でもカーソル移動は効き、実際に成立したら `InputLock.Unlock()` で決定の猶予も即解除する（2026-09-12、§16-1）。`AddButton()` / `SetInitialFocus()` |
+| `MenuNavigation` | Title/StageSelect の Canvas, 各ステージの ClearPanel/FailPanel | メニュー UI のキーボード操作。位置ベース 2D 移動（W/S=上下・最近傍＋端ループ、A/D=同じ行内＋端ループ）、Space/Enter で決定、選択枠の自動生成。マウスホバーは移動時のみ反映。`OnEnable` で `InputLock.LockFor(inputLockDuration)`（全画面共通 0.5s、結果パネルの 1.0s を統一）。カーソル移動・マウスホバーは `InputLock.NavigationAllowed`（フェード中だけ false）を見る、決定（`HandleSubmit()`/`GraphicRaycaster`）は `InputLock.InputAllowed`（フェード中 or 猶予中は false）を見る——猶予中でもカーソル移動は効き、実際に成立したら `InputLock.Unlock()` で決定の猶予も即解除する（§16-1）。`AddButton()` / `SetInitialFocus()` |
 | `InputLock` | (static クラス) | 入力ロック。`InputAllowed` = `!SceneTransition.Transitioning && Time.unscaledTime >= 解除時刻`。`LockFor(秒)` で一定時間 false に（一番遅い解除時刻を採用）。`MenuNavigation`/`DialoguePlayer`/`StageManager`/`SceneTransition` が LockFor、`MenuNavigation`/`DialoguePlayer`/`MainActionController`/`PlayerController` が参照 |
 | `SceneTransition` | (実行時生成, `DontDestroyOnLoad`) | 全シーン遷移で暗転→読み込み→明転。`Go(シーン名)`。演出中 `Transitioning=true`（＝入力全無効）、明転後 `InputLock.LockFor(postFadeInLockSeconds)`。全面黒 Image（sortingOrder 32760, raycastTarget）でマウスも遮断 |
-| `SceneTransitionSettings` | ScriptableObject（`Assets/Resources/SceneTransitionSettings.asset`） | `fadeOutSeconds`(0.5) / `fadeInSeconds`(0.5) / `postFadeInLockSeconds`(**0.25**、2026-09-12 に 0.5→0.25 へ半減)。インスペクター調整 |
+| `SceneTransitionSettings` | ScriptableObject（`Assets/Resources/SceneTransitionSettings.asset`） | `fadeOutSeconds`(0.5) / `fadeInSeconds`(0.5) / `postFadeInLockSeconds`(**0.25**、 0.5→0.25 へ半減)。インスペクター調整 |
 
 ---
 
@@ -641,14 +668,14 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 |---|---|---|---|
 | 移動 | moveSpeed | 6 | PlayerController |
 | ジャンプ | jumpForce | 12 | MainActionController |
-| ジャンプ | 滞空時間の上限 | **無し**（2026-09-21、旧`jumpAirCooldownCap`=3秒は撤廃。着地のみが終了条件） | MainActionController |
+| ジャンプ | 滞空時間の上限 | **無し**（旧`jumpAirCooldownCap`=3秒は撤廃。着地のみが終了条件） | MainActionController |
 | ジャンプ | JumpLiftoffGrace（離陸猶予, const） | 0.25 秒 | MainActionController |
-| ダッシュ | dashSpeed / ダッシュの効果時間（＝クールタイム兼コンボ受付時間） | 18 / **`dashClip`の長さ、既定0.8秒**（2026-09-21、旧`dashDuration`=0.5秒は廃止） | MainActionController |
+| ダッシュ | dashSpeed / ダッシュの効果時間（＝クールタイム兼コンボ受付時間） | 18 / **`dashClip`の長さ、既定0.8秒**（旧`dashDuration`=0.5秒は廃止） | MainActionController |
 | ダッシュ | dashLockFraction（前半ロック割合） | 0.5（＝0.8秒中、前半0.4秒がロック区間） | MainActionController |
-| ダッシュ | dashDecelFraction（後半のうち減速にかける割合、2026-09-23） | 0.5 | MainActionController |
-| 攻撃 | 攻撃の効果時間（＝攻撃判定が出ている時間、クールタイム兼コンボ受付時間） / attackDamage | **`attackClip`の長さ、既定0.5秒**（2026-09-21、旧`attackDuration`=0.4秒・`attackCooldown`=2秒は廃止） / 1 | MainActionController |
-| 攻撃 | 判定の前方オフセット | Transform.localPosition.x の絶対値（既定 0.9、専用フィールドは廃止 2026-09-13） | AttackHitbox |
-| コンボ | 受付猶予 | **＝クールタイムと同じ（busyの間ずっと）**（2026-09-21、旧`comboGraceTime`=0.8秒という独立パラメータは廃止） | MainActionController |
+| ダッシュ | dashDecelFraction（後半のうち減速にかける割合） | 0.5 | MainActionController |
+| 攻撃 | 攻撃の効果時間（＝攻撃判定が出ている時間、クールタイム兼コンボ受付時間） / attackDamage | **`attackClip`の長さ、既定0.5秒**（旧`attackDuration`=0.4秒・`attackCooldown`=2秒は廃止） / 1 | MainActionController |
+| 攻撃 | 判定の前方オフセット | Transform.localPosition.x の絶対値（既定 0.9、専用フィールドは廃止） | AttackHitbox |
+| コンボ | 受付猶予 | **＝クールタイムと同じ（busyの間ずっと）**（旧`comboGraceTime`=0.8秒という独立パラメータは廃止） | MainActionController |
 | アニメーション | dashClip / attackClip | Assets/Animations/Player_Dash.anim（0.8秒） / Player_Attack.anim（0.5秒） | MainActionController |
 | 先行入力 | inputBufferTime（CD 明け前の受付） | 0.1 秒（≒6フレーム） | MainActionController |
 | 先行入力 | BufferedInputMaxLife（記憶の失効, const） | 0.4 秒 | MainActionController |
@@ -660,12 +687,12 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | 敵 | maxHealth / contactDamage | 1 / 1 | Enemy |
 | 敵 | knockbackSpeed / knockbackUpSpeed / knockbackDuration | 8 / 4 / 0.25 秒 | Enemy |
 | ラスボス | moveSpeed / retreatDistance | 2 / 5 | Enemy3AI |
-| ラスボス | radialChance（②を選ぶ確率、2026-09-17追加） | 0.5 | Enemy3AI |
-| ラスボス | firstActionDelay（初回行動の遅延、2026-09-18追加） | 3 秒 | Enemy3AI |
+| ラスボス | radialChance（②を選ぶ確率） | 0.5 | Enemy3AI |
+| ラスボス | firstActionDelay（初回行動の遅延） | 3 秒 | Enemy3AI |
 | ラスボス | radialBulletCount / radialCooldown | 8 / 3 秒 | Enemy3AI |
 | ラスボス | homingTurnSpeed / homingCooldown | 90 度/秒 / 3 秒 | Enemy3AI |
-| 弾 | reversalAngleThreshold / reversalRateMultiplier（反転モード、2026-09-17追加） | 170 度（Bullet.prefabでは150） / 1 | Bullet |
-| 弾 | enemyDamage / selfHitGraceTime（敵キャラへのヒット、2026-09-18追加） | 2 / 0.2 秒 | Bullet |
+| 弾 | reversalAngleThreshold / reversalRateMultiplier（反転モード） | 170 度（Bullet.prefabでは150） / 1 | Bullet |
+| 弾 | enemyDamage / selfHitGraceTime（敵キャラへのヒット） | 2 / 0.2 秒 | Bullet |
 | ラスボス | bulletSpeed | 5 | Enemy3AI |
 | 敵 | clearStageOnDeath（倒すと即クリア） | false（Stage4のボスだけtrue） | Enemy |
 | 砲台 | fireInterval / bulletSpeed / homingOnFire | 2 秒 / 6 / true | EnemyShooter |
@@ -678,15 +705,16 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | ステージ | killY（落下死ライン） | -12 | StageManager |
 | メニュー操作 | frameColor / framePadding（選択枠） | 黄 / 8px | MenuNavigation |
 | メニュー操作 | rowTolerance（横入力で同じ行とみなす縦ズレ） | 40px | MenuNavigation |
-| 入力ロック | inputLockDuration（`MenuNavigation`：画面 / パネルが出てからこの秒数、入力を無効化） | 0.5 秒（全画面共通。結果パネルも 2026-09-12 に 1.0→0.5 秒へ統一） | MenuNavigation |
-| 入力ロック | inputLockDuration（`DialoguePlayer`/`StageManager`：会話・ステージ開始/終了直後の入力無効化） | **0.25 秒**（2026-09-12 に 0.5→0.25 へ半減） | DialoguePlayer / StageManager |
+| 入力ロック | inputLockDuration（`MenuNavigation`：画面 / パネルが出てからこの秒数、入力を無効化） | 0.5 秒（全画面共通。結果パネルも 1.0→0.5 秒へ統一） | MenuNavigation |
+| 入力ロック | inputLockDuration（`DialoguePlayer`/`StageManager`：会話・ステージ開始/終了直後の入力無効化） | **0.25 秒**（0.5→0.25 へ半減） | DialoguePlayer / StageManager |
 | フェード遷移 | fadeOutSeconds / fadeInSeconds | 各 0.5 秒 | SceneTransitionSettings（`Assets/Resources/`） |
-| フェード遷移 | postFadeInLockSeconds | **0.25 秒**（2026-09-12 に 0.5→0.25 へ半減） | SceneTransitionSettings（`Assets/Resources/`） |
-| 会話 | blackColor / boxColor（暗転・ボックス） | ほぼ黒 / 黒 78% | DialoguePlayer |
-| 会話 | centerFontSize / bodyFontSize / speakerFontSize | 40 / 30 / 26 | DialoguePlayer |
+| フェード遷移 | postFadeInLockSeconds | **0.25 秒**（0.5→0.25 へ半減） | SceneTransitionSettings（`Assets/Resources/`） |
+| 会話 | blackColor（暗転） | ほぼ黒 | DialoguePlayer |
+| 会話 | centerFontSize | 40 | DialoguePlayer |
+| テキストボックス | 箱の背景色 / アイコンサイズ・余白 / 名前欄サイズ・色・フォント / 本文フォントサイズ 等、見た目全般 | 黒78% / 64px・16px / 180px幅・20pt 等 | `Assets/Prefabs/UI/SpeakerTextBox.prefab`（`SpeakerTextBoxView`）に一本化。ストーリー会話・チュートリアルヒント共通、Prefab Modeでゲーム未実行のまま編集・確認できる |
 | 会話 | sortingOrder（会話 Canvas） | 200 | DialoguePlayer |
-| 会話 | useTypewriterEffect（1文字ずつ表示するか、ページ単位） | true（2026-09-12 追加、同日中にシーン単位→ページ単位へ変更） | DialogueSequence.Page |
-| 会話 | typewriterCharsPerSecond（文字送りの速さ、ページ単位） | 30 文字/秒（2026-09-12 追加、同日中にシーン単位→ページ単位へ変更） | DialogueSequence.Page |
+| 会話 | useTypewriterEffect（1文字ずつ表示するか、ページ単位） | true（同日中にシーン単位→ページ単位へ変更） | DialogueSequence.Page |
+| 会話 | typewriterCharsPerSecond（文字送りの速さ、ページ単位） | 30 文字/秒（同日中にシーン単位→ページ単位へ変更） | DialogueSequence.Page |
 
 ---
 
@@ -698,7 +726,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 - 物理: `FixedUpdate` は物理積分の「前」に走る。ダッシュ移動を `FixedUpdate` で書くのはこのため（`WaitForFixedUpdate` コルーチンだと積分後になり、1 ステップぶん落下してしまう）。
 - 静的コライダー（`Enemy`, 旧 `Ground_*`）は `Rigidbody2D` なしでプレイヤー（動的 RB）と物理衝突する。`transform` 直接移動でも衝突判定は機能する。
 - `Physics2D.IgnoreCollision` を多用（一方通行高台、ダッシュ中の敵すり抜け）。
-- **地面は Tilemap 化済み**（2026-09-09。§7 / §9-1）。`TilemapCollider2D` + `CompositeCollider2D`（Merge / Polygons）で 1 本の外周コライダーにまとめる。`OverlapBox` での接地判定も効く。仮タイルなので本番は 90×90px 素材で `GroundTile.png` を上書きするだけ。
+- **地面は Tilemap 化済み**（§7 / §9-1）。`TilemapCollider2D` + `CompositeCollider2D`（Merge / Polygons）で 1 本の外周コライダーにまとめる。`OverlapBox` での接地判定も効く。仮タイルなので本番は 90×90px 素材で `GroundTile.png` を上書きするだけ。
 - **エディタ MCP eval の注意**: `EditorSceneManager.OpenScene(...)` と同じ eval 内で `Tilemap.SetTile(...)` を呼ぶと無音で失敗する（1 エディタティック必要）。シーンを開く eval と塗る eval を分ける。
 - **eval で `SetTile` して作った Tilemap は Play 開始時にコライダー形状を生成しない**（`CompositeCollider2D.pathCount = 0` のまま＝地面がすり抜ける）。`ProcessTilemapChanges()` / `GenerateGeometry()` / コライダーの enable トグル / `RefreshAllTiles()` だけでは直らない。**タイルの「変更イベント」が必要** → タイルを一度消して貼り直す（`GetTilesBlock` → `ClearAllTiles` → `SetTilesBlock` → `ProcessTilemapChanges` → `GenerateGeometry`）と再生成される。これを `Awake` で毎回やる `TilemapColliderBootstrap` を各 `Ground` に付けてある（§7）。編集モードではそもそも物理形状が作られないので `pathCount` は 0 のまま（＝ シーンには形状が保存されない。実行時に Bootstrap が作る）。
 
@@ -707,9 +735,9 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 ## 13. 未実装 / TODO
 
 **画面の流れは最小実装で通ったが、以下は未着手 / 仮:**
-- **Stage2, Stage4, Stage5 の中身**。Stage2は2026-09-13にStage1と完全同一構成化（暫定、別プランナーが詳細設計予定）。Stage4は2026-09-13に縦スクロール構成へ作り直したが「スクロールが動くかの簡易確認用」で正式なレベルデザインではない。Stage5は2026-09-16にラスボス(Enemy3)を配置したが「地面とプレイヤーとラスボスがいるだけ」の最小構成で、正式なレベルデザインではない。Stage3はStage1と同一構成（2026-09-11）＋Enemy2追加（2026-09-13）。
+- **Stage2, Stage4, Stage5 の中身**。Stage2はStage1と完全同一構成化（暫定、別プランナーが詳細設計予定）。Stage4は縦スクロール構成へ作り直したが「スクロールが動くかの簡易確認用」で正式なレベルデザインではない。Stage5はラスボス(Enemy3)を配置したが「地面とプレイヤーとラスボスがいるだけ」の最小構成で、正式なレベルデザインではない。Stage3はStage1と同一構成＋Enemy2追加。
 - **会話テキストは全部仮**（`DialogueSequence` アセットの中身）。プロローグの一枚絵も未準備（仮イラスト表示中）。本番の絵は主人公＝左 / ダンジョン＝右の構図で用意予定。
-- **会話 UI の体裁**（日本語表示自体は 2026-09-11 に対応済み — §9-2「日本語フォント」。文字送り演出は 2026-09-12 対応済み — §9-2。常用漢字外の漢字は現状のフォントサブセットに無いので表示できない）。
+- **会話 UI の体裁**（日本語表示自体は対応済み — §9-2「日本語フォント」。文字送り演出も対応済み — §9-2。常用漢字外の漢字は現状のフォントサブセットに無いので表示できない）。
 - **UI の日本語化**（メニューは今は英語のまま。日本語にする場合、`Text` はレンダリングだけなら §9-2 のフォントを流用できるが、見た目を作り込むなら TMP 移行も検討）。
 - 結果画面 / メニューの見た目（配置・色は最小限）。
 - **ロック中ステージの見た目**は Unity 既定のグレーアウトのみ（「LOCKED」表記や鍵アイコンは未実装）。クリア進捗のセーブは `PlayerPrefs` の 1 キーだけ（スロット/複数セーブ無し）。
@@ -719,7 +747,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 - **Stage4のボス`Enemy1_Boss`は仮**。ユーザー指定により「Enemy1のHPを3にしただけ」の暫定実装（頭上体力バー無し。`Enemy1.prefab`に体力バーの子オブジェクトが無いため）。本番のボス仕様が決まり次第差し替え予定。
 - **地面 / 高台 Tilemap の本番タイル素材**（今は仮の `GroundTile.png` と `HighGroundTop*.png`/`HighGroundPillar*.png`。90×90px / PPU 90 を保って上書きすれば差し替わる。高台は天面・柱それぞれ左/中央/右で見た目を区別できる本番絵を想定）。
 - **HighGround（高台）の使い方・注意点は §7 に使い方ガイドとしてまとめてある**（1基=1Tilemap厳守、Groundに描かない、天面/柱・左中央右の機能差の有無、など）。他プランナーへの説明はそちらを参照。
-- **高台の端で降りるときに一瞬引っかかる不具合が未解決**（2026-09-16）。ヒステリシス方式・「他の地面に着地するまでロック」方式の2つを試したが、いずれも実際のゲームプレイでは解消せず、`OneWayPlatform.cs`は元の単一閾値ロジックに戻した（詳細はメモリ`tilemap-platform-oneway`参照）。
+- **高台の端で降りるときに一瞬引っかかる不具合が未解決**。ヒステリシス方式・「他の地面に着地するまでロック」方式の2つを試したが、いずれも実際のゲームプレイでは解消せず、`OneWayPlatform.cs`は元の単一閾値ロジックに戻した（詳細はメモリ`tilemap-platform-oneway`参照）。
 - ステージのカメラ左右クランプ、スポーン地点の明示。
 - 体力 UI アイコンは `enabled` 切り替えのみ / `EnemyHealthBar` の fill は中央アンカー。
 - ハート型など体力 UI の見た目（現状は赤丸で確定・OK）。
@@ -732,7 +760,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
    - 例外 A: **コヨーテタイム**（地面を離れて 0.18 秒以内）。少し落下していても跳べる。
    - 例外 B: **ダッシュ → ジャンプのコンボ**のときだけ、完全な空中でもジャンプ可。ダッシュ移動を中断して跳ぶ。
 2. **落下しない猶予（0.1 秒）とジャンプ受付猶予（0.18 秒）は別パラメータ**。後者が長い。
-3. **ダッシュ → ジャンプでも無敵は途切れない**。無敵はダッシュ効果時間ぶんの専用タイマーで管理し、ジャンプ移行でも減り続ける。入力方向によらず、効果時間が満了するまで無敵は途切れない（2026-09-23、後方入力キャンセル廃止に伴い変更）。
+3. **ダッシュ → ジャンプでも無敵は途切れない**。無敵はダッシュ効果時間ぶんの専用タイマーで管理し、ジャンプ移行でも減り続ける。入力方向によらず、効果時間が満了するまで無敵は途切れない（後方入力キャンセル廃止に伴い変更）。
 4. **クールタイム**: ダッシュ 2 秒 / 攻撃 2 秒（固定）、ジャンプは「着地まで」（上限 3 秒）。
    - コンボにジャンプを含めば「着地まで」だけを見る。含まなければ 2 つ目のクールタイムだけ見る。相方のクールタイムは常に無視。
 5. **コンボ受付猶予（0.8 秒）はクールタイムと独立**。最大 2 連続。
@@ -742,25 +770,26 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 
 ---
 
-## 15. 共通オブジェクトの Prefab 化（2026-09-12）
+## 15. 共通オブジェクトの Prefab 化
 
 全ステージで共通の `Player` / `Enemy_A` / `Enemy_Boss` / `Goal` を Prefab 化した。`Assets/Prefabs/` に置き、各ステージシーンには**直接配置した Prefab インスタンス**（実行時に動的生成する仕組みは無い・不要）。
 
 - **`Assets/Prefabs/Player.prefab`**: Stage1 の `Player`（子の `AttackHitbox` / `DebugBars` ツリーごと）をそのまま Prefab 化。Stage2〜5 は元の GameObject を削除し、このプレハブをインスタンス化して差し替えた。
   - **ステージごとに残す上書き（インスタンス側の override）**: `Transform.position`（全ステージ実は (-10,-1.5,0) で共通）、`MainActionQueue.stageSeed`（Stage1〜5 = 12345 / 22222 / 33333 / 44444 / 55555）。他のフィールドはプレハブ側の値がそのまま使われる。
-- **`Assets/Prefabs/Enemy.prefab`**（**2026-09-13 に `Enemy1.prefab` へリネーム**、詳細は §6-1）: Stage1 の `Enemy_A`（HP1 の雑魚。`Enemy` + `EnemyPatrol`）を Prefab 化。Stage3 の `Enemy_A` はこのプレハブのインスタンスに差し替え（Stage2/4/5 に敵は無し、元々の仕様どおり）。
+- **`Assets/Prefabs/Enemy.prefab`**（**`Enemy1.prefab` へリネーム**、詳細は §6-1）: Stage1 の `Enemy_A`（HP1 の雑魚。`Enemy` + `EnemyPatrol`）を Prefab 化。Stage3 の `Enemy_A` はこのプレハブのインスタンスに差し替え（Stage2/4/5 に敵は無し、元々の仕様どおり）。
 - **`Assets/Prefabs/EnemyBoss.prefab`**: `Enemy.prefab`（現 `Enemy1.prefab`）の **Prefab Variant**（`PrefabUtility` の Variant 機構。ベースの差分だけを持つ）。差分は `Enemy.maxHealth`（1→5）、`EnemyPatrol`（speed 1.5→1 / range 3→2）、そして `HealthBar` 子（`EnemyHealthBar` + BG/Fill/Label）の追加。Stage1 の元の `Enemy_Boss` から `HealthBar` 子をそのまま移設して作成したので、見た目・参照とも作り直しではなく既存資産の再利用。Stage3 の `Enemy_Boss` もこのプレハブのインスタンスに差し替え。
   - 今後 HP や巡回範囲を変えたいときは `EnemyBoss.prefab` 自体を編集すれば、Stage1・Stage3 両方の `Enemy_Boss` に自動反映される（**Play で実証済み**: `Enemy.prefab` の `contactDamage` を一時的に 1→2 に変えて、Stage1 のシーンファイルには一切触れずに `Enemy_A` インスタンス側が 2 を返すことを確認 → 1 に戻した）。
 - **`Assets/Prefabs/Goal.prefab`**: Stage1 の `Goal` を Prefab 化。`stageManager` フィールドは未設定のままにしてある（`Awake` で `FindAnyObjectByType<StageManager>()` に自動解決するので、シーンをまたいだ参照を持たせる必要が無い＝そのままプレハブ化しても安全）。Stage2〜5 の `Goal` もこのプレハブのインスタンスに差し替え。位置はステージごとに override（Stage1 = x28、Stage2〜5 = x25）。
-- **`Assets/Prefabs/HUD_Canvas.prefab`**（2026-09-12 追加分）: Stage1 の `HUD_Canvas`（`ActionBarUI` + `HealthPanel`）を Prefab 化。Stage2〜5 もこのプレハブのインスタンスに差し替え。override は無し（全ステージ完全に同一構成）。
-- **`Assets/Prefabs/StageFlow.prefab`**（2026-09-12 追加分）: Stage1 の `StageFlow`（`StageManager` + `ResultCanvas` の `ClearPanel`/`FailPanel`/`MenuNavigation` 一式）を Prefab 化。`StageManager.clearPanel`/`failPanel`/`nextButton`、各ボタンの `onClick` persistent listener は全部同じ Prefab 階層の内部参照なので、そのまま正しく維持される。Stage2〜5 もこのプレハブのインスタンスに差し替え。override は無し。
-- **`Assets/Prefabs/DialogueSystem.prefab`**（2026-09-12 追加分）: `DialoguePlayer` 単体を Prefab 化（**Stage1〜5 のみ**）。**Prologue シーンの `DialogueSystem` は対象外**（`DialoguePlayer` に加えて `PrologueRunner` が付いており、他のどのシーンとも構成が違う一点物なので、共通化のメリットが無く従来どおりの通常 GameObject のまま）。
+- **`Assets/Prefabs/HUD_Canvas.prefab`**: Stage1 の `HUD_Canvas`（`ActionBarUI` + `HealthPanel`）を Prefab 化。Stage2〜5 もこのプレハブのインスタンスに差し替え。override は無し（全ステージ完全に同一構成）。
+- **`Assets/Prefabs/StageFlow.prefab`**: Stage1 の `StageFlow`（`StageManager` + `ResultCanvas` の `ClearPanel`/`FailPanel`/`MenuNavigation` 一式）を Prefab 化。`StageManager.clearPanel`/`failPanel`/`nextButton`、各ボタンの `onClick` persistent listener は全部同じ Prefab 階層の内部参照なので、そのまま正しく維持される。Stage2〜5 もこのプレハブのインスタンスに差し替え。override は無し。
+- **`Assets/Prefabs/DialogueSystem.prefab`**: `DialoguePlayer` 単体を Prefab 化（**Stage1〜5 のみ**）。**Prologue シーンの `DialogueSystem` は対象外**（`DialoguePlayer` に加えて `PrologueRunner` が付いており、他のどのシーンとも構成が違う一点物なので、共通化のメリットが無く従来どおりの通常 GameObject のまま）。ただし`DialoguePlayer.textBoxPrefab`（後述の`SpeakerTextBox.prefab`への参照）だけは、この非プレハブのPrologue側インスタンスにも個別に配線してある——テキストボックスの見た目はシステムの種類によらず統一したいため。
+- **`Assets/Prefabs/UI/SpeakerTextBox.prefab`（`SpeakerTextBoxView`）**: ストーリー会話（`DialoguePlayer`）とチュートリアルヒント（`TutorialHintUI`）が共有する、テキストボックスの見た目（箱の背景・話者アイコン・名前欄・本文）だけを持つプレハブ。`DialoguePlayer`は実行時に`Instantiate()`して使い、`TutorialHintUI`は`HUD_Canvas.prefab`の`TutorialHint`の子`SpeakerTextBox`としてネストされたインスタンスをそのまま使う。**見た目を調整する唯一の場所**（詳細は§9-2）。
 
 **Prefab 化のあと確認したこと**: `HUD_Canvas`/`StageFlow`/`DialogueSystem` を差し替える前に、それぞれの内部（`ActionBarUI`/`HealthUI`/`StageManager`/`DialoguePlayer`/`MenuNavigation`/`PrologueRunner`）の `[SerializeField]` を全スクリプト横断で洗い出し、**外部の別オブジェクトから直接参照されている箇所が無いこと**を確認してから実施した（§15-1 の教訓を踏まえた事前チェック）。唯一の外部参照だった `Goal.stageManager` は元々 auto-resolve 済みで無害。差し替え後、Stage1〜5 すべてで Play 確認（コンソールエラー・警告 0、`ActionBarUI`/`HealthUI`/`CameraFollow` の自動解決も正常、`StageManager.Clear()` 呼び出しも正常動作）。
 
 **Prefab に関する重要な訂正（ユーザーの認識との相違）**: 「プレハブを直置きすると、あとでプレハブ本体を変更しても反映されない」というのは誤り。**プレハブインスタンスはシーンに直接置いても元のプレハブアセットとリンクしたままで、プレハブ側を編集すれば全インスタンスへ自動反映される**（Unity の Prefab の中核機能）。反映されないのは「そのインスタンスだけ個別に上書き（override）した項目」のみ。よって、今回のような「あとで調整しやすくしたい」という目的には、シーンに直接プレハブインスタンスを置くだけで十分であり、**実行時の動的生成（`Instantiate`）は実装していない・不要**。動的生成が要るのは、敵の湧き方をランダムにしたい／オブジェクトプールしたいなど別の目的が出てきたときで、現状の仕様には無い。
 
-### 15-1. 副作用バグとその修正（2026-09-12、Prefab 化の直後に発生）
+### 15-1. 副作用バグとその修正（Prefab 化の直後に発生）
 
 Player を「削除 → 新しい Prefab インスタンスを配置」という手順で差し替えた際、**Player とは別の GameObject が Player 側のコンポーネントを直接参照（Inspector 上のオブジェクト参照）していた箇所**が、古い Player の破棄と同時にすべて null になった（Tag 検索ではなく直接参照なので、Unity が自動的に新しいインスタンスへ繋ぎ直してはくれない）。影響は Stage2〜5（Stage1 は既存の Player をそのまま `SaveAsPrefabAssetAndConnect` したため同一インスタンスが継続し無事）。
 
@@ -777,11 +806,11 @@ Player を「削除 → 新しい Prefab インスタンスを配置」という
 - `Grid/Ground`・`Grid/HighGround`（Tilemap 地形）: コンポーネント構成は共通だが、塗ったタイルのデータ自体はステージごとに意図的に異なる（レベルデザインの本体）。Tilemap のタイルデータを Prefab の override として持たせるのは大きめのデータになり扱いにくいため、今回は見送り。コンポーネント構成を変える（例: `TilemapColliderBootstrap` にロジックを足す）ときは、既存の 5+1 シーンへ手作業で反映する必要がある点は変わらず。
 - `EventSystem` / `Main Camera`: 単純な定型オブジェクトで、共通化のメリットが薄いため見送り。
 
-**`HUD_Canvas` / `StageFlow` / `DialogueSystem`（Prologue 除く）も 2026-09-12 中に Prefab 化済み**（上記参照）。UnityEvent の persistent listener 配線や Canvas の入れ子構造は、いずれも Prefab 階層の内部参照だったため Player/Enemy/Goal のときと同様に問題なく維持された。
+**`HUD_Canvas` / `StageFlow` / `DialogueSystem`（Prologue 除く）も Prefab 化済み**（上記参照）。UnityEvent の persistent listener 配線や Canvas の入れ子構造は、いずれも Prefab 階層の内部参照だったため Player/Enemy/Goal のときと同様に問題なく維持された。
 
 ---
 
-## 16. 入力ロックの対象を「決定系」だけに限定（2026-09-12、同日中に3段階で調整）
+## 16. 入力ロックの対象を「決定系」だけに限定（同日中に3段階で調整）
 
 **問題**: `InputLock` は元々「画面が切り替わった直後、一定時間**すべての**入力を無効化する」仕組みだった。目的は「連打の勢いで意図せず決定・発動してしまう」ことの防止だが、これは同時に「意図した操作」まで塞いでしまっていた。具体例: 結果パネル（クリア/失敗）が表示された直後、下矢印キーでカーソルをもう1つ下の選択肢へ動かそうとしても、`MenuNavigation` の入力ロック（0.5秒）がカーソル移動そのものをブロックしていたため反応しなかった。
 

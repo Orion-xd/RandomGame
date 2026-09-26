@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// チュートリアルヒントの表示条件・達成条件を1つのオブジェクトにつき1種類だけ担当する（2026-09-22、全面刷新）。
+/// チュートリアルヒントの表示条件・達成条件を1つのオブジェクトにつき1種類だけ担当する（全面刷新）。
 ///
 /// 共通の考え方: 対象（敵/落とし穴/高台/段差）に近づいている間だけヒントを表示し、離れれば消える。
 /// ただし、そのカテゴリを一度でも「達成」すれば（<see cref="TutorialProgress"/>側で管理）、以後は
@@ -23,6 +23,12 @@ public class TutorialHint : MonoBehaviour
     [SerializeField] private TutorialHintCategory category;
     [Tooltip("画面上部に表示するヒントテキスト")]
     [SerializeField] private string hintText;
+
+    [Header("話者（任意）")]
+    [Tooltip("このヒントを喋っているキャラクター。Narrator ならナレーション扱い（アイコン・名前欄とも非表示）。" +
+             "表示名・アイコンは SpeakerRegistry（Assets/Resources/SpeakerRegistry.asset）で一括管理している。" +
+             "チュートリアルは基本的に勇者が話す想定のため既定値は Hero")]
+    [SerializeField] private SpeakerId speaker = SpeakerId.Hero;
 
     [Header("DashPastEnemy / AttackEnemy 用")]
     [Tooltip("対象の敵。未設定なら親から自動取得（敵の子オブジェクトとして配置する想定）")]
@@ -121,7 +127,7 @@ public class TutorialHint : MonoBehaviour
         bool actionReady = _playerQueue == null || _playerQueue.IsUnlocked(RequiredAction);
 
         if (near && actionReady)
-            _hintUI.RequestShow(this, hintText, _proximityCol.Distance(_playerCollider).distance);
+            _hintUI.RequestShow(this, hintText, _proximityCol.Distance(_playerCollider).distance, speaker);
         else
             _hintUI.RequestHide(this);
     }

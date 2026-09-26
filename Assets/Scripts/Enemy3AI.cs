@@ -87,9 +87,8 @@ public class Enemy3AI : MonoBehaviour
     /// <summary>プレイヤーの攻撃を受けた瞬間に呼ばれる。追尾弾を発射中なら、問答無用でその弾を消してクールタイムへ移行する。</summary>
     private void HandleDamaged()
     {
-        Debug.Log("aaa");
         if (_state != State.WaitingForHomingBullet) return;
-        Debug.Log("bbb");
+     
         if (_pendingHomingBullet != null)
         {
             Destroy(_pendingHomingBullet.gameObject);

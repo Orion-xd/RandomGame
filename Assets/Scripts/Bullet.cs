@@ -10,7 +10,7 @@ using UnityEngine;
 /// 敵キャラに触れると enemyDamage を与えて消滅する（selfHitGraceTime の間だけは発射元自身と
 /// 重なっているため無視する）。追尾弾をラスボスへ誘導してヒットさせる攻略に対応するための仕様。
 ///
-/// 【反転（急激な方向転換）について、2026-09-17追加】
+/// 【反転（急激な方向転換）について】
 /// 追尾中にダッシュで弾をすり抜けられると、次の瞬間「プレイヤーへ向かうべき方向」がほぼ真逆になる。
 /// これを通常の回転（RotateTowards）で処理すると、ほぼ180度回転する際の回転軸が数値的に不安定になり、
 /// 回転の途中で意図しない方向（地面や壁の方向）を一瞬通過してしまうことがあった。
@@ -71,7 +71,6 @@ public class Bullet : MonoBehaviour
             // 心臓のあたりに置く想定）を狙う。無ければ今まで通りプレイヤー本体を狙う（フォールバック）。
             var homingTargetTf = p.transform.Find("HomingTarget");
             _playerHomingTarget = homingTargetTf != null ? homingTargetTf : p.transform;
-            Debug.Log(_playerHomingTarget);
         }
 
         // 追尾弾は「命中/地面接触/攻撃で消える」以外の理由では消えない仕様なので、

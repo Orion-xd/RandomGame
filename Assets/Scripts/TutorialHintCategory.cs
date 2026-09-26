@@ -12,6 +12,6 @@ public enum TutorialHintCategory
     AttackEnemy,
     // 新しい値は必ず末尾に追加すること。既存のシーン/プレハブは category を enumValueIndex
     // （＝宣言順のインデックス）でシリアライズしているため、途中に挿入すると既存の割り当てが
-    // ずれて壊れる（2026-09-22、追加時に一度この間違いをして直した）。
+    // ずれて壊れる（追加時に一度この間違いをして直した）。
     JumpOverPit,
 }

@@ -45,12 +45,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DialoguePlayer
   blackColor: {r: 0.05, g: 0.05, b: 0.06, a: 1}
-  boxColor: {r: 0, g: 0, b: 0, a: 0.78}
   textColor: {r: 1, g: 1, b: 1, a: 1}
-  speakerColor: {r: 1, g: 0.92, b: 0.55, a: 1}
   centerFontSize: 40
-  bodyFontSize: 30
-  speakerFontSize: 26
   hintFontSize: 18
   sortingOrder: 200
+  textBoxPrefab: {fileID: 8823166850140176805, guid: 5a13c08155e98e649861de61ed42dfa9, type: 3}
   inputLockDuration: 0.25
