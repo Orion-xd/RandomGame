@@ -50,7 +50,11 @@ public class EnemyShooter : MonoBehaviour
         var player = GameObject.FindGameObjectWithTag("Player");
         if (player != null)
         {
-            Vector2 toPlayer = (Vector2)player.transform.position - (Vector2)origin;
+            // 狙う座標はプレイヤー本体のTransformではなく、専用の目印（HomingTarget、心臓のあたりに置く想定）。
+            // 無ければ今まで通りプレイヤー本体を狙う（フォールバック）。
+            var homingTargetTf = player.transform.Find("HomingTarget");
+            Vector3 targetPos = homingTargetTf != null ? homingTargetTf.position : player.transform.position;
+            Vector2 toPlayer = (Vector2)targetPos - (Vector2)origin;
             if (homingOnFire)
             {
                 if (toPlayer.sqrMagnitude > 0.0001f) direction = toPlayer.normalized;
