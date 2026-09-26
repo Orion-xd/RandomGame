@@ -189,7 +189,11 @@ public class MainActionController : MonoBehaviour
         if (animEvents != null) animEvents.OnAnimationEvent += HandleAnimationEvent;
 
         var health = GetComponent<PlayerHealth>();
-        if (health != null) health.OnDied += HandlePlayerDied;
+        if (health != null)
+        {
+            health.OnDied += HandlePlayerDied;
+            health.OnDamaged += HandlePlayerDamaged;
+        }
 
         // ステージ設定でコンボを無効化する（ステージ1など）。
         _combosEnabled = !(GameFlow.Stages != null
@@ -557,6 +561,14 @@ public class MainActionController : MonoBehaviour
     private void HandlePlayerDied()
     {
         if (animator != null) animator.SetTrigger("Dead");
+    }
+
+    /// <summary>被弾リアクション（PlayerHealth.OnDamaged、致死ダメージでないときのみ発火）。
+    /// busy状態やコンボの進行は一切変更しない、純粋に見た目だけの割り込み演出
+    /// （AnyState→Hit→Idle。他のAnyState遷移＝Dash/Jump/Attack/Deadと同じ扱い）。</summary>
+    private void HandlePlayerDamaged()
+    {
+        if (animator != null) animator.SetTrigger("Hit");
     }
 
     /// <summary>ステージクリア時、StageManager から呼ばれる。クリアアニメーションを再生する
