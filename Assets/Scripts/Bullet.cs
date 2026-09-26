@@ -50,6 +50,7 @@ public class Bullet : MonoBehaviour
     private float _age;
     private Collider2D _col;
     private Collider2D _playerCollider;
+    private Transform _playerHomingTarget;
     private MainActionController _playerMainAction;
     private bool _ignoringPlayer;
 
@@ -66,6 +67,11 @@ public class Bullet : MonoBehaviour
         {
             _playerCollider = p.GetComponent<Collider2D>();
             _playerMainAction = p.GetComponent<MainActionController>();
+            // 追尾のターゲットは当たり判定のTransformそのものではなく、専用の目印（HomingTarget、
+            // 心臓のあたりに置く想定）を狙う。無ければ今まで通りプレイヤー本体を狙う（フォールバック）。
+            var homingTargetTf = p.transform.Find("HomingTarget");
+            _playerHomingTarget = homingTargetTf != null ? homingTargetTf : p.transform;
+            Debug.Log(_playerHomingTarget);
         }
 
         // 追尾弾は「命中/地面接触/攻撃で消える」以外の理由では消えない仕様なので、
@@ -89,9 +95,9 @@ public class Bullet : MonoBehaviour
     {
         _age += Time.deltaTime;
 
-        if (homingTurnSpeed > 0f && _playerCollider != null)
+        if (homingTurnSpeed > 0f && _playerHomingTarget != null)
         {
-            Vector2 toPlayer = (Vector2)_playerCollider.transform.position - (Vector2)transform.position;
+            Vector2 toPlayer = (Vector2)_playerHomingTarget.position - (Vector2)transform.position;
             if (toPlayer.sqrMagnitude > 0.0001f)
             {
                 Vector2 desired = toPlayer.normalized;

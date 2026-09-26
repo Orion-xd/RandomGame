@@ -112,6 +112,7 @@ public class Enemy : MonoBehaviour
 
         bool damaged = health.TakeDamage(contactDamage);
         if (!damaged) return; // 無敵時間中などで実際にダメージが入らなかった場合はノックバックもしない
+        if (health.Health <= 0) return; // 致死ダメージ（やられる瞬間）にはノックバック不要（死亡演出のみ）
 
         var controller = other.GetComponent<PlayerController>();
         if (controller == null) return;
