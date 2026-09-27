@@ -3,6 +3,9 @@ using UnityEngine;
 /// <summary>
 /// 敵をスポーン地点を中心に左右へゆっくり往復させる。
 /// Rigidbody を使わず Transform を直接動かす簡易版。向き（スプライトの flipX）も進行方向に合わせる。
+///
+/// 敵キャラのイラスト素材はプレイヤーと違い左向きに描かれているため、flipXの向きはプレイヤー側の
+/// 「flipX=trueで左向き」とは逆になる（素材自体は直さず、ここで向きだけ補正している）。
 /// </summary>
 public class EnemyPatrol : MonoBehaviour
 {
@@ -32,6 +35,6 @@ public class EnemyPatrol : MonoBehaviour
         else if (p.x < _originX - range) { p.x = _originX - range; _dir = 1; }
 
         transform.position = p;
-        if (_sr != null) _sr.flipX = _dir < 0;
+        if (_sr != null) _sr.flipX = _dir > 0; // 素材が左向きのため、右へ進むときに反転させる
     }
 }
