@@ -30,12 +30,7 @@ MonoBehaviour:
     allowedActions: 000000000100000002000000
     disableCombos: 0
   - displayName: Stage 4
-    sceneName: Stage4
+    sceneName: Stage4_new
     intro: {fileID: 11400000, guid: c2d90fc76176c564eaaad6de0fa0a246, type: 2}
-    allowedActions: 000000000100000002000000
-    disableCombos: 0
-  - displayName: Stage 5
-    sceneName: Stage5
-    intro: {fileID: 11400000, guid: 7ae84ca9687afa647abbdabda0e98188, type: 2}
     allowedActions: 000000000100000002000000
     disableCombos: 0
