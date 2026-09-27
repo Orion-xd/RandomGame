@@ -60,6 +60,7 @@ public class DialoguePlayer : MonoBehaviour
     private float _typewriterElapsed;  // アニメーション開始からの経過秒（Time.unscaledDeltaTime 積算）
     private bool _typewriterActive;    // まだ全文表示し終えていないか
     private float _typewriterCharsPerSecond; // そのページの速さ（DialogueSequence.Page から渡される）
+    private int _typewriterRevealCount;
 
     /// <summary>現在のページの本文が最後まで表示し終えているか（タイプライター無効時は常に true）。</summary>
     private bool IsFullyRevealed => !_typewriterActive;
@@ -92,6 +93,7 @@ public class DialoguePlayer : MonoBehaviour
 
     private void OnDisable()
     {
+        GameAudio.StopDialogueTextSfx();
         // 会話中にシーンが変わった場合などに再生フラグを残さない
         if (IsPlaying) IsPlaying = false;
     }
@@ -165,17 +167,28 @@ public class DialoguePlayer : MonoBehaviour
         if (_typewriterCharsPerSecond <= 0f) { CompleteTypewriter(); return; } // 0以下は即全文表示（保険）
 
         _typewriterElapsed += Time.unscaledDeltaTime;
-        int revealCount = Mathf.FloorToInt(_typewriterElapsed * _typewriterCharsPerSecond);
+        int revealCount = Mathf.Min(
+            Mathf.FloorToInt(_typewriterElapsed * _typewriterCharsPerSecond),
+            _typewriterFullText.Length);
+        if (revealCount <= _typewriterRevealCount) return;
 
-        if (revealCount >= _typewriterFullText.Length) { CompleteTypewriter(); return; }
+        GameAudio.StartDialogueTextSfx();
         _typewriterTarget.text = _typewriterFullText.Substring(0, revealCount);
+        _typewriterRevealCount = revealCount;
+        if (revealCount >= _typewriterFullText.Length)
+        {
+            _typewriterActive = false;
+            GameAudio.StopDialogueTextSfx();
+        }
     }
 
     /// <summary>本文を強制的に全文表示の状態にする。</summary>
     private void CompleteTypewriter()
     {
         if (_typewriterTarget != null) _typewriterTarget.text = _typewriterFullText;
+        _typewriterRevealCount = _typewriterFullText.Length;
         _typewriterActive = false;
+        GameAudio.StopDialogueTextSfx();
     }
 
     /// <summary>対象の Text にページ本文をセットする。`useTypewriter`/`charsPerSecond`（そのページの設定）に応じて
@@ -187,6 +200,8 @@ public class DialoguePlayer : MonoBehaviour
         _typewriterFullText = fullText;
         _typewriterElapsed = 0f;
         _typewriterCharsPerSecond = charsPerSecond;
+        _typewriterRevealCount = 0;
+        GameAudio.StopDialogueTextSfx();
 
         if (useTypewriter && fullText.Length > 0)
         {
