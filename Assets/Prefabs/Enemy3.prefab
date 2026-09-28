@@ -126,7 +126,7 @@ PrefabInstance:
     - target: {fileID: 5057110746581594296, guid: fdb520ebbb06f3d4cb79a350f241b90b, type: 3}
       propertyPath: m_Sprite
       value: 
-      objectReference: {fileID: -8099026489220999769, guid: dff628aaaef770142ae6c1e027b6ba7b, type: 3}
+      objectReference: {fileID: -1876212750457545384, guid: f8b9275232f40bf45ba0da225487439a, type: 3}
     - target: {fileID: 5057110746581594296, guid: fdb520ebbb06f3d4cb79a350f241b90b, type: 3}
       propertyPath: m_Color.b
       value: 1
@@ -162,6 +162,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 6996950647562141356, guid: fdb520ebbb06f3d4cb79a350f241b90b, type: 3}
       insertIndex: -1
       addedObject: {fileID: 6435790255083240914}
+    - targetCorrespondingSourceObject: {fileID: 6996950647562141356, guid: fdb520ebbb06f3d4cb79a350f241b90b, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 657418972849705842}
   m_SourcePrefab: {fileID: 100100000, guid: fdb520ebbb06f3d4cb79a350f241b90b, type: 3}
 --- !u!212 &1535798990386028144 stripped
 SpriteRenderer:
@@ -200,15 +203,12 @@ MonoBehaviour:
   - type: 0
     weight: 1
     edgeOnly: 0
-    animationTrigger: 
   - type: 1
     weight: 1
     edgeOnly: 0
-    animationTrigger: 
   - type: 2
     weight: 1
     edgeOnly: 1
-    animationTrigger: 
   bulletPrefab: {fileID: 4896987851125200844, guid: 70df4e217ede2d6429f7e260853f4ebb, type: 3}
   bulletSpeed: 5
   radialBulletCount: 8
@@ -218,6 +218,28 @@ MonoBehaviour:
   dashAttackSpeed: 10
   dashAttackDuration: 0.6
   dashAttackCooldown: 3
+--- !u!95 &657418972849705842
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3631062313902264420}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: 3df6cb60ba1276a4da58f79d3d9e7cd9, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
 --- !u!4 &8036194978225424255 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 4393396281787361719, guid: fdb520ebbb06f3d4cb79a350f241b90b, type: 3}

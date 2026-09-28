@@ -19,10 +19,12 @@ using UnityEngine;
 /// （<see cref="IsNearScreenEdge"/>、<see cref="ScreenBounds2D"/>参照）。画面端脱出用の行動として
 /// 突進攻撃（プレイヤーへ向かって突進する。結果的に画面端から離れる方向になる）を用意している。
 ///
-/// ── アニメーション（任意） ──
-/// 他の雑魚敵と違い、このボスはアニメーションさせる想定。<see cref="animator"/> を設定し、
-/// 各行動（<see cref="WeightedAction.animationTrigger"/>）にトリガー名を指定すると、その行動を
-/// 実行する瞬間に SetTrigger する。未設定（空文字）ならアニメーションなしでこれまで通り即座に発動する。
+/// ── アニメーション ──
+/// 他の雑魚敵と違い、このボスはアニメーションさせる。Animator の状態は Idle（既定。CoolingDown /
+/// WaitingForHomingBullet / FirstActionWait など「待機扱い」の全状態がここに対応）・Retreat（C#側の
+/// State.Retreating に対応。素材自体はIdleと同じものだが、プログラム側の状態と1対1で対応させるため
+/// あえて別状態にしてある）・Attack（放射弾・追尾弾どちらも共通）・DashAttack の4つ。トリガー名は
+/// "Retreat"/"Attack"/"DashAttack"で固定（Player側の実装と同じく、C#から直接 SetTrigger する方式）。
 ///
 /// ── 向き ──
 /// 常にプレイヤーのいる方向を向く（<see cref="FacingController"/>）。ただし突進攻撃中だけは
@@ -43,8 +45,6 @@ public class Enemy3AI : MonoBehaviour
         public float weight = 1f;
         [Tooltip("true にすると、画面端にいるとき（IsNearScreenEdge）だけ抽選対象に入る（例: 突進攻撃）")]
         public bool edgeOnly = false;
-        [Tooltip("この行動を実行する瞬間に発火させる Animator のトリガー名（任意。空ならアニメーションなし）")]
-        public string animationTrigger;
     }
 
     private enum State { Retreating, CoolingDown, WaitingForHomingBullet, FirstActionWait, DashingAttack }
@@ -150,6 +150,8 @@ public class Enemy3AI : MonoBehaviour
             var homingTargetTf = p.transform.Find("HomingTarget");
             _playerHomingTarget = homingTargetTf != null ? homingTargetTf : _player;
         }
+
+        if (animator != null) animator.SetTrigger("Retreat"); // 開始直後の初期状態(State.Retreating)に対応
     }
 
     /// <summary>プレイヤーの攻撃を受けた瞬間に呼ばれる。追尾弾を発射中なら、問答無用でその弾を消してクールタイムへ移行する。</summary>
@@ -181,7 +183,11 @@ public class Enemy3AI : MonoBehaviour
 
             case State.CoolingDown:
                 _cooldownTimer -= Time.deltaTime;
-                if (_cooldownTimer <= 0f) _state = State.Retreating;
+                if (_cooldownTimer <= 0f)
+                {
+                    _state = State.Retreating;
+                    if (animator != null) animator.SetTrigger("Retreat");
+                }
                 break;
 
             case State.WaitingForHomingBullet:
@@ -291,8 +297,19 @@ public class Enemy3AI : MonoBehaviour
 
     private void ExecuteAction(WeightedAction action)
     {
-        if (animator != null && !string.IsNullOrEmpty(action.animationTrigger))
-            animator.SetTrigger(action.animationTrigger);
+        if (animator != null)
+        {
+            switch (action.type)
+            {
+                case AttackAction.Radial:
+                case AttackAction.Homing:
+                    animator.SetTrigger("Attack"); // 放射弾・追尾弾は共通のAttack状態
+                    break;
+                case AttackAction.DashAttack:
+                    animator.SetTrigger("DashAttack");
+                    break;
+            }
+        }
 
         switch (action.type)
         {
