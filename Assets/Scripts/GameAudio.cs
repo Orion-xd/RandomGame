@@ -22,6 +22,7 @@ public sealed class GameAudio : MonoBehaviour
         public const string DialogueText = "DialogueText";
         public const string Button = "Button";
         public const string Enemy2Attack = "SlimeAttacked";
+        public const string UnlockItem = "UnlockItem";
     }
 
     private const string BgmFolder = "Audio/BGM/";

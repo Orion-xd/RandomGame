@@ -30,6 +30,7 @@ The following sound effects are connected:
 - `DialogueText.mp3`: loops while typewriter dialogue text is being revealed, including the game-start prologue
 - `Button.mp3`: all Unity UI button clicks and keyboard submits
 - `SlimeAttacked.mp3`: Enemy2 projectile attack
+- `UnlockItem.mp3`: Stage1 action unlock pickup
 
 Stage BGM stops immediately when the stage is cleared so the clear sound plays on its own.
 
