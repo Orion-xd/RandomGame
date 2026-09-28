@@ -6,7 +6,10 @@ using UnityEngine;
 /// 向きを補正し続ける「追尾弾」になる（Enemy3の③用。Enemy2はこれを使わず発射時一度きりのまま）。
 /// 当たり判定はトリガー（プレイヤーを物理的に押し返す必要が無いため。接触時の処理は全てスクリプト側で行う）。
 /// Enemy と同じ接触仕様：プレイヤー本体に触れるとダメージ、ダッシュ中はすり抜け、
-/// プレイヤーの攻撃（AttackHitbox）に触れると一撃で消滅。地面に当たっても消滅する。
+/// プレイヤーの攻撃（AttackHitbox）に触れると一撃で消滅。地面に当たっても消滅するが、
+/// 高台（一方通行、<see cref="OneWayPlatform"/>が付いているもの）には反応せず、
+/// 進行方向に関わらず必ずすり抜ける（Enemy2/Enemy3共通の仕様。高台を配置すると
+/// 弾が意図せず高台に吸われて消えてしまう問題への対策）。
 /// 敵キャラに触れると enemyDamage を与えて消滅する（selfHitGraceTime の間だけは発射元自身と
 /// 重なっているため無視する）。追尾弾をラスボスへ誘導してヒットさせる攻略に対応するための仕様。
 ///
@@ -26,7 +29,8 @@ public class Bullet : MonoBehaviour
     [Tooltip("この時間が経過すると何にも当たらなくても自動的に消える（画面外に飛び続けるのを防ぐ）。" +
              "追尾弾（homingTurnSpeed > 0）には適用しない＝命中/地面接触/攻撃で消えるまで永久に飛び続ける")]
     [SerializeField] private float maxLifetime = 6f;
-    [Tooltip("これに触れると弾が消滅する（地面・高台など）")]
+    [Tooltip("これに触れると弾が消滅する（地面など）。ただし同じレイヤーでも OneWayPlatform が" +
+             "付いているもの（高台）には反応しない（必ずすり抜ける）")]
     [SerializeField] private LayerMask groundLayer;
     [Tooltip("秒速あたりの旋回角度（度）。0なら発射時の方向のまま直進（既定・Enemy2用）。" +
              "0より大きいと飛行中もプレイヤーへ継続して向きを補正し続ける追尾弾になる（Enemy3用、ホーミングの強度に相当）")]
@@ -176,7 +180,14 @@ public class Bullet : MonoBehaviour
         Destroy(gameObject);
     }
 
-    private bool IsGround(Collider2D other) => (groundLayer.value & (1 << other.gameObject.layer)) != 0;
+    /// <summary>地面（Ground）かどうか。高台（OneWayPlatform が付いているもの）は同じレイヤーでも
+    /// 除外し、必ずすり抜けさせる（Enemy2/Enemy3の弾に共通の仕様）。</summary>
+    private bool IsGround(Collider2D other)
+    {
+        if ((groundLayer.value & (1 << other.gameObject.layer)) == 0) return false;
+        if (other.GetComponent<OneWayPlatform>() != null) return false;
+        return true;
+    }
 
     /// <summary>プレイヤーの攻撃判定（AttackHitbox）から呼ばれる。一撃で消滅する。</summary>
     public void DestroyByAttack()

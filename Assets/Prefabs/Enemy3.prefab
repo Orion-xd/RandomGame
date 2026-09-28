@@ -126,7 +126,7 @@ PrefabInstance:
     - target: {fileID: 5057110746581594296, guid: fdb520ebbb06f3d4cb79a350f241b90b, type: 3}
       propertyPath: m_Sprite
       value: 
-      objectReference: {fileID: -1876212750457545384, guid: f8b9275232f40bf45ba0da225487439a, type: 3}
+      objectReference: {fileID: 7549541251182801668, guid: 28219783bc18a134a918640df92b76ac, type: 3}
     - target: {fileID: 5057110746581594296, guid: fdb520ebbb06f3d4cb79a350f241b90b, type: 3}
       propertyPath: m_Color.b
       value: 1
@@ -190,7 +190,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Enemy3AI
   moveSpeed: 4
   retreatDistance: 7
-  edgeMargin: 1
+  edgeMargin: 3
   firstActionDelay: 3
   animator: {fileID: 0}
   facing:
@@ -207,7 +207,7 @@ MonoBehaviour:
     weight: 1
     edgeOnly: 0
   - type: 2
-    weight: 1
+    weight: 3
     edgeOnly: 1
   bulletPrefab: {fileID: 4896987851125200844, guid: 70df4e217ede2d6429f7e260853f4ebb, type: 3}
   bulletSpeed: 5
@@ -215,6 +215,9 @@ MonoBehaviour:
   radialCooldown: 3
   homingTurnSpeed: 90
   homingCooldown: 3
+  dashAttackWindupTime: 3
+  dashAttackWindupShakeAmplitude: 0.1
+  dashAttackWindupShakePeriod: 0.2
   dashAttackSpeed: 10
   dashAttackDuration: 0.6
   dashAttackCooldown: 3
