@@ -458,6 +458,7 @@ public class MainActionController : MonoBehaviour
         _busy = BusyAction.Jump;
         _busyStartTime = Time.time;
         _jumpLeftGround = false;
+        GameAudio.PlaySfx(GameAudio.Sfx.Jump);
         if (animator != null)
         {
             animator.SetBool("Landed", false);
@@ -485,6 +486,7 @@ public class MainActionController : MonoBehaviour
 
         _busy = BusyAction.Dash;
         _busyStartTime = Time.time;
+        GameAudio.PlaySfx(GameAudio.Sfx.Dash);
         if (animator != null) animator.SetTrigger("Dash");
     }
 
@@ -518,6 +520,7 @@ public class MainActionController : MonoBehaviour
     {
         _busy = BusyAction.Attack;
         _busyStartTime = Time.time;
+        GameAudio.PlaySfx(GameAudio.Sfx.Attack);
         if (animator != null) animator.SetTrigger("Attack");
     }
 
@@ -567,6 +570,7 @@ public class MainActionController : MonoBehaviour
 
     private void HandlePlayerDied()
     {
+        GameAudio.PlaySfx(GameAudio.Sfx.PlayerDead);
         if (animator != null) animator.SetTrigger("Dead");
     }
 
@@ -575,6 +579,7 @@ public class MainActionController : MonoBehaviour
     /// （AnyState→Hit→Idle。他のAnyState遷移＝Dash/Jump/Attack/Deadと同じ扱い）。</summary>
     private void HandlePlayerDamaged()
     {
+        GameAudio.PlaySfx(GameAudio.Sfx.PlayerHit);
         if (animator != null) animator.SetTrigger("Hit");
     }
 

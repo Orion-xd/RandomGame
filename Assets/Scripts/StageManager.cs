@@ -138,6 +138,8 @@ public class StageManager : MonoBehaviour
     {
         if (_ended) return;
         _ended = true;
+        GameAudio.StopBgm();
+        GameAudio.PlaySfx(GameAudio.Sfx.Clear);
         GameFlow.MarkStageCleared(GameFlow.CurrentStageIndex); // 次のステージを解放
         if (_playerMainAction != null) _playerMainAction.PlayClearAnimation();
         FreezeGameplay();
@@ -149,6 +151,7 @@ public class StageManager : MonoBehaviour
     {
         if (_ended) return;
         _ended = true;
+        GameAudio.PlaySfx(GameAudio.Sfx.Fall);
         FreezeGameplay();
         if (failPanel != null) failPanel.SetActive(true);
         Time.timeScale = 0f;

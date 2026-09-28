@@ -94,5 +94,6 @@ public class EnemyShooter : MonoBehaviour
 
         var bullet = Instantiate(bulletPrefab, origin, Quaternion.identity);
         bullet.Configure(direction, bulletSpeed, 1);
+        GameAudio.PlaySfx(GameAudio.Sfx.Enemy2Attack);
     }
 }
