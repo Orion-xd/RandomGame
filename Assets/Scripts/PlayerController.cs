@@ -75,8 +75,8 @@ public class PlayerController : MonoBehaviour
     {
         // 会話中・画面切り替え直後（InputLock）は移動入力を止める。メインアクション
         // （MainActionController）も同じロックで発動を止めているため、移動だけ先に解禁すると
-        // 「動けるのになぜアクションが出せないのか」という不自然な状態になる（2026-09-12。一度は
-        // 移動だけ対象外にしたが、この不自然さの方が問題だったため両方ブロックへ差し戻した）。
+        // 「動けるのになぜアクションが出せないのか」という不自然な状態になる。一度は
+        // 移動だけ対象外にしたが、この不自然さの方が問題だったため両方ブロックへ差し戻した。
         // ステージ画面にはメニューのカーソル移動に相当する操作が無いため、早期解除の仕組みも無い。
         if (DialoguePlayer.IsPlaying || !InputLock.InputAllowed) { _moveInput = 0f; return; }
 
@@ -112,7 +112,7 @@ public class PlayerController : MonoBehaviour
         if (IsGrounded) LastGroundedTime = Time.time;
 
         // 崖・段差のわずかな引っかかり救済。ダッシュ中（OverridesMovement）でも対象にする
-        // （ユーザー指定、2026-09-24。ダッシュの終了を待たず、その場で引き上げてよい）ため、
+        // （ユーザー指定。ダッシュの終了を待たず、その場で引き上げてよい）ため、
         // 下の OverridesMovement による early return より前に呼ぶ。
         ApplyLedgeAssist();
 
@@ -150,7 +150,7 @@ public class PlayerController : MonoBehaviour
         _rb.linearVelocity = v;
     }
 
-    /// <summary>崖・段差にわずかに引っかかって乗り越えられない不便さを救済する（2026-09-24）。
+    /// <summary>崖・段差にわずかに引っかかって乗り越えられない不便さを救済する。
     /// 当たり判定を「下から ledgeAssistMinAboveFraction 未満の帯」と「それ以上の帯」に分けて、進行方向
     /// すぐ前方をそれぞれ別に判定する。下の帯だけが groundLayer にブロックされていて（＝ほぼ乗り越えて
     /// いる）、上の帯は完全にクリアしている（＝背より高い壁ではない）ときだけ、段差の正確な高さまで

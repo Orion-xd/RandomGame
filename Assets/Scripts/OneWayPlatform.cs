@@ -10,7 +10,7 @@ using UnityEngine;
 /// PlatformEffector2D は重なり量を条件にできないため、毎物理フレーム
 /// Physics2D.IgnoreCollision でプレイヤー本体との当たりを切り替える方式にしている。
 ///
-/// Tilemap 版の高台（天面タイルの TilemapCollider2D + CompositeCollider2D、2026-09-11）にも
+/// Tilemap 版の高台（天面タイルの TilemapCollider2D + CompositeCollider2D）にも
 /// そのまま使う。単体の BoxCollider2D でも Tilemap の CompositeCollider2D でも動くように、
 /// <see cref="Awake"/> は CompositeCollider2D を優先して探す（無ければ他の Collider2D にフォールバック）。
 /// </summary>

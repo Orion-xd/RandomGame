@@ -26,6 +26,7 @@ public class ActionUnlockPickup : MonoBehaviour
         if (queue == null) return;
 
         queue.UnlockAction(action);
+        GameAudio.PlaySfx(GameAudio.Sfx.UnlockItem);
         Destroy(gameObject);
     }
 }

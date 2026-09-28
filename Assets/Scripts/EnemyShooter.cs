@@ -4,12 +4,21 @@ using UnityEngine;
 /// 移動しない敵（Enemy2 = 据え置き砲台）の発射ロジック。一定間隔でプレイヤーへ向けて弾を発射する。
 /// 接触ダメージ・被ダメージなどプレイヤーとの当たり判定仕様は Enemy コンポーネント側が担当する
 /// （このスクリプトは発射のみを担当し、Enemy と併用する）。
+///
+/// 常にプレイヤーのいる方向を向く（<see cref="FacingController"/>）。firePoint はその子として
+/// facing に登録しておくことで、向きが変わってもローカルX座標が正しい側へ反転されるため、
+/// 「左を向いているときは正しい位置から出るが、右を向くとおかしな位置から発射される」といった
+/// 事故を防いでいる。
 /// </summary>
 public class EnemyShooter : MonoBehaviour
 {
+    [Header("向き")]
+    [SerializeField] private FacingController facing;
+
     [Header("発射")]
     [SerializeField] private Bullet bulletPrefab;
-    [Tooltip("弾の発射位置。未設定ならこの GameObject の位置から発射する")]
+    [Tooltip("弾の発射位置（銃口）。未設定ならこの GameObject の位置から発射する。" +
+             "向きが変わったときにローカルX座標が自動で反転されるよう、facing.mirroredChildren にも登録すること")]
     [SerializeField] private Transform firePoint;
     [Tooltip("発射の間隔（秒）")]
     [SerializeField] private float fireInterval = 2f;
@@ -20,15 +29,24 @@ public class EnemyShooter : MonoBehaviour
 
     private float _timer;
     private SpriteRenderer _sr;
+    private Transform _player;
 
     private void Awake()
     {
         _sr = GetComponent<SpriteRenderer>();
     }
 
+    private void Start()
+    {
+        var p = GameObject.FindGameObjectWithTag("Player");
+        if (p != null) _player = p.transform;
+    }
+
     private void Update()
     {
         if (DialoguePlayer.IsPlaying) return; // ストーリー再生中は敵を行動させない
+
+        UpdateFacing();
 
         _timer += Time.deltaTime;
         if (_timer < fireInterval) return;
@@ -40,6 +58,15 @@ public class EnemyShooter : MonoBehaviour
         Fire();
     }
 
+    /// <summary>常にプレイヤーのいる方向を向く。</summary>
+    private void UpdateFacing()
+    {
+        if (_player == null) return;
+        float dx = _player.position.x - transform.position.x;
+        if (Mathf.Abs(dx) < 0.01f) return; // ほぼ真上/真下などで左右不定のときは向きを変えない
+        facing.SetDesiredSign(dx < 0f ? -1 : 1);
+    }
+
     private void Fire()
     {
         if (bulletPrefab == null) return;
@@ -47,13 +74,12 @@ public class EnemyShooter : MonoBehaviour
         Vector3 origin = firePoint != null ? firePoint.position : transform.position;
         Vector2 direction = transform.right;
 
-        var player = GameObject.FindGameObjectWithTag("Player");
-        if (player != null)
+        if (_player != null)
         {
             // 狙う座標はプレイヤー本体のTransformではなく、専用の目印（HomingTarget、心臓のあたりに置く想定）。
             // 無ければ今まで通りプレイヤー本体を狙う（フォールバック）。
-            var homingTargetTf = player.transform.Find("HomingTarget");
-            Vector3 targetPos = homingTargetTf != null ? homingTargetTf.position : player.transform.position;
+            var homingTargetTf = _player.Find("HomingTarget");
+            Vector3 targetPos = homingTargetTf != null ? homingTargetTf.position : _player.position;
             Vector2 toPlayer = (Vector2)targetPos - (Vector2)origin;
             if (homingOnFire)
             {
@@ -68,5 +94,6 @@ public class EnemyShooter : MonoBehaviour
 
         var bullet = Instantiate(bulletPrefab, origin, Quaternion.identity);
         bullet.Configure(direction, bulletSpeed, 1);
+        GameAudio.PlaySfx(GameAudio.Sfx.Enemy2Attack);
     }
 }

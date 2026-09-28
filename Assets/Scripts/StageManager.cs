@@ -11,7 +11,7 @@ using UnityEngine.UI;
 /// 結果画面表示中は Time.timeScale = 0 で停止し、プレイヤーの操作スクリプトを無効化する。
 /// 「もう一度」はシーンの再読み込みなので、アクションの並びなども含めて完全に初期化される。
 ///
-/// ── 体力0での失敗・ステージクリアは、それぞれ専用アニメーションを挟む（2026-09-21クリア、2026-09-23クリア対応） ──
+/// ── 体力0での失敗・ステージクリアは、それぞれ専用アニメーションを挟む ──
 /// 落下死だけは今まで通り即座にパネルを表示する。体力0での失敗・クリアの場合は、
 /// 「即座にゲーム内を全停止（Time.timeScale=0）→ プレイヤーの死亡/クリアアニメーション（UnscaledTime で
 /// 再生され続ける、ループせず1周だけ）→ アニメーション側の Animation Event（AnimationEventRelay 経由、
@@ -138,6 +138,8 @@ public class StageManager : MonoBehaviour
     {
         if (_ended) return;
         _ended = true;
+        GameAudio.StopBgm();
+        GameAudio.PlaySfx(GameAudio.Sfx.Clear);
         GameFlow.MarkStageCleared(GameFlow.CurrentStageIndex); // 次のステージを解放
         if (_playerMainAction != null) _playerMainAction.PlayClearAnimation();
         FreezeGameplay();
@@ -149,6 +151,7 @@ public class StageManager : MonoBehaviour
     {
         if (_ended) return;
         _ended = true;
+        GameAudio.PlaySfx(GameAudio.Sfx.Fall);
         FreezeGameplay();
         if (failPanel != null) failPanel.SetActive(true);
         Time.timeScale = 0f;
