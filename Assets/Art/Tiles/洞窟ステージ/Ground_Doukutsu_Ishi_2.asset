@@ -10,9 +10,9 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 13312, guid: 0000000000000000e000000000000000, type: 0}
-  m_Name: GroundTile_Doukutsu
+  m_Name: Ground_Doukutsu_Ishi_2
   m_EditorClassIdentifier: UnityEngine.dll::UnityEngine.Tilemaps.Tile
-  m_Sprite: {fileID: -8912578876075154440, guid: fd0326ab52eb79747a31cf45971ccda4, type: 3}
+  m_Sprite: {fileID: -2461457580341933243, guid: 2b15c341e283a854a8ff7d9d0549f49d, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_Transform:
     e00: 1
