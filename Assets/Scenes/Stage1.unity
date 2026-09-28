@@ -7658,13 +7658,21 @@ PrefabInstance:
       propertyPath: m_Name
       value: Goal
       objectReference: {fileID: 0}
+    - target: {fileID: 1015385604400220205, guid: f0556144e7bb8f84da71da8c61ffffdd, type: 3}
+      propertyPath: m_SpriteTilingProperty.oldSize.x
+      value: 0.9
+      objectReference: {fileID: 0}
+    - target: {fileID: 1015385604400220205, guid: f0556144e7bb8f84da71da8c61ffffdd, type: 3}
+      propertyPath: m_SpriteTilingProperty.oldSize.y
+      value: 1.73
+      objectReference: {fileID: 0}
     - target: {fileID: 4373824222591742309, guid: f0556144e7bb8f84da71da8c61ffffdd, type: 3}
       propertyPath: m_LocalPosition.x
       value: 68
       objectReference: {fileID: 0}
     - target: {fileID: 4373824222591742309, guid: f0556144e7bb8f84da71da8c61ffffdd, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 3.5
+      value: 3.7
       objectReference: {fileID: 0}
     - target: {fileID: 4373824222591742309, guid: f0556144e7bb8f84da71da8c61ffffdd, type: 3}
       propertyPath: m_LocalPosition.z
