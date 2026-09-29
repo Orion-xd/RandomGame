@@ -52,6 +52,15 @@ public class DialogueSequence : ScriptableObject
                  "BottomTextbox で絵が未指定のうちは仮イラスト（主人公＝左 / ダンジョン＝右）を表示する")]
         public Sprite image;
 
+        [Tooltip("このページだけで全面表示する背景画像（任意）")]
+        public Texture2D fullScreenBackground;
+
+        [Tooltip("全面背景の上に重ねて表示する透過画像（任意）")]
+        public Texture2D fullScreenOverlay;
+
+        [Tooltip("全面オーバーレイのさらに上に重ねて表示する透過画像（任意）")]
+        public Texture2D fullScreenForeground;
+
         [Tooltip("このページの間だけ、シーン上のプレイヤーキャラクターの見た目をこのテクスチャに" +
                  "一時的に差し替える（任意）。未指定ならプレイヤーの通常の見た目（Animatorによる通常の" +
                  "アニメーション）のまま。差し替えたページのまま会話が終わっても、自動的に元の見た目へ戻る")]
@@ -66,6 +75,12 @@ public class DialogueSequence : ScriptableObject
 
         [Tooltip("1文字ずつ表示するときの速さ（1秒あたりに表示する文字数）。useTypewriterEffect が false のときは無視される")]
         public float typewriterCharsPerSecond = 30f;
+
+        [Tooltip("このページを表示したときに再生する音声（任意）")]
+        public AudioClip pageAudio;
+
+        [Tooltip("trueの場合、pageAudioの再生が終わるまで次のページへ進めない")]
+        public bool waitForPageAudio;
     }
 
     [Tooltip("会話のページ。スペース / エンターで1ページずつ進む")]

@@ -65,6 +65,15 @@ public class DialoguePlayer : MonoBehaviour
     /// <summary>現在のページの本文が最後まで表示し終えているか（タイプライター無効時は常に true）。</summary>
     private bool IsFullyRevealed => !_typewriterActive;
 
+    private bool IsAdvanceBlockedByPageAudio
+    {
+        get
+        {
+            var page = _seq != null ? _seq.PageAt(_page) : null;
+            return page != null && page.waitForPageAudio && GameAudio.IsDialoguePageAudioPlaying;
+        }
+    }
+
     private DialogueSequence _seq;
     private int _page;
     private Action _onComplete;
@@ -81,6 +90,9 @@ public class DialoguePlayer : MonoBehaviour
     // 生成した UI
     private GameObject _root;
     private Image _bg;
+    private RawImage _fullScreenBackground;
+    private RawImage _fullScreenOverlay;
+    private RawImage _fullScreenForeground;
     private Image _illust;
     private GameObject _placeholder;
     private Text _centerText;
@@ -103,6 +115,7 @@ public class DialoguePlayer : MonoBehaviour
     private void OnDisable()
     {
         GameAudio.StopDialogueTextSfx();
+        GameAudio.StopDialoguePageAudio();
         // 会話中にシーンが変わった場合などに再生フラグを残さない
         if (IsPlaying) IsPlaying = false;
     }
@@ -148,6 +161,7 @@ public class DialoguePlayer : MonoBehaviour
 
         // 文字送りアニメーションは入力ロック中も進める（見た目だけの演出なので止める必要が無い）。
         UpdateTypewriter();
+        _hintText.enabled = !IsAdvanceBlockedByPageAudio;
 
         if (!InputLock.InputAllowed) return; // 出た直後は連打の勢いで飛ばさない
 
@@ -170,6 +184,7 @@ public class DialoguePlayer : MonoBehaviour
         else
         {
             // 全文表示済みでの入力：次のページへ。
+            if (IsAdvanceBlockedByPageAudio) return;
             Advance();
         }
     }
@@ -250,10 +265,14 @@ public class DialoguePlayer : MonoBehaviour
 
     private void Finish()
     {
+        GameAudio.StopDialoguePageAudio();
         IsPlaying = false;
-        _root.SetActive(false);
         ApplyPlayerSpriteOverride(null); // 差し替えたまま会話が終わっても、必ず元のAnimator制御へ戻す
         Dispatch();
+
+        // 完了コールバックがシーン遷移を始めた場合は、遷移元が一瞬見えないよう最終ページを
+        // シーンのアンロードまで残す。通常の会話終了時だけここで非表示にする。
+        if (!SceneTransition.Transitioning) _root.SetActive(false);
     }
 
     /// <summary>プレイヤーキャラクターの見た目を一時的に差し替える/元へ戻す。overrideSprite が非nullなら
@@ -289,6 +308,8 @@ public class DialoguePlayer : MonoBehaviour
         var p = _seq.PageAt(_page);
         if (p == null) { Finish(); return; }
 
+        GameAudio.StopDialoguePageAudio();
+
         bool centered = p.layout == DialogueSequence.Layout.CenteredOnBlack;
         bool top = p.layout == DialogueSequence.Layout.TopTextbox;
         bool box = !centered;
@@ -302,6 +323,13 @@ public class DialoguePlayer : MonoBehaviour
         // 背景暗転（上部テキストボックスのときはゲーム画面を見せるので暗転しない）。
         _bg.enabled = !top;
         _bg.color = blackColor;
+
+        _fullScreenBackground.enabled = p.fullScreenBackground != null;
+        _fullScreenBackground.texture = p.fullScreenBackground;
+        _fullScreenOverlay.enabled = p.fullScreenOverlay != null;
+        _fullScreenOverlay.texture = p.fullScreenOverlay;
+        _fullScreenForeground.enabled = p.fullScreenForeground != null;
+        _fullScreenForeground.texture = p.fullScreenForeground;
 
         // 一枚絵 / 仮イラスト（BottomTextbox で絵が未指定のうちは仮を出す）。
         bool showRealImage = img != null && box;
@@ -339,7 +367,8 @@ public class DialoguePlayer : MonoBehaviour
             SetPageText(_textBox.Body, p.text, p.useTypewriterEffect, p.typewriterCharsPerSecond); // 話者名は対象外（上で即時表示済み）、台詞本文だけ文字送りする
         }
 
-        _hintText.enabled = true;
+        GameAudio.PlayDialoguePageAudio(p.pageAudio);
+        _hintText.enabled = !IsAdvanceBlockedByPageAudio;
     }
 
     private void LayoutBox(bool top)
@@ -407,6 +436,15 @@ public class DialoguePlayer : MonoBehaviour
         _bg = NewImage("Background", _root.transform);
         Stretch((RectTransform)_bg.transform);
         _bg.color = blackColor;
+
+        _fullScreenBackground = NewRawImage("FullScreenBackground", _root.transform);
+        Stretch((RectTransform)_fullScreenBackground.transform);
+
+        _fullScreenOverlay = NewRawImage("FullScreenOverlay", _root.transform);
+        Stretch((RectTransform)_fullScreenOverlay.transform);
+
+        _fullScreenForeground = NewRawImage("FullScreenForeground", _root.transform);
+        Stretch((RectTransform)_fullScreenForeground.transform);
 
         _illust = NewImage("Illustration", _root.transform);
         FillRect((RectTransform)_illust.transform, 0.12f, 0.30f, 0.88f, 0.96f);
@@ -486,6 +524,14 @@ public class DialoguePlayer : MonoBehaviour
         var img = go.AddComponent<Image>();
         img.raycastTarget = false;
         return img;
+    }
+
+    private RawImage NewRawImage(string name, Transform parent)
+    {
+        var go = NewRect(name, parent);
+        var image = go.AddComponent<RawImage>();
+        image.raycastTarget = false;
+        return image;
     }
 
     private Text NewText(string name, Transform parent, int size, TextAnchor align)
