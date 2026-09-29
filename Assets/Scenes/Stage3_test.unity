@@ -1918,6 +1918,19 @@ Tilemap:
     e31: 0
     e32: 0
     e33: 1
+--- !u!1001 &974074682
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications: []
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 4dcf0e98d90041cd987d7a7d02b51003, type: 3}
 --- !u!1 &1053400318
 GameObject:
   m_ObjectHideFlags: 0
@@ -10187,3 +10200,4 @@ SceneRoots:
   - {fileID: 184911773}
   - {fileID: 2110615161}
   - {fileID: 1547609517}
+  - {fileID: 974074682}

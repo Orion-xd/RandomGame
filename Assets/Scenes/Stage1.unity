@@ -7962,7 +7962,19 @@ PrefabInstance:
   m_Modification:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
-    m_Modifications: []
+    m_Modifications:
+    - target: {fileID: 7100000000000000003, guid: 4dcf0e98d90041cd987d7a7d02b51003, type: 3}
+      propertyPath: midground.sprite
+      value: 
+      objectReference: {fileID: 0}
+    - target: {fileID: 7100000000000000003, guid: 4dcf0e98d90041cd987d7a7d02b51003, type: 3}
+      propertyPath: background.sprite
+      value: 
+      objectReference: {fileID: -1899220916372834530, guid: 867dc3b1b131e25458aa234e2b2a760b, type: 3}
+    - target: {fileID: 7100000000000000003, guid: 4dcf0e98d90041cd987d7a7d02b51003, type: 3}
+      propertyPath: foreground.sprite
+      value: 
+      objectReference: {fileID: 2305140777532878171, guid: 134bfcb9f90bff042a3a71775005c0ec, type: 3}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []

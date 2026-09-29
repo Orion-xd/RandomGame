@@ -35,7 +35,6 @@ public sealed class ParallaxBackground : MonoBehaviour
     [Tooltip("未設定の場合はMain Cameraを自動的に使用します。")]
     [SerializeField] private Camera targetCamera;
     [SerializeField] private bool followHorizontal = true;
-    [SerializeField] private bool followVertical = false;
 
     [Header("3段階パララックス")]
     [SerializeField] private LayerSettings foreground = new LayerSettings
@@ -71,6 +70,7 @@ public sealed class ParallaxBackground : MonoBehaviour
         public float cameraFollow;
         public bool repeatHorizontally;
         public float tileWidth;
+        public float verticalOffset;
         public Vector3 startPosition;
     }
 
@@ -129,7 +129,8 @@ public sealed class ParallaxBackground : MonoBehaviour
         }
 
         Vector3 cameraPosition = targetCamera.transform.position;
-        root.position = new Vector3(cameraPosition.x, cameraPosition.y + settings.verticalOffset, 0f);
+        float initialY = cameraPosition.y + settings.verticalOffset;
+        root.position = new Vector3(cameraPosition.x, initialY, 0f);
 
         return new LayerRuntime
         {
@@ -137,6 +138,7 @@ public sealed class ParallaxBackground : MonoBehaviour
             cameraFollow = settings.cameraFollow,
             repeatHorizontally = settings.repeatHorizontally,
             tileWidth = tileWidth,
+            verticalOffset = settings.verticalOffset,
             startPosition = root.position
         };
     }
@@ -155,9 +157,8 @@ public sealed class ParallaxBackground : MonoBehaviour
             float x = followHorizontal
                 ? layer.startPosition.x + cameraDelta.x * layer.cameraFollow
                 : layer.startPosition.x;
-            float y = followVertical
-                ? layer.startPosition.y + cameraDelta.y * layer.cameraFollow
-                : layer.startPosition.y;
+            // 近景・中景・遠景の区別なく、Y座標は常にメインカメラへ1:1で追従する。
+            float y = cameraPosition.y + layer.verticalOffset;
 
             // 同じ画像3枚をカメラ付近へ再配置し、左右の移動量に関係なく無限に繰り返す。
             if (followHorizontal && layer.repeatHorizontally && layer.tileWidth > 0f)

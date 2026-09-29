@@ -67,6 +67,12 @@ public sealed class GameAudio : MonoBehaviour
         _instance.StopBgmInternal();
     }
 
+    public static void PlayBgm(string bgmName)
+    {
+        if (string.IsNullOrEmpty(bgmName)) return;
+        EnsureInstance().PlayBgmInternal(bgmName);
+    }
+
     public static void StartDialogueTextSfx()
     {
         EnsureInstance().StartDialogueTextSfxInternal();
@@ -137,7 +143,7 @@ public sealed class GameAudio : MonoBehaviour
         if (_bgmPending && !DialoguePlayer.IsPlaying && InputLock.InputAllowed)
         {
             _bgmPending = false;
-            PlayBgm(_pendingBgmName);
+            PlayBgmInternal(_pendingBgmName);
         }
 
         if (!_bgmFadingIn) return;
@@ -214,7 +220,7 @@ public sealed class GameAudio : MonoBehaviour
         _bgmFadingIn = false;
     }
 
-    private void PlayBgm(string bgmName)
+    private void PlayBgmInternal(string bgmName)
     {
         if (_currentBgmName == bgmName && _bgmSource.isPlaying) return;
 
