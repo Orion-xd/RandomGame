@@ -44,6 +44,8 @@ public class MenuNavigation : MonoBehaviour
     [SerializeField] private InitialCursor initialCursor = InitialCursor.FirstUsable;
 
     [Header("選択枠")]
+    [Tooltip("false なら選択枠を表示しない（キーボード操作自体は有効）")]
+    [SerializeField] private bool showFrame = true;
     [SerializeField] private Color frameColor = new Color(1f, 0.85f, 0.2f, 1f);
     [Tooltip("ボタンの周囲にはみ出す枠の太さ (px)")]
     [SerializeField] private float framePadding = 8f;
@@ -299,7 +301,7 @@ public class MenuNavigation : MonoBehaviour
     {
         if (_frame == null) return;
 
-        if (!HasValidIndex())
+        if (!showFrame || !HasValidIndex())
         {
             if (_frame.gameObject.activeSelf) _frame.gameObject.SetActive(false);
             _appliedIndex = -1;
