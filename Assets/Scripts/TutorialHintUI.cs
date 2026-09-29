@@ -31,7 +31,7 @@ public class TutorialHintUI : MonoBehaviour
              "Assets/Prefabs/UI/SpeakerTextBox.prefab のインスタンスを指す")]
     [SerializeField] private SpeakerTextBoxView textBox;
 
-    private readonly List<(object requester, string text, float distance, SpeakerId speaker)> _requests = new();
+    private readonly List<(object requester, string text, float distance, SpeakerId speaker, SpeakerExpression expression)> _requests = new();
 
     private void Awake()
     {
@@ -58,18 +58,18 @@ public class TutorialHintUI : MonoBehaviour
     /// speaker は任意（ストーリー会話の TopTextbox と同じ話者アイコン欄の仕組み）。
     /// 省略（None）すればこれまで通りアイコン・名前欄とも非表示のまま。表示名・アイコンは
     /// SpeakerRegistry から解決する。</summary>
-    public void RequestShow(object requester, string text, float distance, SpeakerId speaker = SpeakerId.None)
+    public void RequestShow(object requester, string text, float distance, SpeakerId speaker = SpeakerId.None, SpeakerExpression expression = SpeakerExpression.Normal)
     {
         for (int i = 0; i < _requests.Count; i++)
         {
             if (Equals(_requests[i].requester, requester))
             {
-                _requests[i] = (requester, text, distance, speaker);
+                _requests[i] = (requester, text, distance, speaker, expression);
                 Refresh();
                 return;
             }
         }
-        _requests.Add((requester, text, distance, speaker));
+        _requests.Add((requester, text, distance, speaker, expression));
         Refresh();
     }
 
@@ -95,13 +95,13 @@ public class TutorialHintUI : MonoBehaviour
         if (textBox == null) return;
         if (textBox.Body != null) textBox.Body.text = nearest.text;
 
-        // 話者アイコン・名前欄・本文の余白は、共有ビュー（SpeakerTextBoxView）へ丸ごと委譲する
+        // 話者アイコン・名前欄の表示は、共有ビュー（SpeakerTextBoxView）へ丸ごと委譲する
         // （見た目の計算はそちら側の責務。表示名・アイコンは SpeakerRegistry から解決する）。
-        // 本文の左右マージンは話者の有無によらず常に同じ（ユーザー指定）。
+        // 本文の左右マージンはプレハブのBodyに直接設定されている値をそのまま使うので、
+        // ここでは何も触らない（インスペクターで見ながら調整できるようにするための設計）。
         bool hasSpeaker = nearest.speaker != SpeakerId.None;
         var profile = hasSpeaker ? SpeakerRegistry.Get(nearest.speaker) : null;
-        textBox.SetSpeaker(profile);
-        textBox.ApplyBodyInset();
+        textBox.SetSpeaker(profile, nearest.expression);
     }
 
     private void SetVisible(bool visible)

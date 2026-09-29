@@ -33,6 +33,7 @@ public class Enemy : MonoBehaviour
     private PlayerController _playerController;
     private MainActionController _playerMainAction;
     private bool _ignoringPlayer;
+    private Enemy3AI _bossAI; // 任意。付いていれば突進攻撃中などのノックバック倍率を問い合わせる
 
     private int _health;
 
@@ -50,6 +51,7 @@ public class Enemy : MonoBehaviour
     private void Awake()
     {
         _col = GetComponent<Collider2D>();
+        _bossAI = GetComponent<Enemy3AI>();
         _health = maxHealth;
 
         if (healthBar != null)
@@ -126,6 +128,10 @@ public class Enemy : MonoBehaviour
 
         float dir = Mathf.Sign(other.transform.position.x - transform.position.x);
         if (dir == 0f) dir = 1f;
-        controller.ApplyKnockback(new Vector2(dir * knockbackSpeed, knockbackUpSpeed), knockbackDuration);
+
+        // 突進攻撃中に接触したときだけ、ラスボス側で設定した倍率でノックバックを強化する
+        // （それ以外の敵、およびラスボスの突進攻撃以外の接触では常に1倍＝今まで通り）。
+        float multiplier = _bossAI != null ? _bossAI.KnockbackMultiplier : 1f;
+        controller.ApplyKnockback(new Vector2(dir * knockbackSpeed * multiplier, knockbackUpSpeed * multiplier), knockbackDuration);
     }
 }

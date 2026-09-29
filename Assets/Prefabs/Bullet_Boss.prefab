@@ -57,8 +57,16 @@ PrefabInstance:
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8944913330095386953, guid: eb63c598242ca574681f998abce32ac2, type: 3}
+      propertyPath: upwardRampTime
+      value: 3
+      objectReference: {fileID: 0}
+    - target: {fileID: 8944913330095386953, guid: eb63c598242ca574681f998abce32ac2, type: 3}
       propertyPath: selfHitGraceTime
       value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 8944913330095386953, guid: eb63c598242ca574681f998abce32ac2, type: 3}
+      propertyPath: groundAvoidMinGrazeAngle
+      value: 70
       objectReference: {fileID: 0}
     m_RemovedComponents:
     - {fileID: 7276272126011583541, guid: eb63c598242ca574681f998abce32ac2, type: 3}
