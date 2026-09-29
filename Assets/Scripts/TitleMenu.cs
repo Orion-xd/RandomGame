@@ -300,6 +300,11 @@ public sealed class TitleMenu : MonoBehaviour
     {
         if (_starting) return;
         _starting = true;
+        // このボタンは独自の生入力判定（UpdateStartButtonInput）でクリックを検知しており、
+        // Button.onClick を一度も発火させない。GameAudio側の「シーン内の全Buttonのonclickに
+        // クリック音を自動で仕込む」仕組み（WireButtonsAfterSceneLoad）の対象外になるため、
+        // ここで明示的にクリック音を鳴らす（他のボタンと同じSfx.Button）。
+        GameAudio.PlaySfx(GameAudio.Sfx.Button);
         GameFlow.StartGame();
     }
 
