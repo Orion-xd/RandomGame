@@ -1510,7 +1510,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5675437057748136969, guid: 2324b26c456753c4dab96f8eb15899ce, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 105.93
+      value: 102.23
       objectReference: {fileID: 0}
     - target: {fileID: 5675437057748136969, guid: 2324b26c456753c4dab96f8eb15899ce, type: 3}
       propertyPath: m_LocalPosition.y
@@ -1695,7 +1695,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5675437057748136969, guid: 2324b26c456753c4dab96f8eb15899ce, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 103.33
+      value: 99.630005
       objectReference: {fileID: 0}
     - target: {fileID: 5675437057748136969, guid: 2324b26c456753c4dab96f8eb15899ce, type: 3}
       propertyPath: m_LocalPosition.y
@@ -4080,6 +4080,10 @@ PrefabInstance:
     - target: {fileID: 1378489346549490450, guid: 2324b26c456753c4dab96f8eb15899ce, type: 3}
       propertyPath: m_Name
       value: Enemy1 (5)
+      objectReference: {fileID: 0}
+    - target: {fileID: 1378489346549490450, guid: 2324b26c456753c4dab96f8eb15899ce, type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 5675437057748136969, guid: 2324b26c456753c4dab96f8eb15899ce, type: 3}
       propertyPath: m_LocalPosition.x
@@ -17897,7 +17901,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5675437057748136969, guid: 2324b26c456753c4dab96f8eb15899ce, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 108.13
+      value: 104.43
       objectReference: {fileID: 0}
     - target: {fileID: 5675437057748136969, guid: 2324b26c456753c4dab96f8eb15899ce, type: 3}
       propertyPath: m_LocalPosition.y
@@ -17954,7 +17958,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5675437057748136969, guid: 2324b26c456753c4dab96f8eb15899ce, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 55.11
+      value: 57.75
       objectReference: {fileID: 0}
     - target: {fileID: 5675437057748136969, guid: 2324b26c456753c4dab96f8eb15899ce, type: 3}
       propertyPath: m_LocalPosition.y
@@ -18608,12 +18612,12 @@ SceneRoots:
   - {fileID: 1980892975}
   - {fileID: 1897876166}
   - {fileID: 1707517577}
+  - {fileID: 1284174880}
   - {fileID: 272718474}
   - {fileID: 1518782008}
   - {fileID: 195545857}
   - {fileID: 1104426651}
   - {fileID: 1699916593}
-  - {fileID: 1284174880}
   - {fileID: 1365227586}
   - {fileID: 670404175}
   - {fileID: 289457987}
