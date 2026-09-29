@@ -51,3 +51,7 @@ MonoBehaviour:
   sortingOrder: 200
   textBoxPrefab: {fileID: 8823166850140176805, guid: 5a13c08155e98e649861de61ed42dfa9, type: 3}
   inputLockDuration: 0.25
+  bodySizeTop: {x: 1000, y: 200}
+  bodyPositionTop: {x: 200, y: -20}
+  bodySizeBottom: {x: 1000, y: 200}
+  bodyPositionBottom: {x: 200, y: -20}

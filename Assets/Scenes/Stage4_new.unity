@@ -1868,7 +1868,7 @@ PrefabInstance:
     - target: {fileID: 6080677848254731972, guid: 90ba1bdb9c592894081e1b02791dece2, type: 3}
       propertyPath: textBoxPrefab
       value: 
-      objectReference: {fileID: 1981237928}
+      objectReference: {fileID: 8823166850140176805, guid: 5a13c08155e98e649861de61ed42dfa9, type: 3}
     - target: {fileID: 7885771644416257950, guid: 90ba1bdb9c592894081e1b02791dece2, type: 3}
       propertyPath: m_Name
       value: DialogueSystem
