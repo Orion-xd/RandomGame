@@ -87,6 +87,7 @@ public class DialoguePlayer : MonoBehaviour
     private SpeakerTextBoxView _textBox;
     private Text _hintText;
     private int _defaultBodyFontSize; // テキストボックスのプレハブに設定されている本文の既定文字サイズ
+    private float _bodyInset; // 本文の左右マージン。テキストボックスのプレハブでBodyに設定されている値をそのまま使う
 
     private void Awake()
     {
@@ -330,12 +331,11 @@ public class DialoguePlayer : MonoBehaviour
         {
             LayoutBox(top);
             _textBox.Body.fontSize = p.fontSize > 0 ? p.fontSize : _defaultBodyFontSize; // 0以下なら既定サイズ（プレハブ設定）
-            // 話者の有無によらず、本文の左右は常に同じだけ空けてアイコン欄ぶんのスペースを確保する
-            // （ユーザー指定）。中央揃えの見た目を保ったまま文字送りしてもブレないよう、
-            // CenterTextHorizontally で「全文表示時にちょうど収まる位置」へあらかじめ左端を固定してから
-            // 文字送りを始める。
-            float inset = _textBox.GetBodyInset();
-            CenterTextHorizontally(_textBox.Body, inset, inset, p.text ?? "");
+            // 話者の有無によらず、本文の左右は常に同じだけ空ける（ユーザー指定）。マージンの幅は
+            // プレハブのBodyに直接設定されている値（_bodyInset）を使う。中央揃えの見た目を保ったまま
+            // 文字送りしてもブレないよう、CenterTextHorizontally で「全文表示時にちょうど収まる位置」へ
+            // あらかじめ左端を固定してから文字送りを始める。
+            CenterTextHorizontally(_textBox.Body, _bodyInset, _bodyInset, p.text ?? "");
             SetPageText(_textBox.Body, p.text, p.useTypewriterEffect, p.typewriterCharsPerSecond); // 話者名は対象外（上で即時表示済み）、台詞本文だけ文字送りする
         }
 
@@ -430,6 +430,10 @@ public class DialoguePlayer : MonoBehaviour
         // ページごとの文字サイズ指定（DialogueSequence.Page.fontSize）が0以下のときに使う既定値として、
         // プレハブに設定されている本文の文字サイズをそのまま控えておく。
         _defaultBodyFontSize = _textBox.Body != null ? _textBox.Body.fontSize : 45;
+        // 本文の左右マージンも、アイコンサイズから自動計算するのではなく、プレハブのBodyに直接
+        // 設定されている値（offsetMin.x）をそのまま使う。インスペクターでPrefab Modeを見ながら
+        // 直接調整できるようにするため（ユーザー指定）。
+        _bodyInset = _textBox.Body != null ? ((RectTransform)_textBox.Body.transform).offsetMin.x : 0f;
 
         _hintText = NewText("Hint", _root.transform, hintFontSize, TextAnchor.LowerRight);
         _hintText.text = "Click / Space / Enter ▶";

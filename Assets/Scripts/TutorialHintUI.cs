@@ -95,13 +95,13 @@ public class TutorialHintUI : MonoBehaviour
         if (textBox == null) return;
         if (textBox.Body != null) textBox.Body.text = nearest.text;
 
-        // 話者アイコン・名前欄・本文の余白は、共有ビュー（SpeakerTextBoxView）へ丸ごと委譲する
+        // 話者アイコン・名前欄の表示は、共有ビュー（SpeakerTextBoxView）へ丸ごと委譲する
         // （見た目の計算はそちら側の責務。表示名・アイコンは SpeakerRegistry から解決する）。
-        // 本文の左右マージンは話者の有無によらず常に同じ（ユーザー指定）。
+        // 本文の左右マージンはプレハブのBodyに直接設定されている値をそのまま使うので、
+        // ここでは何も触らない（インスペクターで見ながら調整できるようにするための設計）。
         bool hasSpeaker = nearest.speaker != SpeakerId.None;
         var profile = hasSpeaker ? SpeakerRegistry.Get(nearest.speaker) : null;
         textBox.SetSpeaker(profile, nearest.expression);
-        textBox.ApplyBodyInset();
     }
 
     private void SetVisible(bool visible)
