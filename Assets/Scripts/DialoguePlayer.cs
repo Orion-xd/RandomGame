@@ -16,6 +16,15 @@ using UnityEngine.UI;
 ///  - BottomTextbox   : 暗転＋一枚絵＋下部テキストボックス（プロローグ後半）。絵未指定なら仮イラスト。
 ///  - TopTextbox      : 暗転なし＋上部テキストボックス（ステージ開始時。ゲーム画面が見える）
 ///
+/// ── テキストボックス本文（Body）の大きさ・位置 ──
+/// アイコンサイズ等からの自動計算は一切せず、`bodySizeTop`/`bodyPositionTop`（TopTextbox用）と
+/// `bodySizeBottom`/`bodyPositionBottom`（BottomTextbox用）という、ゲーム全体で固定のインスペクター値を
+/// そのまま使う（CenteredOnBlackはテキストボックス自体を表示しないので対象外）。Bodyは中央
+/// （0.5, 0.5）アンカー・ピボットの固定サイズRectとして毎ページ設定し直す。値は実際にプレイして
+/// 画面を見ながら人力で調整する想定（全シーンで同じ位置に出るため、一度決めればよい）。
+/// 以前はセリフの文字数に応じて余白を毎ページ計算し直す方式だったが、実際のテキストボックスの
+/// 横幅（プレースホルダー素材と本番素材でアイコンサイズ等が違う）に計算が追従できず、意図しない
+/// 大きさ・位置になる問題があったため、この固定値方式に変更した。
 /// ── 文字送り（タイプライター演出） ──
 /// on/off・速さともに**ページ単位**（`DialogueSequence.Page.useTypewriterEffect` / `.typewriterCharsPerSecond`、
 /// 既定 true / 30）で決める（シーン一律ではなく、テキストごとに個別設定できる）。true のページは
@@ -54,6 +63,17 @@ public class DialoguePlayer : MonoBehaviour
     [Tooltip("会話（プロローグ / ステージ開始会話）が出てからこの秒数、送り入力を無効化する（連打で飛ばさないように）")]
     [SerializeField] private float inputLockDuration = 0.25f;
 
+    [Header("テキストボックス本文（Body）の大きさ・位置 ── ゲーム全体で固定の値。" +
+            "プレイ中の画面を見ながら人力で調整すること。位置はテキストボックス中央からのオフセット")]
+    [Tooltip("上部表示（TopTextbox）のときのBodyの幅・高さ")]
+    [SerializeField] private Vector2 bodySizeTop = new Vector2(612f, 236f);
+    [Tooltip("上部表示（TopTextbox）のときのBodyの位置（テキストボックス中央からのオフセット）")]
+    [SerializeField] private Vector2 bodyPositionTop = Vector2.zero;
+    [Tooltip("下部表示（BottomTextbox）のときのBodyの幅・高さ")]
+    [SerializeField] private Vector2 bodySizeBottom = new Vector2(612f, 236f);
+    [Tooltip("下部表示（BottomTextbox）のときのBodyの位置（テキストボックス中央からのオフセット）")]
+    [SerializeField] private Vector2 bodyPositionBottom = Vector2.zero;
+
     // 文字送り（タイプライター演出）の進行状態
     private Text _typewriterTarget;    // 現在アニメーション対象の Text（_centerText か _bodyText）
     private string _typewriterFullText = "";
@@ -87,7 +107,6 @@ public class DialoguePlayer : MonoBehaviour
     private SpeakerTextBoxView _textBox;
     private Text _hintText;
     private int _defaultBodyFontSize; // テキストボックスのプレハブに設定されている本文の既定文字サイズ
-    private float _bodyInset; // 本文の左右マージン。テキストボックスのプレハブでBodyに設定されている値をそのまま使う
 
     private void Awake()
     {
@@ -331,11 +350,17 @@ public class DialoguePlayer : MonoBehaviour
         {
             LayoutBox(top);
             _textBox.Body.fontSize = p.fontSize > 0 ? p.fontSize : _defaultBodyFontSize; // 0以下なら既定サイズ（プレハブ設定）
-            // 話者の有無によらず、本文の左右は常に同じだけ空ける（ユーザー指定）。マージンの幅は
-            // プレハブのBodyに直接設定されている値（_bodyInset）を使う。中央揃えの見た目を保ったまま
-            // 文字送りしてもブレないよう、CenterTextHorizontally で「全文表示時にちょうど収まる位置」へ
-            // あらかじめ左端を固定してから文字送りを始める。
-            CenterTextHorizontally(_textBox.Body, _bodyInset, _bodyInset, p.text ?? "");
+            // 本文の大きさ・位置は、アイコンサイズ等からの計算を一切せず、bodySizeTop/Bottom・
+            // bodyPositionTop/Bottom（ゲーム全体で固定、インスペクターで人力調整）をそのまま使う。
+            // 中央（0.5, 0.5）アンカー・ピボットの、固定サイズ・固定位置のRectとして毎回設定し直す
+            // （以前は文字数に応じて幅を毎ページ計算し直しており、実際の箱の横幅とズレて意図しない
+            // 結果になることがあったため廃止）。アラインメントはプレハブの設定のまま変更しない。
+            var bodyRt = (RectTransform)_textBox.Body.transform;
+            bodyRt.anchorMin = new Vector2(0.5f, 0.5f);
+            bodyRt.anchorMax = new Vector2(0.5f, 0.5f);
+            bodyRt.pivot = new Vector2(0.5f, 0.5f);
+            bodyRt.sizeDelta = top ? bodySizeTop : bodySizeBottom;
+            bodyRt.anchoredPosition = top ? bodyPositionTop : bodyPositionBottom;
             SetPageText(_textBox.Body, p.text, p.useTypewriterEffect, p.typewriterCharsPerSecond); // 話者名は対象外（上で即時表示済み）、台詞本文だけ文字送りする
         }
 
@@ -362,8 +387,9 @@ public class DialoguePlayer : MonoBehaviour
     /// 左端から文字を生やしていく。全文表示時にちょうど中央に収まるので、見た目は変えずに
     /// 文字送り中のブレだけを無くせる。全文が確保領域より広い（改行が要る）場合は `pad=0` になり、
     /// 確保領域いっぱいを使う左揃えにフォールバックする。
-    /// `leftBound`/`rightBound` は話者アイコン欄ぶんなど、中央寄せ計算の前に確保しておきたい
-    /// 追加の左右マージン（px）。`_centerText`（アイコン無し）なら 0/0 を渡す。
+    /// `leftBound`/`rightBound` は中央寄せ計算の前に確保しておきたい追加の左右マージン（px）。
+    /// 現在は `_centerText`（CenteredOnBlack、アイコン無しなので 0/0 を渡す）専用。テキストボックス
+    /// 本文（Body）は固定サイズ・固定位置（`bodySizeTop`等）を使う方式に変更したため、ここは通らない。
     /// </summary>
     private static void CenterTextHorizontally(Text target, float leftBound, float rightBound, string fullText)
     {
@@ -430,10 +456,6 @@ public class DialoguePlayer : MonoBehaviour
         // ページごとの文字サイズ指定（DialogueSequence.Page.fontSize）が0以下のときに使う既定値として、
         // プレハブに設定されている本文の文字サイズをそのまま控えておく。
         _defaultBodyFontSize = _textBox.Body != null ? _textBox.Body.fontSize : 45;
-        // 本文の左右マージンも、アイコンサイズから自動計算するのではなく、プレハブのBodyに直接
-        // 設定されている値（offsetMin.x）をそのまま使う。インスペクターでPrefab Modeを見ながら
-        // 直接調整できるようにするため（ユーザー指定）。
-        _bodyInset = _textBox.Body != null ? ((RectTransform)_textBox.Body.transform).offsetMin.x : 0f;
 
         _hintText = NewText("Hint", _root.transform, hintFontSize, TextAnchor.LowerRight);
         _hintText.text = "Click / Space / Enter ▶";
