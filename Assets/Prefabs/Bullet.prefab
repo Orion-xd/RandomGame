@@ -176,7 +176,11 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 256
   homingTurnSpeed: 0
-  reversalAngleThreshold: 150
+  homingInertia: 0.3
+  homingInertiaTowardBoss: 1.5
+  towardBossAngleThreshold: 30
+  freezeHomingWhilePlayerAirborne: 1
+  reversalAngleThreshold: 120
   reversalRateMultiplier: 1
   enemyDamage: 2
   selfHitGraceTime: 0.5

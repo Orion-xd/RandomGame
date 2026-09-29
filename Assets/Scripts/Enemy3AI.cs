@@ -19,17 +19,21 @@ using UnityEngine;
 /// （<see cref="IsNearScreenEdge"/>、<see cref="ScreenBounds2D"/>参照）。画面端脱出用の行動として
 /// 突進攻撃（プレイヤーへ向かって突進する。結果的に画面端から離れる方向になる）を用意している。
 ///
-/// ── アニメーション（任意） ──
-/// 他の雑魚敵と違い、このボスはアニメーションさせる想定。<see cref="animator"/> を設定し、
-/// 各行動（<see cref="WeightedAction.animationTrigger"/>）にトリガー名を指定すると、その行動を
-/// 実行する瞬間に SetTrigger する。未設定（空文字）ならアニメーションなしでこれまで通り即座に発動する。
+/// ── アニメーション ──
+/// 他の雑魚敵と違い、このボスはアニメーションさせる。Animator の状態は Idle（既定。CoolingDown /
+/// WaitingForHomingBullet / FirstActionWait など「待機扱い」の全状態がここに対応）・Retreat（C#側の
+/// State.Retreating に対応。素材自体はIdleと同じものだが、プログラム側の状態と1対1で対応させるため
+/// あえて別状態にしてある）・Attack（放射弾・追尾弾どちらも共通）・DashAttack の4つ。トリガー名は
+/// "Retreat"/"Attack"/"DashAttack"で固定（Player側の実装と同じく、C#から直接 SetTrigger する方式）。
 ///
 /// ── 向き ──
-/// 常にプレイヤーのいる方向を向く（<see cref="FacingController"/>）。ただし突進攻撃中だけは
-/// 向きを変えられない（突進の勢いの途中で向きが変わると不自然なため）。突進中に向きを変えたく
-/// なった場合はその希望だけ覚えておき、突進が終わってもまだその希望が残っていれば、そこで向きを
-/// 変える（FacingController の Lock/Unlock）。firePoint は facing.mirroredChildren に登録して
-/// おくことで、向きに応じてローカルX座標が自動で反転され、常に正しい側から発射される。
+/// 常にプレイヤーのいる方向を向く（<see cref="FacingController"/>）。ただし突進攻撃（予備動作の
+/// 溜め中〜本番の移動中まで一貫して）だけは向きを変えられない（溜めで見せている方向と実際に
+/// 突進する方向が食い違ったり、突進の勢いの途中で向きが変わったりすると不自然なため）。
+/// その間に向きを変えたくなった場合はその希望だけ覚えておき、突進本番が終わってもまだその希望が
+/// 残っていれば、そこで向きを変える（FacingController の Lock/Unlock）。firePoint は
+/// facing.mirroredChildren に登録しておくことで、向きに応じてローカルX座標が自動で反転され、
+/// 常に正しい側から発射される。
 /// </summary>
 public class Enemy3AI : MonoBehaviour
 {
@@ -43,11 +47,9 @@ public class Enemy3AI : MonoBehaviour
         public float weight = 1f;
         [Tooltip("true にすると、画面端にいるとき（IsNearScreenEdge）だけ抽選対象に入る（例: 突進攻撃）")]
         public bool edgeOnly = false;
-        [Tooltip("この行動を実行する瞬間に発火させる Animator のトリガー名（任意。空ならアニメーションなし）")]
-        public string animationTrigger;
     }
 
-    private enum State { Retreating, CoolingDown, WaitingForHomingBullet, FirstActionWait, DashingAttack }
+    private enum State { Retreating, CoolingDown, WaitingForHomingBullet, FirstActionWait, DashAttackWindup, DashingAttack }
 
     [Header("①離脱移動")]
     [Tooltip("プレイヤーから遠ざかる速度")]
@@ -103,12 +105,22 @@ public class Enemy3AI : MonoBehaviour
     [SerializeField] private float homingCooldown = 3f;
 
     [Header("突進攻撃（画面端にいるときだけ抽選対象になりうる）")]
+    [Tooltip("突進の前に、その場で静止して予備動作を見せる時間(秒)。いきなり発動すると強すぎるための" +
+             "溜め時間で、この間はプレイヤーの攻撃などを受けても中断しない（体力が0になって死ぬ場合を除く）")]
+    [SerializeField] private float dashAttackWindupTime = 3f;
+    [Tooltip("予備動作中、その場で上下に振動させる揺れ幅（ワールド単位。中心からの片側の振れ幅）")]
+    [SerializeField] private float dashAttackWindupShakeAmplitude = 0.1f;
+    [Tooltip("予備動作中の振動の周期（秒）。1往復（上→下→上）にかかる時間。小さいほど速く振動する")]
+    [SerializeField] private float dashAttackWindupShakePeriod = 0.2f;
     [Tooltip("突進の速さ")]
     [SerializeField] private float dashAttackSpeed = 10f;
     [Tooltip("突進の継続時間(秒)")]
     [SerializeField] private float dashAttackDuration = 0.6f;
     [Tooltip("突進後のクールタイム(秒)")]
     [SerializeField] private float dashAttackCooldown = 3f;
+    [Tooltip("突進攻撃の移動中にプレイヤーへ接触したときのノックバックを、通常の何倍の勢いにするか" +
+             "（Enemy側の接触ノックバック計算にそのまま掛かる。既定3倍）")]
+    [SerializeField] private float dashAttackKnockbackMultiplier = 3f;
 
     private State _state = State.Retreating;
     private float _cooldownTimer;
@@ -121,6 +133,14 @@ public class Enemy3AI : MonoBehaviour
     private bool _firstActionDone;
     private WeightedAction _pendingAction;
     private float _dashDir;
+    private float _windupBaseY;
+
+    /// <summary>突進攻撃の移動中か（予備動作中は含まない）。Enemy側の接触ノックバック計算が参照する。</summary>
+    public bool IsDashAttacking => _state == State.DashingAttack;
+
+    /// <summary>Enemy側の接触ノックバック計算に掛ける倍率。突進攻撃の移動中だけ dashAttackKnockbackMultiplier、
+    /// それ以外は1倍（通常通り）。</summary>
+    public float KnockbackMultiplier => IsDashAttacking ? dashAttackKnockbackMultiplier : 1f;
 
     private void Awake()
     {
@@ -150,9 +170,13 @@ public class Enemy3AI : MonoBehaviour
             var homingTargetTf = p.transform.Find("HomingTarget");
             _playerHomingTarget = homingTargetTf != null ? homingTargetTf : _player;
         }
+
+        if (animator != null) animator.SetTrigger("Retreat"); // 開始直後の初期状態(State.Retreating)に対応
     }
 
-    /// <summary>プレイヤーの攻撃を受けた瞬間に呼ばれる。追尾弾を発射中なら、問答無用でその弾を消してクールタイムへ移行する。</summary>
+    /// <summary>プレイヤーの攻撃を受けた瞬間に呼ばれる（プレイヤー自身の攻撃、または誘導し返された
+    /// 自分の弾のどちらでも Enemy.OnDamaged 経由でここに来る）。追尾弾を発射中なら、問答無用でその弾を
+    /// 消してクールタイムへ移行する。</summary>
     private void HandleDamaged()
     {
         if (_state != State.WaitingForHomingBullet) return;
@@ -163,6 +187,7 @@ public class Enemy3AI : MonoBehaviour
             _pendingHomingBullet = null;
         }
 
+        if (animator != null) animator.SetBool("Waiting", false); // ここでAttackのループを終えてIdleへ戻してよい
         _cooldownTimer = homingCooldown;
         _state = State.CoolingDown;
     }
@@ -181,13 +206,18 @@ public class Enemy3AI : MonoBehaviour
 
             case State.CoolingDown:
                 _cooldownTimer -= Time.deltaTime;
-                if (_cooldownTimer <= 0f) _state = State.Retreating;
+                if (_cooldownTimer <= 0f)
+                {
+                    _state = State.Retreating;
+                    if (animator != null) animator.SetTrigger("Retreat");
+                }
                 break;
 
             case State.WaitingForHomingBullet:
                 // 弾が消える（着弾・地面/壁接触・攻撃で破壊）までは何もできない。
                 if (_pendingHomingBullet == null)
                 {
+                    if (animator != null) animator.SetBool("Waiting", false); // Attackのループを終えてよい
                     _cooldownTimer = homingCooldown;
                     _state = State.CoolingDown;
                 }
@@ -197,6 +227,10 @@ public class Enemy3AI : MonoBehaviour
                 // 一番最初の行動だけ、選択されてから実際に発動するまで少し待つ。
                 _cooldownTimer -= Time.deltaTime;
                 if (_cooldownTimer <= 0f) ExecuteAction(_pendingAction);
+                break;
+
+            case State.DashAttackWindup:
+                UpdateDashAttackWindup();
                 break;
 
             case State.DashingAttack:
@@ -291,14 +325,28 @@ public class Enemy3AI : MonoBehaviour
 
     private void ExecuteAction(WeightedAction action)
     {
-        if (animator != null && !string.IsNullOrEmpty(action.animationTrigger))
-            animator.SetTrigger(action.animationTrigger);
+        if (animator != null)
+        {
+            switch (action.type)
+            {
+                case AttackAction.Radial:
+                case AttackAction.Homing:
+                    animator.SetTrigger("Attack"); // 放射弾・追尾弾は共通のAttack状態
+                    // 追尾弾を操作している間（WaitingForHomingBullet）はAttackをループさせ続けたいので、
+                    // そのことをAnimator側にも伝える（Attack→Idleの遷移条件になっている）。
+                    animator.SetBool("Waiting", action.type == AttackAction.Homing);
+                    break;
+                case AttackAction.DashAttack:
+                    animator.SetTrigger("DashAttack");
+                    break;
+            }
+        }
 
         switch (action.type)
         {
             case AttackAction.Radial: FireRadial(); break;
             case AttackAction.Homing: FireHoming(); break;
-            case AttackAction.DashAttack: StartDashAttack(); break;
+            case AttackAction.DashAttack: StartDashAttackWindup(); break;
         }
     }
 
@@ -333,20 +381,53 @@ public class Enemy3AI : MonoBehaviour
 
     private Vector3 FirePointPosition => firePoint != null ? firePoint.position : transform.position;
 
-    /// <summary>突進攻撃。プレイヤーへ向かって高速移動する（結果的に画面端から離れる方向になるので、
-    /// 離脱を諦めて画面端に張り付いた状態から抜け出す手段になる）。接触ダメージは Enemy 側の
-    /// 通常の接触判定（OnCollisionEnter2D）がそのまま処理するので、ここでは移動だけを行う。
-    /// 突進の勢いの途中で向きが変わると不自然なので、突進中は向きをロックする（FacingController）。</summary>
-    private void StartDashAttack()
+    /// <summary>突進攻撃の予備動作。いきなり発動すると強すぎるため、実際に動き出す前にその場で
+    /// dashAttackWindupTime 秒だけ静止して溜める（見た目は突進本番と同じ1枚絵のままでよいという
+    /// 判断のため、Animator側は本番の DashingAttack と同じ "Dashing" 状態を流用し続ける）。
+    /// 突進する方向は、この溜め始めの瞬間のプレイヤー位置で決めて確定させる（溜め中に敵の向きで
+    /// 予告している方向と、実際に突進する方向が食い違わないようにするため）。
+    /// この間はダメージを受けても中断しない（体力0による死亡は Enemy 側が別途処理する）。
+    /// 「溜めている感」を出すため、アニメーションではなく座標そのものを上下に振動させる
+    /// （dashAttackWindupShakeAmplitude/Period。溜め始めのY座標を中心に振動し、突進本番の
+    /// 移動開始時にはぴったり元のY座標へ戻す）。</summary>
+    private void StartDashAttackWindup()
     {
         _dashDir = Mathf.Sign(_player.position.x - transform.position.x);
         if (_dashDir == 0f) _dashDir = 1f;
         facing.LockTo(_dashDir < 0f ? -1 : 1);
 
-        _cooldownTimer = dashAttackDuration;
-        _state = State.DashingAttack;
+        // 予備動作の間も含めて、突進が終わるまでDashAttackのアニメーション状態を維持する
+        // （クリップ自体の長さではなく、実際の予備動作+突進の継続時間で制御する）。
+        if (animator != null) animator.SetBool("Dashing", true);
+
+        _windupBaseY = transform.position.y;
+        _cooldownTimer = dashAttackWindupTime;
+        _state = State.DashAttackWindup;
     }
 
+    private void UpdateDashAttackWindup()
+    {
+        float elapsed = dashAttackWindupTime - _cooldownTimer;
+        float phase = dashAttackWindupShakePeriod > 0f ? elapsed / dashAttackWindupShakePeriod : 0f;
+        Vector3 p = transform.position;
+        p.y = _windupBaseY + dashAttackWindupShakeAmplitude * Mathf.Sin(phase * 2f * Mathf.PI);
+        transform.position = p;
+
+        _cooldownTimer -= Time.deltaTime;
+        if (_cooldownTimer <= 0f)
+        {
+            p = transform.position;
+            p.y = _windupBaseY; // 振動を残さず、きっちり元の高さに戻してから突進を始める
+            transform.position = p;
+
+            _cooldownTimer = dashAttackDuration;
+            _state = State.DashingAttack;
+        }
+    }
+
+    /// <summary>突進攻撃本番。プレイヤーへ向かって高速移動する（結果的に画面端から離れる方向になるので、
+    /// 離脱を諦めて画面端に張り付いた状態から抜け出す手段になる）。接触ダメージは Enemy 側の
+    /// 通常の接触判定（OnCollisionEnter2D）がそのまま処理するので、ここでは移動だけを行う。</summary>
     private void UpdateDashAttack()
     {
         Vector3 p = transform.position;
@@ -358,6 +439,7 @@ public class Enemy3AI : MonoBehaviour
         if (_cooldownTimer <= 0f)
         {
             facing.Unlock(); // 突進中に向きを変えたい希望があれば、ここで初めて反映される
+            if (animator != null) animator.SetBool("Dashing", false); // ここでDashAttackのアニメーションを終えてよい
             _cooldownTimer = dashAttackCooldown;
             _state = State.CoolingDown;
         }
