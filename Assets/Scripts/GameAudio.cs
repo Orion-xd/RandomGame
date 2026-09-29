@@ -36,6 +36,7 @@ public sealed class GameAudio : MonoBehaviour
     private AudioSource _bgmSource;
     private AudioSource _sfxSource;
     private AudioSource _dialogueTextSource;
+    private AudioSource _dialoguePageAudioSource;
     private AudioListener _fallbackListener;
     private string _currentBgmName;
     private string _pendingBgmName;
@@ -84,6 +85,26 @@ public sealed class GameAudio : MonoBehaviour
         _instance._dialogueTextSource.Stop();
     }
 
+    public static bool IsDialoguePageAudioPlaying =>
+        _instance != null && _instance._dialoguePageAudioSource.isPlaying;
+
+    public static void PlayDialoguePageAudio(AudioClip clip)
+    {
+        if (clip == null) return;
+
+        GameAudio instance = EnsureInstance();
+        instance._dialoguePageAudioSource.Stop();
+        instance._dialoguePageAudioSource.clip = clip;
+        instance._dialoguePageAudioSource.Play();
+    }
+
+    public static void StopDialoguePageAudio()
+    {
+        if (_instance == null) return;
+        _instance._dialoguePageAudioSource.Stop();
+        _instance._dialoguePageAudioSource.clip = null;
+    }
+
     private static GameAudio EnsureInstance()
     {
         if (_instance != null) return _instance;
@@ -121,6 +142,12 @@ public sealed class GameAudio : MonoBehaviour
         _dialogueTextSource.playOnAwake = false;
         _dialogueTextSource.spatialBlend = 0f;
         _dialogueTextSource.volume = 0.35f;
+
+        _dialoguePageAudioSource = gameObject.AddComponent<AudioSource>();
+        _dialoguePageAudioSource.loop = false;
+        _dialoguePageAudioSource.playOnAwake = false;
+        _dialoguePageAudioSource.spatialBlend = 0f;
+        _dialoguePageAudioSource.volume = 0.8f;
 
         _fallbackListener = gameObject.AddComponent<AudioListener>();
         RefreshFallbackAudioListener();

@@ -140,17 +140,17 @@ public class StageManager : MonoBehaviour
     }
 
     /// <summary>ステージクリア。プレイヤーの操作は即座に封印するが、outro（クリア後会話）が
-    /// 設定されていれば、それを再生し終えるまではゲーム内時間を止めない。会話が無い/終わった後は
-    /// 従来通り、ゲーム内を全停止してプレイヤーのクリアアニメーションだけ再生させる。パネルは
-    /// クリアアニメーション側の Animation Event（HandlePlayerAnimationEvent の "ShowClearPanel"）で
-    /// 表示される。</summary>
+    /// 設定されていれば、それを再生し終えるまではゲーム内時間を止めない。通常ステージは会話後に
+    /// クリアアニメーションと結果パネルを表示する。最終ステージだけは最後の会話ページから直接
+    /// タイトルへ戻り、STAGE CLEARパネルは表示しない。</summary>
     public void Clear()
     {
         if (_ended) return;
         _ended = true;
         GameAudio.StopBgm();
         GameAudio.PlaySfx(GameAudio.Sfx.Clear);
-        GameFlow.MarkStageCleared(GameFlow.CurrentStageIndex); // 次のステージを解放
+        int stageIndex = GameFlow.ActiveStageIndex;
+        GameFlow.MarkStageCleared(stageIndex); // 次のステージを解放
         FreezeGameplay(); // 操作の封印はここで即座に行う（outro再生中もゲーム内時間を止めないため）
 
         // 倒した瞬間に再生中だった攻撃などのアニメーションが一瞬で打ち切られて見えないよう、
@@ -158,19 +158,38 @@ public class StageManager : MonoBehaviour
         // ら、そちらのクリア演出を優先してこの猶予は打ち切る）。
         _forceIdleCoroutine = StartCoroutine(ForceIdleAfterDelay(1f));
 
-        var outro = GameFlow.Stages != null ? GameFlow.Stages.OutroAt(GameFlow.CurrentStageIndex) : null;
+        var outro = GameFlow.Stages != null ? GameFlow.Stages.OutroAt(stageIndex) : null;
         var player = FindAnyObjectByType<DialoguePlayer>();
         if (player != null && player.HasContent(outro))
         {
-            player.Play(outro, PlayClearAnimationAndFreeze);
+            player.Play(outro, FinishClearSequence);
         }
         else
         {
-            PlayClearAnimationAndFreeze();
+            FinishClearSequence();
         }
     }
 
     private Coroutine _forceIdleCoroutine;
+
+    private void FinishClearSequence()
+    {
+        int stageIndex = GameFlow.ActiveStageIndex;
+        bool isFinalStage = stageIndex >= 0 && stageIndex == GameFlow.StageCount - 1;
+        if (!isFinalStage)
+        {
+            PlayClearAnimationAndFreeze();
+            return;
+        }
+
+        if (_forceIdleCoroutine != null)
+        {
+            StopCoroutine(_forceIdleCoroutine);
+            _forceIdleCoroutine = null;
+        }
+
+        GameFlow.GoTitle();
+    }
 
     /// <summary>指定秒数（実時間。Time.timeScale=0でも進む）待ってから、プレイヤーのAnimatorを
     /// 強制的にIdleへ切り替える（MainActionControllerが無効化されると"Moving"パラメータが更新
@@ -251,5 +270,6 @@ public class StageManager : MonoBehaviour
     // ── 結果画面ボタン ──
     public void OnNextStage() => GameFlow.NextStage();
     public void OnRetry() => GameFlow.RetryStage();
+    public void OnTitle() => GameFlow.GoTitle();
     public void OnStageSelect() => GameFlow.GoStageSelect();
 }

@@ -18,70 +18,110 @@ MonoBehaviour:
     text: "\u304B\u2026\u52DD\u3063\u305F\u2026"
     fontSize: 45
     image: {fileID: 0}
+    fullScreenBackground: {fileID: 0}
+    fullScreenOverlay: {fileID: 0}
+    fullScreenForeground: {fileID: 0}
     playerSpriteOverride: {fileID: 0}
     layout: 2
     useTypewriterEffect: 1
     typewriterCharsPerSecond: 30
+    pageAudio: {fileID: 0}
+    waitForPageAudio: 0
   - speaker: 1
     expression: 3
     text: "\u546A\u3044\u304C\u89E3\u3051\u305F\u308F\uFF01"
     fontSize: 45
     image: {fileID: 0}
+    fullScreenBackground: {fileID: 0}
+    fullScreenOverlay: {fileID: 0}
+    fullScreenForeground: {fileID: 0}
     playerSpriteOverride: {fileID: 5024734127510466783, guid: 7160cf65c3547b443af6c6a09e649dd8, type: 3}
     layout: 2
     useTypewriterEffect: 1
     typewriterCharsPerSecond: 30
+    pageAudio: {fileID: 0}
+    waitForPageAudio: 0
   - speaker: 1
     expression: 1
     text: "\u56DA\u308F\u308C\u305F\u4EBA\u305F\u3061\u306F\u5411\u3053\u3046\u306B\u3044\u308B\u306E\u304B\u3057\u3089"
     fontSize: 45
     image: {fileID: 0}
+    fullScreenBackground: {fileID: 0}
+    fullScreenOverlay: {fileID: 0}
+    fullScreenForeground: {fileID: 0}
     playerSpriteOverride: {fileID: 5024734127510466783, guid: 7160cf65c3547b443af6c6a09e649dd8, type: 3}
     layout: 2
     useTypewriterEffect: 1
     typewriterCharsPerSecond: 30
+    pageAudio: {fileID: 0}
+    waitForPageAudio: 0
   - speaker: 1
     expression: 1
     text: "\u52A9\u3051\u306B\u884C\u304D\u307E\u3057\u3087\u3046\uFF01"
     fontSize: 45
     image: {fileID: 0}
+    fullScreenBackground: {fileID: 0}
+    fullScreenOverlay: {fileID: 0}
+    fullScreenForeground: {fileID: 0}
     playerSpriteOverride: {fileID: 5024734127510466783, guid: 7160cf65c3547b443af6c6a09e649dd8, type: 3}
     layout: 2
     useTypewriterEffect: 1
     typewriterCharsPerSecond: 30
+    pageAudio: {fileID: 0}
+    waitForPageAudio: 0
   - speaker: 0
     expression: 0
     text: "\u52C7\u8005\u3057\u3070\u308A\u3061\u3083\u3093\u306E\u6D3B\u8E8D\u306B\u3088\u308A\u3001\u8857\u306B\u5E73\u548C\u304C\u623B\u3063\u305F"
     fontSize: 45
     image: {fileID: 0}
+    fullScreenBackground: {fileID: 0}
+    fullScreenOverlay: {fileID: 0}
+    fullScreenForeground: {fileID: 0}
     playerSpriteOverride: {fileID: 5024734127510466783, guid: 7160cf65c3547b443af6c6a09e649dd8, type: 3}
-    layout: 2
+    layout: 0
     useTypewriterEffect: 1
     typewriterCharsPerSecond: 30
+    pageAudio: {fileID: 0}
+    waitForPageAudio: 0
   - speaker: 0
     expression: 0
     text: "\u9577\u304D\u306B\u308F\u305F\u308B\u30C0\u30F3\u30B8\u30E7\u30F3\u653B\u7565\u3082\u3001\u3064\u3044\u306B\u5E55\u3092\u9589\u3058\u305F\u306E\u3067\u3042\u308B"
     fontSize: 45
     image: {fileID: 0}
+    fullScreenBackground: {fileID: 0}
+    fullScreenOverlay: {fileID: 0}
+    fullScreenForeground: {fileID: 0}
     playerSpriteOverride: {fileID: 5024734127510466783, guid: 7160cf65c3547b443af6c6a09e649dd8, type: 3}
-    layout: 2
+    layout: 0
     useTypewriterEffect: 1
     typewriterCharsPerSecond: 30
+    pageAudio: {fileID: 0}
+    waitForPageAudio: 0
   - speaker: 0
     expression: 0
     text: "\u3057\u3070\u308A\u3061\u3083\u3093\u306E\u52C7\u8005\u9053\u306F\u3001\u307E\u3060\u307E\u3060\u7D9A\u304F\u2026"
     fontSize: 45
     image: {fileID: 0}
+    fullScreenBackground: {fileID: 0}
+    fullScreenOverlay: {fileID: 0}
+    fullScreenForeground: {fileID: 0}
     playerSpriteOverride: {fileID: 5024734127510466783, guid: 7160cf65c3547b443af6c6a09e649dd8, type: 3}
-    layout: 2
+    layout: 0
     useTypewriterEffect: 1
     typewriterCharsPerSecond: 30
+    pageAudio: {fileID: 0}
+    waitForPageAudio: 0
   - speaker: 0
     expression: 0
     text: 'GAME CLEAR '
-    fontSize: 45
+    fontSize: 120
     image: {fileID: 0}
+    fullScreenBackground: {fileID: 2800000, guid: 6b7a15c8035db4894a37228f7652c64a, type: 3}
+    fullScreenOverlay: {fileID: 2800000, guid: 5a943e5167aa34c6d95ab493f528cc18, type: 3}
+    fullScreenForeground: {fileID: 2800000, guid: aad80aa475ee744e4aec768b72afd635, type: 3}
     playerSpriteOverride: {fileID: 5024734127510466783, guid: 7160cf65c3547b443af6c6a09e649dd8, type: 3}
-    layout: 2
+    layout: 0
     useTypewriterEffect: 1
     typewriterCharsPerSecond: 30
+    pageAudio: {fileID: 8300000, guid: eb9d8957e8cd84f20943128270823b11, type: 3}
+    waitForPageAudio: 1

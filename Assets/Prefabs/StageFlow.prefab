@@ -968,7 +968,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: Retry
+  m_Text: Back to Title
 --- !u!1 &4072449094830538432
 GameObject:
   m_ObjectHideFlags: 0
@@ -1275,7 +1275,7 @@ GameObject:
   - component: {fileID: 6938342291521557637}
   - component: {fileID: 9100000000000000005}
   m_Layer: 0
-  m_Name: RetryBtn
+  m_Name: TitleBtn
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1385,7 +1385,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 5131299604931573627}
         m_TargetAssemblyTypeName: StageManager, Assembly-CSharp
-        m_MethodName: OnRetry
+        m_MethodName: OnTitle
         m_Mode: 0
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
