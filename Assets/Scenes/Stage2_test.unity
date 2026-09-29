@@ -1789,7 +1789,7 @@ PrefabInstance:
     - target: {fileID: 6080677848254731972, guid: 90ba1bdb9c592894081e1b02791dece2, type: 3}
       propertyPath: textBoxPrefab
       value: 
-      objectReference: {fileID: 387517105}
+      objectReference: {fileID: 8823166850140176805, guid: 5a13c08155e98e649861de61ed42dfa9, type: 3}
     - target: {fileID: 7885771644416257950, guid: 90ba1bdb9c592894081e1b02791dece2, type: 3}
       propertyPath: m_Name
       value: DialogueSystem
@@ -2438,17 +2438,6 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 1551965042745076561, guid: 5a13c08155e98e649861de61ed42dfa9, type: 3}
   m_PrefabInstance: {fileID: 387517103}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &387517105 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 8823166850140176805, guid: 5a13c08155e98e649861de61ed42dfa9, type: 3}
-  m_PrefabInstance: {fileID: 387517103}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2a544b68873e57649aedf84a817132ed, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SpeakerTextBoxView
 --- !u!114 &390379976
 MonoBehaviour:
   m_ObjectHideFlags: 0
