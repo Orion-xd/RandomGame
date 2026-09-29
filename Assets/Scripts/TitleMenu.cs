@@ -335,9 +335,12 @@ public sealed class TitleMenu : MonoBehaviour
     {
         if (_startRect == null) return false;
         Vector2 position;
-        if (Touchscreen.current != null)
-            position = Touchscreen.current.primaryTouch.position.ReadValue();
-        else if (Mouse.current != null) position = Mouse.current.position.ReadValue();
+        // マウスを優先する。ブラウザ（WebGLビルド）では、実際にはマウスしか使っていなくても
+        // Touchscreen.current がnullでなくなることがあり、タッチを優先すると使われていない
+        // （初期値のままの）座標を見てしまい、ボタン内判定が常に失敗する問題があった
+        // （Unity Editor上では再現しないため、ビルドしてブラウザで再生したときだけ発生していた）。
+        if (Mouse.current != null) position = Mouse.current.position.ReadValue();
+        else if (Touchscreen.current != null) position = Touchscreen.current.primaryTouch.position.ReadValue();
         else return false;
         return RectTransformUtility.RectangleContainsScreenPoint(_startRect, position, null);
     }
