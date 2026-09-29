@@ -30,16 +30,18 @@ public class SpeakerTextBoxView : MonoBehaviour
     public Text Body => body;
 
     /// <summary>話者アイコン・名前欄の表示内容を反映する（本文の余白は別途 GetBodyInset/ApplyBodyInset で扱う）。
-    /// profile が null（ナレーション扱い）なら、アイコン・名前欄とも非表示にする。</summary>
-    public void SetSpeaker(SpeakerRegistry.Profile profile)
+    /// profile が null（ナレーション扱い）なら、アイコン・名前欄とも非表示にする。
+    /// expression はそのキャラクターに用意が無ければ Normal のアイコンに自動でフォールバックする。</summary>
+    public void SetSpeaker(SpeakerRegistry.Profile profile, SpeakerExpression expression = SpeakerExpression.Normal)
     {
-        bool hasIcon = profile != null && profile.icon != null;
+        Sprite icon = profile?.GetIcon(expression);
+        bool hasIcon = icon != null;
         bool hasName = profile != null && !string.IsNullOrEmpty(profile.displayName);
 
         if (speakerIcon != null)
         {
             speakerIcon.enabled = hasIcon;
-            if (hasIcon) speakerIcon.sprite = profile.icon;
+            if (hasIcon) speakerIcon.sprite = icon;
         }
         if (speakerName != null)
         {

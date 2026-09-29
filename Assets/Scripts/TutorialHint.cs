@@ -31,8 +31,12 @@ public class TutorialHint : MonoBehaviour
              "表示名・アイコンは SpeakerRegistry（Assets/Resources/SpeakerRegistry.asset）で一括管理している。" +
              "チュートリアルは基本的に勇者が話す想定のため既定値は Hero")]
     [SerializeField] private SpeakerId speaker = SpeakerId.Hero;
+    [Tooltip("このヒントでの表情。話者にその表情のアイコンが登録されていなければ Normal に" +
+             "フォールバックする（SpeakerRegistry参照）")]
+    [SerializeField] private SpeakerExpression expression = SpeakerExpression.Normal;
     [Header("内容")]
-    [Tooltip("画面上部に表示するヒントテキスト")]
+    [TextArea(2, 6)]
+    [Tooltip("画面上部に表示するヒントテキスト。改行可")]
     [SerializeField] private string hintText;
 
     [Header("DashOverPit / JumpOverPit / ClimbLedge 用")]
@@ -186,7 +190,7 @@ public class TutorialHint : MonoBehaviour
         bool actionReady = _playerQueue == null || _playerQueue.IsUnlocked(RequiredAction);
 
         if (near && actionReady)
-            _hintUI.RequestShow(this, hintText, _proximityCol.Distance(_playerCollider).distance, speaker);
+            _hintUI.RequestShow(this, hintText, _proximityCol.Distance(_playerCollider).distance, speaker, expression);
         else
             _hintUI.RequestHide(this);
     }

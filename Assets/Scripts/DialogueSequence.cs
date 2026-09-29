@@ -35,13 +35,27 @@ public class DialogueSequence : ScriptableObject
                  "表示名・アイコンは SpeakerRegistry（Assets/Resources/SpeakerRegistry.asset）で一括管理している")]
         public SpeakerId speaker;
 
+        [Tooltip("このセリフでの表情。話者にその表情のアイコンが登録されていなければ Normal に" +
+                 "フォールバックする（SpeakerRegistry参照）")]
+        public SpeakerExpression expression;
+
         [TextArea(2, 6)]
         [Tooltip("本文。改行可")]
         public string text;
 
+        [Tooltip("本文の文字サイズ。既定は45（テキストボックスのプレハブ設定と同じ）。" +
+                 "0以下を指定した場合も既定のサイズにフォールバックする" +
+                 "（CenteredOnBlackならDialoguePlayerのcenterFontSize）")]
+        public int fontSize = 45;
+
         [Tooltip("このページで表示する一枚絵（任意）。未指定なら直前に指定された絵を継続。" +
                  "BottomTextbox で絵が未指定のうちは仮イラスト（主人公＝左 / ダンジョン＝右）を表示する")]
         public Sprite image;
+
+        [Tooltip("このページの間だけ、シーン上のプレイヤーキャラクターの見た目をこのテクスチャに" +
+                 "一時的に差し替える（任意）。未指定ならプレイヤーの通常の見た目（Animatorによる通常の" +
+                 "アニメーション）のまま。差し替えたページのまま会話が終わっても、自動的に元の見た目へ戻る")]
+        public Sprite playerSpriteOverride;
 
         [Tooltip("表示レイアウト")]
         public Layout layout = Layout.BottomTextbox;
