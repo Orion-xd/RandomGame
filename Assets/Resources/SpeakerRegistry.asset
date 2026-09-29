@@ -15,10 +15,46 @@ MonoBehaviour:
   profiles:
   - id: 0
     displayName: 
-    icon: {fileID: 0}
+    expressions: []
   - id: 1
     displayName: "\u3057\u3070\u308A\u3061\u3083\u3093"
-    icon: {fileID: 21300000, guid: dd8bbcfe5afb7aa48bac987cc006cda5, type: 3}
+    expressions:
+    - expression: 0
+      icon: {fileID: 6313678622981851543, guid: aafdea1ab85386d42a814b2ecd95697f, type: 3}
+    - expression: 1
+      icon: {fileID: -3376691075925889007, guid: 729a07f8086b44e4ba57de335aedcddf, type: 3}
+    - expression: 2
+      icon: {fileID: 7366127416484222529, guid: 2e5bbb326cda1bd4982bf2f7d83e8cf2, type: 3}
+    - expression: 3
+      icon: {fileID: 6964379718634701707, guid: c3fb6a565c39a2540a22bdbf90a6cf30, type: 3}
+    - expression: 4
+      icon: {fileID: -6848733435212840644, guid: 5fe27323e99b9834f8a6857dda40ea65, type: 3}
+    - expression: 5
+      icon: {fileID: 5877632587636999583, guid: cfca5a962537f4f4b9f701541abfad0a, type: 3}
+    - expression: 6
+      icon: {fileID: 7377997450690695903, guid: f87c1a161215b0f42a469ff1d076375d, type: 3}
+    - expression: 7
+      icon: {fileID: 3017924835376149710, guid: a5be7cd754bbd67459b7ce80569482a2, type: 3}
+    - expression: 8
+      icon: {fileID: -7861666786776575807, guid: f61df3b0f22a7c64391aa7ee5d5789d0, type: 3}
+    - expression: 9
+      icon: {fileID: -2378564764119346736, guid: 7770119c41b0c274ea1d8db427ddebb6, type: 3}
+    - expression: 10
+      icon: {fileID: -5039587866963504534, guid: 00684e91f190d0142b0b3f4609bb55dd, type: 3}
+    - expression: 11
+      icon: {fileID: -4653252467672650037, guid: 041a1f73a48082e44a7b9219a9d464ad, type: 3}
+    - expression: 12
+      icon: {fileID: -8610492264483577247, guid: 2c291ec6e781f4f42984086a2d432671, type: 3}
+    - expression: 13
+      icon: {fileID: 1534724073831264998, guid: a12e592d7496d9440bebd03b4beba54c, type: 3}
+    - expression: 14
+      icon: {fileID: 7970076228630116710, guid: d32c69978d336304bbcaa05b78c6610e, type: 3}
+    - expression: 15
+      icon: {fileID: 3864211731372440138, guid: 692e1dbe4b481a949aaa16ee5dc5c724, type: 3}
   - id: 2
     displayName: "\u30E9\u30B9\u30DC\u30B9"
-    icon: {fileID: 21300000, guid: 86a9482f435640a4a8eeaa515710f495, type: 3}
+    expressions:
+    - expression: 1
+      icon: {fileID: -263445372047308761, guid: 466f2ed2a8fc4fa4197b16e6e47174e9, type: 3}
+    - expression: 5
+      icon: {fileID: 5133022804229973702, guid: 66e5222887c9a144eaac4adc803fe726, type: 3}

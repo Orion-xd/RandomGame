@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 86a9482f435640a4a8eeaa515710f495
+guid: 66e5222887c9a144eaac4adc803fe726
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 2597559291928411804
-    second: SpeakerIcon_Boss_0
+      213: 5133022804229973702
+    second: "\u56F0\u308B\uFF08\u30E9\u30B9\u30DB\u3099\u30B9\uFF09_0"
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -46,7 +46,7 @@ TextureImporter:
   nPOTScale: 0
   lightmap: 0
   compressionQuality: 50
-  spriteMode: 1
+  spriteMode: 2
   spriteExtrude: 1
   spriteMeshType: 1
   alignment: 0
@@ -139,13 +139,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: SpeakerIcon_Boss_0
+      name: "\u56F0\u308B\uFF08\u30E9\u30B9\u30DB\u3099\u30B9\uFF09_0"
       rect:
         serializedVersion: 2
-        x: 0
-        y: 0
-        width: 128
-        height: 128
+        x: 142
+        y: 791
+        width: 229
+        height: 209
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -154,8 +154,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: c9e786ed9626c0420800000000000000
-      internalID: 2597559291928411804
+      spriteID: 6c66b166b092c3740800000000000000
+      internalID: 5133022804229973702
       vertices: []
       indices: 
       edges: []
@@ -164,7 +164,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 5e97eb03825dee720800000000000000
+    spriteID: 
     internalID: 0
     vertices: []
     indices: 
@@ -174,7 +174,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      SpeakerIcon_Boss_0: 2597559291928411804
+      "\u56F0\u308B\uFF08\u30E9\u30B9\u30DB\u3099\u30B9\uFF09_0": 5133022804229973702
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

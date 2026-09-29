@@ -24,6 +24,11 @@ public class StageSet : ScriptableObject
         [Tooltip("このステージに初めて入ったときに流す会話（任意。未設定なら会話なし）")]
         public DialogueSequence intro;
 
+        [Tooltip("クリア条件達成後、クリアパネルが出る前に流す会話（任意。未設定なら会話なしで従来通り" +
+                 "即座にクリア演出へ進む）。再生中もゲーム内時間は止めない（敵などは動き続ける）が、" +
+                 "プレイヤーの操作はクリアが確定した瞬間に既に封印されている")]
+        public DialogueSequence outro;
+
         [Tooltip("このステージで抽選するアクション。空ならシーンの MainActionQueue.lottery をそのまま使う。" +
                  "例: ステージ1は Dash のみ、ステージ2は Dash と Attack、ステージ3以降は 3 つ全部")]
         public MainActionType[] allowedActions;
@@ -49,6 +54,9 @@ public class StageSet : ScriptableObject
 
     public DialogueSequence IntroAt(int index)
         => (index >= 0 && index < Count) ? stages[index].intro : null;
+
+    public DialogueSequence OutroAt(int index)
+        => (index >= 0 && index < Count) ? stages[index].outro : null;
 
     /// <summary>そのステージで使えるアクション（＝抽選対象）。未設定（空 / null）なら null を返す。</summary>
     public MainActionType[] AllowedActionsAt(int index)

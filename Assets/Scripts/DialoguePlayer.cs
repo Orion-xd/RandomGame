@@ -71,6 +71,13 @@ public class DialoguePlayer : MonoBehaviour
     private Sprite _lastImage;
     private Font _font;
 
+    // ページごとのプレイヤー見た目の一時差し替え（DialogueSequence.Page.playerSpriteOverride）用。
+    // Animatorは毎フレーム自分で決めたスプライトをSpriteRendererへ書き込み続けるため、差し替え中は
+    // Animator自体を止めて上書きされないようにする（会話終了時 or 差し替え解除時に元へ戻す）。
+    private Animator _playerAnimator;
+    private SpriteRenderer _playerSpriteRenderer;
+    private bool _playerAnimatorWasEnabled;
+
     // 生成した UI
     private GameObject _root;
     private Image _bg;
@@ -79,6 +86,8 @@ public class DialoguePlayer : MonoBehaviour
     private Text _centerText;
     private SpeakerTextBoxView _textBox;
     private Text _hintText;
+    private int _defaultBodyFontSize; // テキストボックスのプレハブに設定されている本文の既定文字サイズ
+    private float _bodyInset; // 本文の左右マージン。テキストボックスのプレハブでBodyに設定されている値をそのまま使う
 
     private void Awake()
     {
@@ -112,6 +121,19 @@ public class DialoguePlayer : MonoBehaviour
         {
             Dispatch();
             return;
+        }
+
+        var playerGo = GameObject.FindGameObjectWithTag("Player");
+        if (playerGo != null)
+        {
+            _playerAnimator = playerGo.GetComponent<Animator>();
+            _playerSpriteRenderer = playerGo.GetComponent<SpriteRenderer>();
+            _playerAnimatorWasEnabled = _playerAnimator != null && _playerAnimator.enabled;
+        }
+        else
+        {
+            _playerAnimator = null;
+            _playerSpriteRenderer = null;
         }
 
         IsPlaying = true;
@@ -230,7 +252,26 @@ public class DialoguePlayer : MonoBehaviour
     {
         IsPlaying = false;
         _root.SetActive(false);
+        ApplyPlayerSpriteOverride(null); // 差し替えたまま会話が終わっても、必ず元のAnimator制御へ戻す
         Dispatch();
+    }
+
+    /// <summary>プレイヤーキャラクターの見た目を一時的に差し替える/元へ戻す。overrideSprite が非nullなら
+    /// Animatorを止めてそのスプライトを直接表示し、nullならAnimatorへ制御を返す（Animatorは毎フレーム
+    /// 自分でスプライトを書き込み続けるため、差し替え中は止めておかないと上書きされてしまう）。</summary>
+    private void ApplyPlayerSpriteOverride(Sprite overrideSprite)
+    {
+        if (_playerSpriteRenderer == null) return;
+
+        if (overrideSprite != null)
+        {
+            if (_playerAnimator != null) _playerAnimator.enabled = false;
+            _playerSpriteRenderer.sprite = overrideSprite;
+        }
+        else if (_playerAnimator != null)
+        {
+            _playerAnimator.enabled = _playerAnimatorWasEnabled;
+        }
     }
 
     private void Dispatch()
@@ -256,6 +297,8 @@ public class DialoguePlayer : MonoBehaviour
         if (p.image != null) _lastImage = p.image;
         Sprite img = centered ? null : _lastImage;
 
+        ApplyPlayerSpriteOverride(p.playerSpriteOverride);
+
         // 背景暗転（上部テキストボックスのときはゲーム画面を見せるので暗転しない）。
         _bg.enabled = !top;
         _bg.color = blackColor;
@@ -271,6 +314,7 @@ public class DialoguePlayer : MonoBehaviour
         _centerText.enabled = centered;
         if (centered)
         {
+            _centerText.fontSize = p.fontSize > 0 ? p.fontSize : centerFontSize; // 0以下なら既定サイズ
             CenterTextHorizontally(_centerText, 0f, 0f, p.text ?? ""); // 全文表示時に中央へ来る位置へ左端を固定（文字送り中の左右ブレ防止）
             SetPageText(_centerText, p.text, p.useTypewriterEffect, p.typewriterCharsPerSecond);
         }
@@ -282,16 +326,16 @@ public class DialoguePlayer : MonoBehaviour
         // SpeakerRegistry から解決する（誰がどのアイコンかはここでは決めない）。
         bool hasSpeaker = box && p.speaker != SpeakerId.None;
         var profile = hasSpeaker ? SpeakerRegistry.Get(p.speaker) : null;
-        _textBox.SetSpeaker(profile);
+        _textBox.SetSpeaker(profile, p.expression);
         if (box)
         {
             LayoutBox(top);
-            // 話者の有無によらず、本文の左右は常に同じだけ空けてアイコン欄ぶんのスペースを確保する
-            // （ユーザー指定）。中央揃えの見た目を保ったまま文字送りしてもブレないよう、
-            // CenterTextHorizontally で「全文表示時にちょうど収まる位置」へあらかじめ左端を固定してから
-            // 文字送りを始める。
-            float inset = _textBox.GetBodyInset();
-            CenterTextHorizontally(_textBox.Body, inset, inset, p.text ?? "");
+            _textBox.Body.fontSize = p.fontSize > 0 ? p.fontSize : _defaultBodyFontSize; // 0以下なら既定サイズ（プレハブ設定）
+            // 話者の有無によらず、本文の左右は常に同じだけ空ける（ユーザー指定）。マージンの幅は
+            // プレハブのBodyに直接設定されている値（_bodyInset）を使う。中央揃えの見た目を保ったまま
+            // 文字送りしてもブレないよう、CenterTextHorizontally で「全文表示時にちょうど収まる位置」へ
+            // あらかじめ左端を固定してから文字送りを始める。
+            CenterTextHorizontally(_textBox.Body, _bodyInset, _bodyInset, p.text ?? "");
             SetPageText(_textBox.Body, p.text, p.useTypewriterEffect, p.typewriterCharsPerSecond); // 話者名は対象外（上で即時表示済み）、台詞本文だけ文字送りする
         }
 
@@ -383,6 +427,13 @@ public class DialoguePlayer : MonoBehaviour
         // 明示的に設定する（プレハブ自体に既に設定済みだが、二重の安全策として）。
         if (_textBox.SpeakerName != null) _textBox.SpeakerName.font = _font;
         if (_textBox.Body != null) _textBox.Body.font = _font;
+        // ページごとの文字サイズ指定（DialogueSequence.Page.fontSize）が0以下のときに使う既定値として、
+        // プレハブに設定されている本文の文字サイズをそのまま控えておく。
+        _defaultBodyFontSize = _textBox.Body != null ? _textBox.Body.fontSize : 45;
+        // 本文の左右マージンも、アイコンサイズから自動計算するのではなく、プレハブのBodyに直接
+        // 設定されている値（offsetMin.x）をそのまま使う。インスペクターでPrefab Modeを見ながら
+        // 直接調整できるようにするため（ユーザー指定）。
+        _bodyInset = _textBox.Body != null ? ((RectTransform)_textBox.Body.transform).offsetMin.x : 0f;
 
         _hintText = NewText("Hint", _root.transform, hintFontSize, TextAnchor.LowerRight);
         _hintText.text = "Click / Space / Enter ▶";
