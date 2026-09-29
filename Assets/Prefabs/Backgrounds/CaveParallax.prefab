@@ -45,8 +45,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ParallaxBackground
   targetCamera: {fileID: 0}
+  verticalFollowTarget: {fileID: 0}
   followHorizontal: 1
-  followVertical: 0
   foreground:
     name: "\u8FD1\u666F"
     sprite: {fileID: 2994913123753146854, guid: face48971f429f249b3b19a8a1b4480b, type: 3}

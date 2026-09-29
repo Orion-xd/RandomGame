@@ -358,7 +358,6 @@ MonoBehaviour:
   xOffset: 0
   yOffset: 0
   followHorizontal: 1
-  followVertical: 0
 --- !u!114 &538298670
 MonoBehaviour:
   m_ObjectHideFlags: 0
