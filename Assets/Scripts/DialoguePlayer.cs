@@ -81,6 +81,7 @@ public class DialoguePlayer : MonoBehaviour
     private bool _typewriterActive;    // まだ全文表示し終えていないか
     private float _typewriterCharsPerSecond; // そのページの速さ（DialogueSequence.Page から渡される）
     private int _typewriterRevealCount;
+    private bool _typewriterReserveFullTextLayout;
 
     /// <summary>現在のページの本文が最後まで表示し終えているか（タイプライター無効時は常に true）。</summary>
     private bool IsFullyRevealed => !_typewriterActive;
@@ -229,7 +230,7 @@ public class DialoguePlayer : MonoBehaviour
         if (revealCount <= _typewriterRevealCount) return;
 
         GameAudio.StartDialogueTextSfx();
-        _typewriterTarget.text = _typewriterFullText.Substring(0, revealCount);
+        SetTypewriterVisibleCount(revealCount);
         _typewriterRevealCount = revealCount;
         if (revealCount >= _typewriterFullText.Length)
         {
@@ -249,7 +250,12 @@ public class DialoguePlayer : MonoBehaviour
 
     /// <summary>対象の Text にページ本文をセットする。`useTypewriter`/`charsPerSecond`（そのページの設定）に応じて
     /// 1文字ずつ表示するか即時表示するかを切り替える。</summary>
-    private void SetPageText(Text target, string fullText, bool useTypewriter, float charsPerSecond)
+    private void SetPageText(
+        Text target,
+        string fullText,
+        bool useTypewriter,
+        float charsPerSecond,
+        bool reserveFullTextLayout = false)
     {
         fullText ??= "";
         _typewriterTarget = target;
@@ -257,18 +263,33 @@ public class DialoguePlayer : MonoBehaviour
         _typewriterElapsed = 0f;
         _typewriterCharsPerSecond = charsPerSecond;
         _typewriterRevealCount = 0;
+        _typewriterReserveFullTextLayout = reserveFullTextLayout;
         GameAudio.StopDialogueTextSfx();
 
         if (useTypewriter && fullText.Length > 0)
         {
             _typewriterActive = true;
-            target.text = "";
+            SetTypewriterVisibleCount(0);
         }
         else
         {
             _typewriterActive = false;
             target.text = fullText;
         }
+    }
+
+    private void SetTypewriterVisibleCount(int visibleCount)
+    {
+        visibleCount = Mathf.Clamp(visibleCount, 0, _typewriterFullText.Length);
+        if (!_typewriterReserveFullTextLayout || visibleCount >= _typewriterFullText.Length)
+        {
+            _typewriterTarget.text = _typewriterFullText.Substring(0, visibleCount);
+            return;
+        }
+
+        string visible = _typewriterFullText.Substring(0, visibleCount);
+        string hidden = _typewriterFullText.Substring(visibleCount);
+        _typewriterTarget.text = visible + "<color=#00000000>" + hidden + "</color>";
     }
 
     private void Advance()
@@ -362,8 +383,9 @@ public class DialoguePlayer : MonoBehaviour
         if (centered)
         {
             _centerText.fontSize = p.fontSize > 0 ? p.fontSize : centerFontSize; // 0以下なら既定サイズ
-            CenterTextHorizontally(_centerText, 0f, 0f, p.text ?? ""); // 全文表示時に中央へ来る位置へ左端を固定（文字送り中の左右ブレ防止）
-            SetPageText(_centerText, p.text, p.useTypewriterEffect, p.typewriterCharsPerSecond);
+            _centerText.alignment = TextAnchor.MiddleCenter;
+            SetPageText(_centerText, p.text, p.useTypewriterEffect, p.typewriterCharsPerSecond,
+                reserveFullTextLayout: true);
         }
 
         // テキストボックス（箱・話者アイコン・名前欄・本文の見た目は共有ビュー SpeakerTextBoxView に委譲）。
@@ -404,39 +426,6 @@ public class DialoguePlayer : MonoBehaviour
         rt.anchorMax = new Vector2(0.92f, top ? 0.97f : 0.32f);
         rt.offsetMin = Vector2.zero;
         rt.offsetMax = Vector2.zero;
-    }
-
-    /// <summary>
-    /// 中央揃え（`TextAnchor.MiddleCenter`）のまま文字送りすると、文字数が増えるたびに中央の基準が
-    /// ズレて左右にブレて見える問題がある（`CenteredOnBlack` の `_centerText` で最初に発覚）。
-    ///
-    /// 対策：全文をあらかじめ測って必要な横幅を求め、確保領域（`leftBound`/`rightBound` を追加で
-    /// 差し引いた残り）の中でその横幅ぶんだけ中央寄せした位置に「左端」を固定する
-    /// （`offsetMin`/`offsetMax` で領域自体を狭める）。揃えは `MiddleLeft` に変更し、その固定された
-    /// 左端から文字を生やしていく。全文表示時にちょうど中央に収まるので、見た目は変えずに
-    /// 文字送り中のブレだけを無くせる。全文が確保領域より広い（改行が要る）場合は `pad=0` になり、
-    /// 確保領域いっぱいを使う左揃えにフォールバックする。
-    /// `leftBound`/`rightBound` は中央寄せ計算の前に確保しておきたい追加の左右マージン（px）。
-    /// 現在は `_centerText`（CenteredOnBlack、アイコン無しなので 0/0 を渡す）専用。テキストボックス
-    /// 本文（Body）は固定サイズ・固定位置（`bodySizeTop`等）を使う方式に変更したため、ここは通らない。
-    /// </summary>
-    private static void CenterTextHorizontally(Text target, float leftBound, float rightBound, string fullText)
-    {
-        var rt = (RectTransform)target.transform;
-
-        // 一旦 leftBound/rightBound だけの inset に戻し、その残り領域の横幅を測る。
-        rt.offsetMin = new Vector2(leftBound, rt.offsetMin.y);
-        rt.offsetMax = new Vector2(-rightBound, rt.offsetMax.y);
-        float availableWidth = rt.rect.width;
-
-        // 全文の横幅を測る（Text.preferredWidth は改行を無視した「1行に並べた場合」の幅）。
-        target.text = fullText;
-        float textWidth = Mathf.Min(target.preferredWidth, availableWidth);
-
-        float pad = Mathf.Max(0f, (availableWidth - textWidth) / 2f);
-        rt.offsetMin = new Vector2(leftBound + pad, rt.offsetMin.y);
-        rt.offsetMax = new Vector2(-(rightBound + pad), rt.offsetMax.y);
-        target.alignment = TextAnchor.MiddleLeft;
     }
 
     // ── UI 構築（実行時生成） ─────────────────────────────
