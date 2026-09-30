@@ -10,7 +10,8 @@ using UnityEngine.SceneManagement;
 ///
 /// 解放仕様：先頭ステージは常にプレイ可能。あるステージをクリアすると次のステージが解放される
 ///   （＝ステージ i は「i==0 もしくは ステージ i-1 がクリア済み」なら解放）。
-///   クリア状況はステージごとの bool（PlayerPrefs にビットマスクで保存。アプリ再起動後も維持）。
+///   クリア状況・会話既読はステージごとの bool（**メモリ上の static フィールドのみで保持。
+///   セーブ機能は無く、ページの再読み込みやブラウザの再起動で必ず初期状態に戻る**）。
 ///   テスト用に ResetProgress() で全消去。開発者はステージ選択画面の DevStageClearToggles で自由に変更可。
 /// </summary>
 public static class GameFlow
@@ -20,9 +21,6 @@ public static class GameFlow
     public const string StageSelectScene = "StageSelect";
 
     private const string StageSetResourcePath = "StageSet";
-    private const string ClearedKey = "RandomGame.ClearedStagesMask";
-    private const string SeenIntroKey = "RandomGame.SeenIntroMask";
-    private const string SeenPrologueKey = "RandomGame.SeenPrologue";
 
     private static StageSet _stages;
 
@@ -60,11 +58,7 @@ public static class GameFlow
     public static int StageCount => Stages != null ? Stages.Count : 0;
     public static bool HasNextStage => CurrentStageIndex + 1 < StageCount;
 
-    private static int ClearedMask
-    {
-        get => PlayerPrefs.GetInt(ClearedKey, 0);
-        set { PlayerPrefs.SetInt(ClearedKey, value); PlayerPrefs.Save(); }
-    }
+    private static int ClearedMask;
 
     /// <summary>そのステージをクリア済みか。</summary>
     public static bool IsStageCleared(int index)
@@ -102,13 +96,9 @@ public static class GameFlow
     /// <summary>ステージクリア時に呼ぶ。そのステージを「クリア済み」にする（＝次が解放される）。</summary>
     public static void MarkStageCleared(int index) => SetStageCleared(index, true);
 
-    // ── 会話の既読フラグ（初回だけ再生するため。PlayerPrefs に保存。開発者用トグルからも変更可） ──
+    // ── 会話の既読フラグ（初回だけ再生するため。メモリ上のみで保持。開発者用トグルからも変更可） ──
 
-    private static int SeenIntroMask
-    {
-        get => PlayerPrefs.GetInt(SeenIntroKey, 0);
-        set { PlayerPrefs.SetInt(SeenIntroKey, value); PlayerPrefs.Save(); }
-    }
+    private static int SeenIntroMask;
 
     /// <summary>そのステージの開始時会話を既に見たか（初回判定）。</summary>
     public static bool HasSeenIntro(int index)
@@ -128,14 +118,10 @@ public static class GameFlow
     public static void MarkIntroSeen(int index) => SetIntroSeen(index, true);
 
     /// <summary>プロローグ会話を既に見たか。既読なら「ゲームスタート」でプロローグをスキップする。</summary>
-    public static bool HasSeenPrologue => PlayerPrefs.GetInt(SeenPrologueKey, 0) != 0;
+    public static bool HasSeenPrologue { get; private set; }
 
     /// <summary>プロローグ会話の既読フラグを直接セットする（開発者用トグル / 再生後の自動セット）。</summary>
-    public static void SetPrologueSeen(bool seen)
-    {
-        PlayerPrefs.SetInt(SeenPrologueKey, seen ? 1 : 0);
-        PlayerPrefs.Save();
-    }
+    public static void SetPrologueSeen(bool seen) => HasSeenPrologue = seen;
 
     /// <summary>プロローグ会話を「見た」ことにする。</summary>
     public static void MarkPrologueSeen() => SetPrologueSeen(true);
@@ -144,18 +130,16 @@ public static class GameFlow
     /// ステージ選択画面の開発者用リセットボタンが呼ぶ。</summary>
     public static void ResetStageProgress()
     {
-        PlayerPrefs.DeleteKey(ClearedKey);
-        PlayerPrefs.DeleteKey(SeenIntroKey);
-        PlayerPrefs.Save();
+        ClearedMask = 0;
+        SeenIntroMask = 0;
     }
 
     /// <summary>クリア状況・会話既読（プロローグ含む）を全てリセット（先頭のみ解放・全会話が初回状態）。
-    /// テスト用 / FreshBuildGuard（新ビルド初回起動）用。</summary>
+    /// テスト用。</summary>
     public static void ResetProgress()
     {
         ResetStageProgress();
-        PlayerPrefs.DeleteKey(SeenPrologueKey);
-        PlayerPrefs.Save();
+        HasSeenPrologue = false;
     }
 
     // すべての画面遷移は SceneTransition 経由（暗転 → 読み込み → 明転）。

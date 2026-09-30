@@ -368,7 +368,7 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
   - **`BackButton`**: 画面**左下**（anchor (0,0), pivot (0.5,0.5), anchoredPos (190,80) ＝左端・下端から 40px, 300×80、Stage ボタンと同スタイル）。`onClick` → `StageSelectMenu.BackToTitle()` → `GameFlow.GoTitle()`。`MenuNavigation` のカーソル対象（ステージ行の下、リセットボタンの下）。
   - **`DevProgressResetButton`（開発者用）**: `BackButton` の少し上（`gapAboveBackButton` 16px, 300×60, 暗赤）に実行時生成する「Reset story & clear」ボタン。押すと `GameFlow.ResetStageProgress()`（全ステージのクリアフラグ＋ステージ開始会話の既読を false。**プロローグ既読は残す**）＋ 画面上の全チェックボックス（`DevStageClearToggles.ResetAll()` / `DevStorySeenToggles.ResetAll()`）の見た目もリセット ＋ `RefreshLocks()`。表示条件は `DeveloperSettings.Active`。生成後 `MenuNavigation.AddButton()` で**カーソル対象に登録**（ステージ行の下、`BackButton` の上）。
 - **ステージ解放**: 最初は Stage1 のみ。あるステージをクリアすると次が解放される。
-  - クリア状況は**ステージごとの bool**（`GameFlow`、`PlayerPrefs` キー `RandomGame.ClearedStagesMask` にビットマスクで保存＝アプリ再起動後も維持）。`IsStageCleared(i)` / `SetStageCleared(i,b)` / `MarkStageCleared(i)`（= Set true。クリア時 `StageManager.Clear()` から呼ぶ）/ `ResetProgress()`（テスト用に全消去）。
+  - クリア状況は**ステージごとの bool**（`GameFlow` の static フィールドにビットマスクで保持。**セーブ機能は無く、メモリ上のみ＝ページの再読み込みやブラウザの再起動で必ず消える**）。`IsStageCleared(i)` / `SetStageCleared(i,b)` / `MarkStageCleared(i)`（= Set true。クリア時 `StageManager.Clear()` から呼ぶ）/ `ResetProgress()`（テスト用に全消去）。
   - **解放判定**: `IsStageUnlocked(i)` = `i==0 || IsStageCleared(i-1)`。`UnlockedStageIndex` は「連続して解放されている最大 index」（表示・カーソル初期位置の目安、派生値）。
   - `GameFlow.LoadStage` はロック中の index を無視する（多重防御）。
   - `StageSelectMenu`（`stageButtons[]` を index 順に割当、`StageButtons` で公開）が `Start`/`RefreshLocks()` で未解放ステージのボタンを `interactable = false` にする（今は Unity 既定のグレーアウト表示のみ）。
@@ -376,12 +376,8 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
   - チェック = そのステージがクリア済み（`GameFlow.SetStageCleared`）。クリア済みステージは自動でチェック済み。開発者が自由に付け外しでき、変更で即 `RefreshLocks()`。
   - 「Stage1 と 3 だけチェック」のような非現実的状態も許容（整合はとらない。トグルは `IsStageCleared` を素直に反映、ボタン解放は `IsStageUnlocked` ルール由来なので、その場合 Stage3 は「チェック済みだがロック」になる）。
   - **表示条件は `DeveloperSettings.Active`** ＝「エディタ内 かつ `Assets/Resources/DeveloperSettings.asset` の `developerMode == true`」（：ScriptableObject 化。インスペクターでその 1 アセットの bool を切り替えるだけ、再コンパイル不要）。エディタ外ビルドでは値に関係なく常に無効（`Active` が `#if UNITY_EDITOR` ガード）。開発者用3コンポーネント（`DevStageClearToggles` / `DevStorySeenToggles` / `DevProgressResetButton`）はこの1スイッチだけに従う。プレイヤーがクリア状況を書き換える経路はここだけ。
-- **ビルド版の初回起動リセット（`FreshBuildGuard`、`Debug.isDebugBuild`直結方式へ再設計）**: エディタ**外**のビルドで、起動時（`RuntimeInitializeOnLoadMethod` / `BeforeSceneLoad`）に**Development Buildのときだけ**スタンプ文字列を `PlayerPrefs` キー `RandomGame.BuildStamp` と照合し、違えば `GameFlow.ResetProgress()` ＋記録し直す。**エディタ内は無効**（`#if UNITY_EDITOR`）。unityroom（WebGL）想定＝PlayerPrefs はブラウザの IndexedDB にページ URL 単位で保存。
-  - **設計方針**: 以前は`FreshBuildGuard.Policy`という独立した`const`（`OnEveryBuild`/`OnTokenChange`/`Disabled`の3択→一度`AlwaysReset`/`NeverReset`の2択へ簡素化）を手動でリリース前に切り替える方式だったが、**「切り替え忘れたまま配布すると既存プレイヤーの進行状況ごと全消去してしまう」事故が構造的に起こり得た**（確認ダイアログはあったが、それでも押し進めればビルドできてしまい「絶対に消えない」保証にはならなかった）。これを無くすため、**切り替える定数自体を廃止し、`Debug.isDebugBuild`（Unity標準のランタイムプロパティ、Development Buildなら`true`）に直結**させた:
-    - Development Build（`Debug.isDebugBuild == true`）: スタンプ＝`"build:" + Application.buildGUID`（buildGUIDは毎ビルド自動採番）と前回のスタンプを比較し、違えばリセット。ビルドし直すたびに毎回リセットされる（開発用）。
-    - それ以外の通常ビルド（`Debug.isDebugBuild == false`）: **一切リセットしない**。配布して上書きアップデートしても、既にプレイ済みのプレイヤーの進行状況は絶対に消えない（切り替える人間の判断が介在しないため、消し忘れという事故が原理的に起こらない）。
-  - **ビルド前の確認ダイアログ（`FreshBuildGuardBuildCheck.cs`）は削除済み**: 通常ビルドが無条件で安全になったため、リリース前の確認自体が不要になった。
-  - **エディタのPlayとの混入について**: エディタPlay中のPlayerPrefsは、実際のビルド版とは物理的に別のストレージ（Windowsならレジストリキーが別、WebGLならそもそもブラウザ側の別ストレージ）に保存されるため、この機構の有無に関係なく構造的に混ざりようがない。
+- **セーブ機能は無い（意図的な仕様）**: クリア状況・各ステージ開始会話の既読・プロローグ既読は、いずれも `GameFlow` の static フィールドにメモリ上でのみ保持する（`PlayerPrefs` 等の永続化ストレージは一切使わない）。よってページの再読み込みやブラウザの再起動を行うと必ず初期状態（Stage1のみ解放・全会話未読）に戻る。
+  - 以前は `PlayerPrefs` にビットマスクで保存し、アプリ再起動後も進行状況が残る設計だった（初回起動時だけ `FreshBuildGuard` が `Debug.isDebugBuild` を見てリセットする仕組みも存在した）が、**セーブ機能自体を撤去する方針に変更**したため両方とも削除した（`FreshBuildGuard.cs` は削除済み）。
 - **ボタンの `onClick` はすべて永続 UnityEvent リスナー**（Inspector に表示される。`UnityEventTools.AddPersistentListener` で設定済み）。結果画面の各ボタンも同様に `StageManager` の `OnNextStage`/`OnRetry`/`OnStageSelect` を指す。EventSystem は `InputSystemUIInputModule` + `Assets/InputSystem_Actions.inputactions`。
 - **Stage1（チュートリアルステージ化）**: 地面は x セル [-19,7) ＋ [10,30)（落とし穴 x≈7〜10 あり、変更なし）。**開始時に使えるアクションは Dash のみ**（`allowedActions`は変更なしで従来どおり）で、道中でアイテムを拾うたびにアクションが1つずつ解放されていき、同時にそのアクションの使い方を教えるヒントが画面上部に表示される、スプラトゥーン系チュートリアル形式の構成に作り替えた。詳細な仕組みは §9-3「チュートリアルシステム」参照。レイアウト（x座標）:
   - `Enemy1`（@x≈-4、`EnemyPatrol`を無効化して静止）に子`ProximityZone`（`TutorialHint(DashPastEnemy)`、近接判定用Collider 6×3）＝「ダッシュで敵をかわす」
@@ -485,11 +481,11 @@ if (next==Jump && !jumpGroundBypass && !jumpGrounded) return;  // 発動その�
 **プロローグ**: `Title`「Game Start」→ `GameFlow.StartGame()` → `Prologue` シーン → `PrologueRunner` が `StageSet.prologue` を再生 → 終了で `GameFlow.GoStageSelect()`。`StartGame()` は Prologue が Build Settings に無ければ StageSelect へ直行。
 
 **ステージ開始会話**: `StageManager.Start()` → `TryPlayIntro()`。
-- そのステージを**初めて開いたときだけ**再生。既読は `GameFlow` が `PlayerPrefs` キー `RandomGame.SeenIntroMask`（ビットマスク）で保持。`HasSeenIntro(i)` / `SetIntroSeen(i,b)` / `MarkIntroSeen(i)`。`GameFlow.ResetProgress()` はクリア状況・プロローグ既読と一緒にこれも消す。
+- そのステージを**初めて開いたときだけ**再生。既読は `GameFlow` の static フィールド（ビットマスク、メモリ上のみ）で保持。`HasSeenIntro(i)` / `SetIntroSeen(i,b)` / `MarkIntroSeen(i)`。`GameFlow.ResetProgress()` はクリア状況・プロローグ既読と一緒にこれも消す。
 - 会話中は `Time.timeScale = 0`（プレイヤーも敵も停止）。読み終わると `OnIntroFinished()` で `MarkIntroSeen` → `timeScale = 1`。会話が無い / `DialoguePlayer` が居ないステージは即「既読」にしてスキップ。
 - `intro` が未設定のステージは会話なしで通常開始。
 
-**プロローグの既読フラグ**: `GameFlow.HasSeenPrologue` / `SetPrologueSeen(b)` / `MarkPrologueSeen()`（`PlayerPrefs` キー `RandomGame.SeenPrologue`、0/1）。
+**プロローグの既読フラグ**: `GameFlow.HasSeenPrologue` / `SetPrologueSeen(b)` / `MarkPrologueSeen()`（static bool、メモリ上のみ）。
 - **既読ならプロローグをスキップ**: `GameFlow.StartGame()` は未読のときだけ `Prologue` シーンを読み込む（既読なら StageSelect へ直行）。`PrologueRunner` も冒頭で既読チェック（直接 Play 時の保険）。プロローグを最後まで読むと `MarkPrologueSeen()`。
 
 **開発者用の既読トグル（`DevStorySeenToggles`）**: `DevStageClearToggles`（クリア状況）と同じ流儀の実行時生成 `Toggle`。**表示条件は `DeveloperSettings.Active`**（エディタ内 かつ `Resources/DeveloperSettings.asset` の `developerMode`。`DevStageClearToggles` / `DevProgressResetButton` と共通）。`Start()` で `!DeveloperSettings.Active` なら自身を `enabled = false` にして何も生成しない。同じ階層に `StageSelectMenu` があるかで動作を自動判定:
@@ -642,7 +638,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | `ActionBarUI` | HUD_Canvas/ActionBar | アクション先読み表示。`queue`（Player の MainActionQueue）は未設定なら Tag=Player から自動取得。`controller`（MainActionController）も同様に自動取得。クールタイム/コンボ受付の可視化については§2-2参照 |
 | `HealthUI` | HUD_Canvas/HealthPanel | 体力アイコン表示。`playerHealth`（Player の PlayerHealth）は未設定なら Tag=Player から自動取得 |
 | `StageSet` | ScriptableObject（`Assets/Resources/StageSet.asset`） | ステージの並び。`stages[]` = `displayName` + `sceneName` + `intro`（会話）+ `allowedActions`（そのステージの抽選対象）+ `disableCombos`。全体の `prologue`。`AllowedActionsAt`/`DisableCombosAt`/`IndexOfScene`。GameFlow が Resources.Load |
-| `GameFlow` | (static クラス) | 画面遷移（`SceneTransition.Go` 経由）+ ステージ解放 + 会話既読。`Stages`（StageSet）、`StageCount`、`StartGame`（未読ならPrologue経由）/`LoadStage`/`RetryStage`/`NextStage`/`GoStageSelect`/`GoTitle`、`CurrentStageIndex`、`ActiveStageIndex`（アクティブシーン名から StageSet index を解決）、クリア状況（`IsStageCleared`/`SetStageCleared`/`MarkStageCleared`、PlayerPrefs ビットマスク）、`IsStageUnlocked`/`UnlockedStageIndex`、ステージ会話既読（`HasSeenIntro`/`SetIntroSeen`/`MarkIntroSeen`、ビットマスク）、プロローグ既読（`HasSeenPrologue`/`SetPrologueSeen`/`MarkPrologueSeen`、0/1）、`ResetStageProgress`（クリア＋ステージ既読の2キー消去、プロローグは残す）、`ResetProgress`（3キー消去） |
+| `GameFlow` | (static クラス) | 画面遷移（`SceneTransition.Go` 経由）+ ステージ解放 + 会話既読。`Stages`（StageSet）、`StageCount`、`StartGame`（未読ならPrologue経由）/`LoadStage`/`RetryStage`/`NextStage`/`GoStageSelect`/`GoTitle`、`CurrentStageIndex`、`ActiveStageIndex`（アクティブシーン名から StageSet index を解決）、クリア状況（`IsStageCleared`/`SetStageCleared`/`MarkStageCleared`、static int ビットマスク・メモリ上のみ）、`IsStageUnlocked`/`UnlockedStageIndex`、ステージ会話既読（`HasSeenIntro`/`SetIntroSeen`/`MarkIntroSeen`、ビットマスク）、プロローグ既読（`HasSeenPrologue`/`SetPrologueSeen`/`MarkPrologueSeen`、static bool）、`ResetStageProgress`（クリア＋ステージ既読をリセット、プロローグは残す）、`ResetProgress`（全部リセット）。**セーブ機能は無く、いずれもページの再読み込み・ブラウザの再起動で初期状態に戻る** |
 | `DeveloperSettings` | ScriptableObject（`Assets/Resources/DeveloperSettings.asset`） | 開発者機能の総合スイッチ。`developerMode` bool をインスペクター編集。静的 `Active` = エディタ内 かつ `developerMode`（`#if UNITY_EDITOR` ガード。ビルドでは常に false）。`DevStageClearToggles` / `DevStorySeenToggles` / `DevProgressResetButton` が従う |
 | `DialogueSequence` | ScriptableObject（`Assets/Dialogue/*.asset`） | 会話 1 本。`pages[]` = `speaker` + `text` + `image` + `layout` + `useTypewriterEffect`（既定 true）+ `typewriterCharsPerSecond`（既定 30）（ページごとに文字送り演出の on/off と速さ） |
 | `DialoguePlayer` | Prologue シーン, 各ステージシーン | 会話再生（UI は実行時生成）。`Play(seq, onComplete)`、静的 `IsPlaying`。送り＝Space/Enter/左クリック（画面任意位置）。`Play()` で `InputLock.LockFor(inputLockDuration=0.25)`（0.5→0.25 へ半減）。日本語表示用に `Resources.Load<Font>("Fonts/NotoSansJP-Regular")` を使用（§9-2）。1文字ずつの文字送り演出（on/off・速さともにページ単位＝`DialogueSequence.Page.useTypewriterEffect`/`.typewriterCharsPerSecond`、§9-2） |
@@ -652,7 +648,6 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 | `DevStageClearToggles` | StageSelect/Canvas | 【開発者用】各ステージボタンにクリア状況チェックボックス＋"clear" ラベルを実行時生成。`public ResetAll()`。表示は `DeveloperSettings.Active` |
 | `DevStorySeenToggles` | StageSelect/Canvas ＋ Title/Canvas | 【開発者用】会話の既読トグル＋"story" ラベルを実行時生成。StageSelect＝各ステージの開始会話、Title＝プロローグ。`public ResetAll()`（StageSelect 側のみ実効）。表示は `DeveloperSettings.Active` |
 | `DevProgressResetButton` | StageSelect/Canvas | 【開発者用】BackButton の少し上に「Reset story & clear」ボタンを実行時生成し `MenuNavigation.AddButton` で登録。`GameFlow.ResetStageProgress()` ＋ 両トグルの `ResetAll()`。表示は `DeveloperSettings.Active` |
-| `FreshBuildGuard` | (static, `RuntimeInitializeOnLoadMethod`) | ビルド版のみ。**`Debug.isDebugBuild`に直結**：Development Buildなら起動時に`GameFlow.ResetProgress()`、それ以外の通常ビルドは無条件で絶対にリセットしない（切り替える定数を廃止し、消し忘れ事故を構造的に排除）。エディタ内は無効 |
 | `StageManager` | 各ステージ/StageFlow | クリア/失敗判定・結果画面表示・結果ボタン処理・落下死判定（killY）・初回入場時の開始会話（`TryPlayIntro`, `Time.timeScale=0`）・ステージ開始時 / 会話終了時に `InputLock.LockFor(inputLockDuration=0.25)`（0.5→0.25 へ半減）。体力0での失敗は`Fail()`とは別経路（`HandlePlayerHpDied`→死亡アニメーション→Animation Eventで`HandlePlayerAnimationEvent`がパネル表示、§2-7）。**`Clear()`も同様の方式へ変更**（`PlayClearAnimation()`→クリアアニメーション→Animation Eventでパネル表示）。落下死（killY）は既定`Fail()`だが、`softRetryOnFall`をtrue＋`softRetryPoint`を設定すると失敗にせず指定位置へ戻す「優しい」扱いに切り替えられる（Stage1では既定オフ、§9-3） |
 | `Goal` | 各ステージ/Goal | 右端トリガー。ボス全滅後にプレイヤーが触れると `StageManager.Clear()` |
 | `MenuNavigation` | Title/StageSelect の Canvas, 各ステージの ClearPanel/FailPanel | メニュー UI のキーボード操作。位置ベース 2D 移動（W/S=上下・最近傍＋端ループ、A/D=同じ行内＋端ループ）、Space/Enter で決定、選択枠の自動生成。マウスホバーは移動時のみ反映。`OnEnable` で `InputLock.LockFor(inputLockDuration)`（全画面共通 0.5s、結果パネルの 1.0s を統一）。カーソル移動・マウスホバーは `InputLock.NavigationAllowed`（フェード中だけ false）を見る、決定（`HandleSubmit()`/`GraphicRaycaster`）は `InputLock.InputAllowed`（フェード中 or 猶予中は false）を見る——猶予中でもカーソル移動は効き、実際に成立したら `InputLock.Unlock()` で決定の猶予も即解除する（§16-1）。`AddButton()` / `SetInitialFocus()` |
@@ -740,7 +735,7 @@ Grid                   @ (0,0)  [Grid] cell size (1,1)
 - **会話 UI の体裁**（日本語表示自体は対応済み — §9-2「日本語フォント」。文字送り演出も対応済み — §9-2。常用漢字外の漢字は現状のフォントサブセットに無いので表示できない）。
 - **UI の日本語化**（メニューは今は英語のまま。日本語にする場合、`Text` はレンダリングだけなら §9-2 のフォントを流用できるが、見た目を作り込むなら TMP 移行も検討）。
 - 結果画面 / メニューの見た目（配置・色は最小限）。
-- **ロック中ステージの見た目**は Unity 既定のグレーアウトのみ（「LOCKED」表記や鍵アイコンは未実装）。クリア進捗のセーブは `PlayerPrefs` の 1 キーだけ（スロット/複数セーブ無し）。
+- **ロック中ステージの見た目**は Unity 既定のグレーアウトのみ（「LOCKED」表記や鍵アイコンは未実装）。クリア進捗はセーブされない（メモリ上のみ、§9-2参照）。
 - `StageManager.nextButton` の表示可否は `GameFlow.CurrentStageIndex` 依存。エディタでステージシーンを直接 Play すると index=0 扱いになる（フロー経由なら正しい）。
 - ボスの行動（`Enemy_Boss` / Stage4の`Enemy1_Boss` は今のところ HP が多いだけの巡回。攻撃パターン無し）。
 - Enemy1・Enemy2・Enemy3（ラスボス）すべて実装済み（§6-1〜§6-3）。Enemy3の各種数値（体力8、クールタイム3秒など）は未指定だったため仮に決めたもの。バランス調整はこれから。
